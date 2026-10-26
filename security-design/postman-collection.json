@@ -1,0 +1,1011 @@
+{
+	"info": {
+		"_postman_id": "b7d2f9e4-41d5-49cb-875f-2c89f2a9675d",
+		"name": "Sports Management System - Security & JWT Collection (TH5)",
+		"description": "Postman Collection kiểm thử bảo mật cho Buổi thực hành 5: Xác thực JWT, Phân quyền RBAC, Resource Ownership và Bảo mật liên dịch vụ.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Authentication & Identity",
+			"item": [
+				{
+					"name": "Login as Admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.collectionVariables.set(\"adminToken\", jsonData.accessToken);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+						},
+						"url": {
+							"raw": "{{authUrl}}/api/v1/auth/login",
+							"host": [
+								"{{authUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Login as Organizer 1",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.collectionVariables.set(\"organizer1Token\", jsonData.accessToken);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"organizer1\",\n  \"password\": \"organizer123\"\n}"
+						},
+						"url": {
+							"raw": "{{authUrl}}/api/v1/auth/login",
+							"host": [
+								"{{authUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Login as Organizer 2",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.collectionVariables.set(\"organizer2Token\", jsonData.accessToken);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"organizer2\",\n  \"password\": \"organizer123\"\n}"
+						},
+						"url": {
+							"raw": "{{authUrl}}/api/v1/auth/login",
+							"host": [
+								"{{authUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Login as Referee 1",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.collectionVariables.set(\"refereeToken\", jsonData.accessToken);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"referee1\",\n  \"password\": \"referee123\"\n}"
+						},
+						"url": {
+							"raw": "{{authUrl}}/api/v1/auth/login",
+							"host": [
+								"{{authUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Login as Standard User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.collectionVariables.set(\"userToken\", jsonData.accessToken);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"user1\",\n  \"password\": \"user123\"\n}"
+						},
+						"url": {
+							"raw": "{{authUrl}}/api/v1/auth/login",
+							"host": [
+								"{{authUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Login with Invalid Password (Expected 401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 401\", function () {",
+									"    pm.response.to.have.status(401);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"organizer1\",\n  \"password\": \"wrongPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{authUrl}}/api/v1/auth/login",
+							"host": [
+								"{{authUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Register New Account (Expected 201)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"demo_athlete\",\n  \"password\": \"AthletePass123!\",\n  \"fullName\": \"Tran Van Athlete\",\n  \"email\": \"athlete@example.com\",\n  \"role\": \"ROLE_USER\"\n}"
+						},
+						"url": {
+							"raw": "{{authUrl}}/api/v1/auth/register",
+							"host": [
+								"{{authUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"register"
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Profile - /auth/me (Expected 200)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{organizer1Token}}"
+							}
+						],
+						"url": {
+							"raw": "{{authUrl}}/api/v1/auth/me",
+							"host": [
+								"{{authUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"me"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2. Public APIs (No Token Required)",
+			"item": [
+				{
+					"name": "Public: Get All Tournaments (Expected 200)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{tournamentUrl}}/api/v1/tournaments",
+							"host": [
+								"{{tournamentUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tournaments"
+							]
+						}
+					}
+				},
+				{
+					"name": "Public: Get Tournament By ID (Expected 200)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{tournamentUrl}}/api/v1/tournaments/1",
+							"host": [
+								"{{tournamentUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tournaments",
+								"1"
+							]
+						}
+					}
+				},
+				{
+					"name": "Public: Get All Matches (Expected 200)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{matchUrl}}/api/v1/matches",
+							"host": [
+								"{{matchUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"matches"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Protected APIs - Tournament Service (RBAC & Ownership)",
+			"item": [
+				{
+					"name": "Organizer 1: Create Tournament (Expected 201)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.collectionVariables.set(\"createdTournamentId\", jsonData.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{organizer1Token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Championship 2026\",\n  \"description\": \"Annual sports tournament\",\n  \"startDate\": \"2026-11-01\",\n  \"endDate\": \"2026-11-15\",\n  \"location\": \"Hanoi Sports Complex\",\n  \"registrationStartDate\": \"2026-10-01\",\n  \"registrationEndDate\": \"2026-10-25\",\n  \"status\": \"OPEN\"\n}"
+						},
+						"url": {
+							"raw": "{{tournamentUrl}}/api/v1/tournaments",
+							"host": [
+								"{{tournamentUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tournaments"
+							]
+						}
+					}
+				},
+				{
+					"name": "Organizer 1: Update Own Tournament (Expected 200)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{organizer1Token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Championship 2026 Updated by Owner\",\n  \"description\": \"Updated tournament details\",\n  \"startDate\": \"2026-11-01\",\n  \"endDate\": \"2026-11-15\",\n  \"location\": \"Hanoi Indoor Stadium\",\n  \"registrationStartDate\": \"2026-10-01\",\n  \"registrationEndDate\": \"2026-10-25\",\n  \"status\": \"OPEN\"\n}"
+						},
+						"url": {
+							"raw": "{{tournamentUrl}}/api/v1/tournaments/{{createdTournamentId}}",
+							"host": [
+								"{{tournamentUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tournaments",
+								"{{createdTournamentId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Organizer 2: Attempt Update Organizer 1's Tournament (Expected 403 Forbidden - Ownership Check)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403 Forbidden\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{organizer2Token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Illegal Hijack Attempt\",\n  \"description\": \"Should be rejected due to ownership violation\",\n  \"startDate\": \"2026-11-01\",\n  \"endDate\": \"2026-11-15\",\n  \"location\": \"Nowhere\",\n  \"registrationStartDate\": \"2026-10-01\",\n  \"registrationEndDate\": \"2026-10-25\",\n  \"status\": \"CANCELLED\"\n}"
+						},
+						"url": {
+							"raw": "{{tournamentUrl}}/api/v1/tournaments/{{createdTournamentId}}",
+							"host": [
+								"{{tournamentUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tournaments",
+								"{{createdTournamentId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Admin: Update Organizer 1's Tournament (Expected 200 - Admin Override)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Championship 2026 - Approved by Admin\",\n  \"description\": \"Admin override verified\",\n  \"startDate\": \"2026-11-01\",\n  \"endDate\": \"2026-11-15\",\n  \"location\": \"National Stadium\",\n  \"registrationStartDate\": \"2026-10-01\",\n  \"registrationEndDate\": \"2026-10-25\",\n  \"status\": \"CONFIRMED\"\n}"
+						},
+						"url": {
+							"raw": "{{tournamentUrl}}/api/v1/tournaments/{{createdTournamentId}}",
+							"host": [
+								"{{tournamentUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tournaments",
+								"{{createdTournamentId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Standard User: Attempt to Create Tournament (Expected 403 Forbidden - Role Check)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403 Forbidden\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{userToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Unauthorized Tournament\",\n  \"description\": \"User does not have ROLE_ORGANIZER\",\n  \"startDate\": \"2026-11-01\",\n  \"endDate\": \"2026-11-15\",\n  \"location\": \"Local Park\",\n  \"registrationStartDate\": \"2026-10-01\",\n  \"registrationEndDate\": \"2026-10-25\",\n  \"status\": \"OPEN\"\n}"
+						},
+						"url": {
+							"raw": "{{tournamentUrl}}/api/v1/tournaments",
+							"host": [
+								"{{tournamentUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tournaments"
+							]
+						}
+					}
+				},
+				{
+					"name": "Unauthenticated: Call Protected API without Token (Expected 401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 401 Unauthorized\", function () {",
+									"    pm.response.to.have.status(401);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{tournamentUrl}}/api/v1/tournaments/{{createdTournamentId}}",
+							"host": [
+								"{{tournamentUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tournaments",
+								"{{createdTournamentId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Invalid Token: Call with Tampered Token (Expected 401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 401 Unauthorized\", function () {",
+									"    pm.response.to.have.status(401);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.tampered.token"
+							}
+						],
+						"url": {
+							"raw": "{{tournamentUrl}}/api/v1/tournaments/{{createdTournamentId}}",
+							"host": [
+								"{{tournamentUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tournaments",
+								"{{createdTournamentId}}"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "4. Protected APIs - Match Service (Role & Inter-Service)",
+			"item": [
+				{
+					"name": "Organizer 1: Create Match (S2S Token Propagation Success - Expected 201)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 Created\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.collectionVariables.set(\"createdMatchId\", jsonData.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{organizer1Token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tournamentId\": {{createdTournamentId}},\n  \"round\": \"Quarter-Final\",\n  \"matchTime\": \"2026-11-05T15:00:00\",\n  \"location\": \"Court 1\",\n  \"participant1\": \"Team Red\",\n  \"participant2\": \"Team Blue\",\n  \"status\": \"SCHEDULED\"\n}"
+						},
+						"url": {
+							"raw": "{{matchUrl}}/api/v1/matches",
+							"host": [
+								"{{matchUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"matches"
+							]
+						}
+					}
+				},
+				{
+					"name": "Organizer 1: Create Match with Non-existent Tournament (Expected 400 Bad Request)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{organizer1Token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tournamentId\": 999999,\n  \"round\": \"Final\",\n  \"matchTime\": \"2026-11-15T19:00:00\",\n  \"location\": \"Main Arena\",\n  \"participant1\": \"Team Alpha\",\n  \"participant2\": \"Team Beta\",\n  \"status\": \"SCHEDULED\"\n}"
+						},
+						"url": {
+							"raw": "{{matchUrl}}/api/v1/matches",
+							"host": [
+								"{{matchUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"matches"
+							]
+						}
+					}
+				},
+				{
+					"name": "Referee: Update Match Result (Expected 200)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{refereeToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tournamentId\": {{createdTournamentId}},\n  \"round\": \"Quarter-Final\",\n  \"matchTime\": \"2026-11-05T15:00:00\",\n  \"location\": \"Court 1\",\n  \"participant1\": \"Team Red (Score: 2)\",\n  \"participant2\": \"Team Blue (Score: 1)\",\n  \"status\": \"COMPLETED\"\n}"
+						},
+						"url": {
+							"raw": "{{matchUrl}}/api/v1/matches/{{createdMatchId}}",
+							"host": [
+								"{{matchUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"matches",
+								"{{createdMatchId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Standard User: Attempt to Update Match (Expected 403 Forbidden)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403 Forbidden\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{userToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tournamentId\": {{createdTournamentId}},\n  \"round\": \"Quarter-Final\",\n  \"matchTime\": \"2026-11-05T15:00:00\",\n  \"location\": \"Court 1\",\n  \"participant1\": \"Hacked\",\n  \"participant2\": \"Hacked\",\n  \"status\": \"COMPLETED\"\n}"
+						},
+						"url": {
+							"raw": "{{matchUrl}}/api/v1/matches/{{createdMatchId}}",
+							"host": [
+								"{{matchUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"matches",
+								"{{createdMatchId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Admin: Delete Match (Expected 204 No Content)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204 No Content\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{matchUrl}}/api/v1/matches/{{createdMatchId}}",
+							"host": [
+								"{{matchUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"matches",
+								"{{createdMatchId}}"
+							]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "authUrl",
+			"value": "http://localhost:8083"
+		},
+		{
+			"key": "tournamentUrl",
+			"value": "http://localhost:8081"
+		},
+		{
+			"key": "matchUrl",
+			"value": "http://localhost:8082"
+		},
+		{
+			"key": "adminToken",
+			"value": ""
+		},
+		{
+			"key": "organizer1Token",
+			"value": ""
+		},
+		{
+			"key": "organizer2Token",
+			"value": ""
+		},
+		{
+			"key": "refereeToken",
+			"value": ""
+		},
+		{
+			"key": "userToken",
+			"value": ""
+		},
+		{
+			"key": "createdTournamentId",
+			"value": "1"
+		},
+		{
+			"key": "createdMatchId",
+			"value": "1"
+		}
+	]
+}

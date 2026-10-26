@@ -1,0 +1,199 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # MESSAGE BROKER - RABBITMQ
+  # ==========================================
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: sports-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - sports-network
+
+  # ==========================================
+  # DATABASE - POSTGRESQL (Multiple DBs)
+  # ==========================================
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: sports-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: sports
+      POSTGRES_PASSWORD: sports123
+      POSTGRES_MULTIPLE_DATABASES: auth_db,tournament_db,team_db,athlete_db,match_db,result_db,ranking_db,notification_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sports-network
+
+  # ==========================================
+  # 1. TOURNAMENT SERVICE (Port 8081)
+  # ==========================================
+  tournament-service:
+    build:
+      context: .
+      dockerfile: tournament-service/Dockerfile
+    container_name: sports-tournament-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/tournament_db
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: sports123
+    depends_on:
+      - postgres-db
+    networks:
+      - sports-network
+
+  # ==========================================
+  # 2. TEAM SERVICE (Port 8085)
+  # ==========================================
+  team-service:
+    build:
+      context: .
+      dockerfile: team-service/Dockerfile
+    container_name: sports-team-service
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/team_db
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: sports123
+    depends_on:
+      - postgres-db
+    networks:
+      - sports-network
+
+  # ==========================================
+  # 3. ATHLETE SERVICE (Port 8086)
+  # ==========================================
+  athlete-service:
+    build:
+      context: .
+      dockerfile: athlete-service/Dockerfile
+    container_name: sports-athlete-service
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/athlete_db
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: sports123
+    depends_on:
+      - postgres-db
+    networks:
+      - sports-network
+
+  # ==========================================
+  # 4. MATCH SERVICE (Port 8082)
+  # ==========================================
+  match-service:
+    build:
+      context: .
+      dockerfile: match-service/Dockerfile
+    container_name: sports-match-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/match_db
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: sports123
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SERVICES_TOURNAMENT_URL: http://tournament-service:8081
+    depends_on:
+      - postgres-db
+      - rabbitmq
+      - tournament-service
+    networks:
+      - sports-network
+
+  # ==========================================
+  # 5. RESULT SERVICE (Port 8087)
+  # ==========================================
+  result-service:
+    build:
+      context: .
+      dockerfile: result-service/Dockerfile
+    container_name: sports-result-service
+    ports:
+      - "8087:8087"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/result_db
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: sports123
+    depends_on:
+      - postgres-db
+    networks:
+      - sports-network
+
+  # ==========================================
+  # 6. RANKING SERVICE (Port 8088)
+  # ==========================================
+  ranking-service:
+    build:
+      context: .
+      dockerfile: ranking-service/Dockerfile
+    container_name: sports-ranking-service
+    ports:
+      - "8088:8088"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/ranking_db
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: sports123
+    depends_on:
+      - postgres-db
+    networks:
+      - sports-network
+
+  # ==========================================
+  # AUTH SERVICE (Port 8083) - TH5 Security
+  # ==========================================
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: sports-auth-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: sports123
+    depends_on:
+      - postgres-db
+    networks:
+      - sports-network
+
+  # ==========================================
+  # NOTIFICATION SERVICE (Port 8084) - TH3 Async
+  # ==========================================
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: sports-notification-service
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/notification_db
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: sports123
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - postgres-db
+      - rabbitmq
+    networks:
+      - sports-network
+
+networks:
+  sports-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

@@ -1,0 +1,186 @@
+### ==============================================================================
+### SPORTS MANAGEMENT SYSTEM - BỘ KIỂM THỬ API TRÊN INTELLIJ IDEA (HTTP CLIENT)
+### Hướng dẫn: Nhấn vào biểu tượng Run (mũi tên xanh ▶) bên cạnh mỗi dòng request
+### ==============================================================================
+
+@baseUrl = http://localhost:8080/api/v1
+
+### ------------------------------------------------------------------------------
+### 1. DỊCH VỤ GIẢI ĐẤU (TOURNAMENT SERVICE)
+### ------------------------------------------------------------------------------
+
+### 1.1 Lấy danh sách toàn bộ Giải đấu
+GET {{baseUrl}}/tournaments
+Accept: application/json
+
+### 1.2 Lấy chi tiết Giải đấu theo ID
+GET {{baseUrl}}/tournaments/1
+Accept: application/json
+
+### 1.3 Lấy danh sách Môn thể thao (Sport)
+GET {{baseUrl}}/sports
+Accept: application/json
+
+### 1.4 Lấy danh sách Nội dung thi đấu (Competition)
+GET {{baseUrl}}/competitions
+Accept: application/json
+
+### 1.5 Lấy các nội dung thi đấu thuộc Giải đấu 1
+GET {{baseUrl}}/competitions/tournament/1
+Accept: application/json
+
+
+### ------------------------------------------------------------------------------
+### 2. DỊCH VỤ ĐỘI THI ĐẤU (TEAM SERVICE)
+### ------------------------------------------------------------------------------
+
+### 2.1 Lấy danh sách tất cả các Đội bóng
+GET {{baseUrl}}/teams
+Accept: application/json
+
+### 2.2 Lấy chi tiết Đội bóng theo ID (ID = 1: CNTT FC)
+GET {{baseUrl}}/teams/1
+Accept: application/json
+
+### 2.3 Thêm mới một Đội bóng
+POST {{baseUrl}}/teams
+Content-Type: application/json
+
+{
+  "name": "Bách Khoa FC",
+  "shortName": "BK",
+  "managerName": "Nguyễn Văn HLV",
+  "contactPhone": "0912349999",
+  "contactEmail": "bkfc@hust.edu.vn"
+}
+
+
+### ------------------------------------------------------------------------------
+### 3. DỊCH VỤ VẬN ĐỘNG VIÊN (ATHLETE SERVICE)
+### ------------------------------------------------------------------------------
+
+### 3.1 Lấy danh sách tất cả Vận động viên
+GET {{baseUrl}}/athletes
+Accept: application/json
+
+### 3.2 Lấy thông tin chi tiết VĐV theo ID (ID = 1: Nguyễn Văn Long)
+GET {{baseUrl}}/athletes/1
+Accept: application/json
+
+### 3.3 Thêm mới một Vận động viên
+POST {{baseUrl}}/athletes
+Content-Type: application/json
+
+{
+  "fullName": "Hoàng Văn Tuấn",
+  "dateOfBirth": "2003-09-09",
+  "gender": "MALE",
+  "identityCardNumber": "001203009999",
+  "phone": "0988776655",
+  "email": "tuan@student.vn",
+  "nationality": "Vietnam",
+  "healthStatus": "QUALIFIED"
+}
+
+
+### ------------------------------------------------------------------------------
+### 4. DỊCH VỤ ĐĂNG KÝ & LỊCH THI ĐẤU (MATCH SERVICE)
+### ------------------------------------------------------------------------------
+
+### 4.1 Xem tất cả hồ sơ đăng ký tham gia thi đấu
+GET {{baseUrl}}/registrations
+Accept: application/json
+
+### 4.2 Xem danh sách thành phần thi đấu chính thức (Participants) nội dung Bóng đá (ID = 1)
+GET {{baseUrl}}/participants/competition/1
+Accept: application/json
+
+### 4.3 Xem danh sách tất cả Trận đấu (Matches)
+GET {{baseUrl}}/matches
+Accept: application/json
+
+### 4.4 Xem các trận đấu của Nội dung thi đấu 1 (Bóng đá nam)
+GET {{baseUrl}}/matches/competition/1
+Accept: application/json
+
+### 4.5 Tạo lịch thi đấu cho một Trận đấu mới (Vòng 2: CNTT FC vs Cơ Khí FC)
+POST {{baseUrl}}/matches
+Content-Type: application/json
+
+{
+  "tournamentId": 1,
+  "competitionId": 1,
+  "round": "Vòng 2",
+  "participant1": "CNTT FC",
+  "participant2": "Cơ Khí FC",
+  "location": "Sân vận động Bách Khoa",
+  "status": "SCHEDULED"
+}
+
+
+### ------------------------------------------------------------------------------
+### 5. DỊCH VỤ KẾT QUẢ THI ĐẤU (RESULT SERVICE)
+### ------------------------------------------------------------------------------
+
+### 5.1 Lấy danh sách toàn bộ kết quả trận đấu
+GET {{baseUrl}}/results
+Accept: application/json
+
+### 5.2 Lấy chi tiết kết quả và các bàn thắng của Trận 1 (CNTT FC 2 - 1 Kinh Tế FC)
+GET {{baseUrl}}/results/match/1
+Accept: application/json
+
+### 5.3 Ghi nhận kết quả cho Trận đấu mới (Giả sử Match ID = 4, tỉ số 3 - 0)
+POST {{baseUrl}}/results
+Content-Type: application/json
+
+{
+  "matchId": 4,
+  "scoreParticipant1": 3,
+  "scoreParticipant2": 0,
+  "notes": "CNTT FC thi đấu áp đảo",
+  "details": [
+    {
+      "detailType": "GOAL",
+      "participantName": "CNTT FC",
+      "athleteName": "Nguyễn Văn Long",
+      "detailTime": "12'",
+      "detailValue": "1-0"
+    },
+    {
+      "detailType": "GOAL",
+      "participantName": "CNTT FC",
+      "athleteName": "Nguyễn Văn Long",
+      "detailTime": "55'",
+      "detailValue": "2-0"
+    },
+    {
+      "detailType": "GOAL",
+      "participantName": "CNTT FC",
+      "athleteName": "Nguyễn Văn Long",
+      "detailTime": "80'",
+      "detailValue": "3-0"
+    }
+  ]
+}
+
+### 5.4 Ban tổ chức duyệt xác nhận kết quả (Confirm) - Tự động kích hoạt cập nhật BXH
+PUT {{baseUrl}}/results/1/confirm
+Content-Type: application/json
+
+{
+  "confirmedBy": "TRUONG_BAN_TO_CHUC"
+}
+
+
+### ------------------------------------------------------------------------------
+### 6. DỊCH VỤ BẢNG XẾP HẠNG (RANKING SERVICE)
+### ------------------------------------------------------------------------------
+
+### 6.1 Xem Bảng xếp hạng của Nội dung thi đấu 1 (Bóng đá nam sinh viên)
+GET {{baseUrl}}/rankings/competition/1
+Accept: application/json
+
+### 6.2 Yêu cầu hệ thống tính toán lại Bảng xếp hạng tự động từ các trận đã đấu
+POST {{baseUrl}}/rankings/competition/1/recalculate
+Accept: application/json
