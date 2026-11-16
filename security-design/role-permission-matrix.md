@@ -67,6 +67,8 @@ Hệ thống Quản lý Thể thao định nghĩa 5 vai trò rõ rệt (`ROLE_AD
 | 16 | `POST` | `/api/v1/results` | Result | Bảo vệ | `ROLE_REFEREE` (được phân công), `ROLE_ORGANIZER` (sở hữu giải), `ROLE_ADMIN` | Trọng tài không ghi đè được `CONFIRMED`; KNOCKOUT hòa phải có luân lưu | 201 Created / 400 / 403 |
 | 17 | `PUT` | `/api/v1/results/{id}/confirm` | Result | Bảo vệ | `ROLE_ORGANIZER` (sở hữu giải), `ROLE_ADMIN` | Xác nhận chính thức & đồng bộ Match/Ranking | 200 / 202 / 403 |
 | 18 | `PATCH` | `/api/v1/results/{id}` | Result | Bảo vệ | Trọng tài (`notes` khi chưa confirm); Organizer/Admin được mở lại `PENDING_CONFIRMATION` | Mở lại/xóa kết quả tự tính lại BXH | 200 OK / 400 / 403 |
+| 19 | `POST` | `/api/v1/rankings/competition/{id}/recalculate` | Ranking | Bảo vệ | `ROLE_ADMIN`, `ROLE_ORGANIZER` (sở hữu giải đấu cha), `ROLE_INTERNAL_RESULT_SYNC` | Trọng tài (`REFEREE`) và Organizer khác không được tính lại BXH giải không sở hữu | 200 OK / 400 / 401 / 403 / 404 |
+| 20 | `PUT` | `/api/v1/rankings/competition/{id}/items` | Ranking | Bảo vệ | `ROLE_ADMIN`, `ROLE_ORGANIZER` (sở hữu giải đấu cha) | Cấm `ROLE_INTERNAL_RESULT_SYNC`, Trọng tài và Organizer không sở hữu giải | 200 OK / 400 / 401 / 403 / 404 |
 
 ---
 

@@ -105,4 +105,82 @@ class RankingSecurityIntegrationTest {
                         .header("Authorization", internalSyncToken))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    void organizerOwnershipAndNullSafeUpdateItems_Enforced() throws Exception {
+        String refToken = issueToken("referee1", "ROLE_REFEREE");
+        String mgrToken = issueToken("manager1", "ROLE_TEAM_MANAGER");
+        String org1Token = issueToken("organizer1", "ROLE_ORGANIZER");
+        String org2Token = issueToken("organizer2", "ROLE_ORGANIZER");
+        String adminToken = issueToken("admin", "ROLE_ADMIN");
+
+        when(rankingProviderClient.getCompetitionById(10L)).thenReturn(Map.of(
+                "id", 10L, "tournamentId", 99L, "name", "BXH 10"
+        ));
+        when(rankingProviderClient.getTournamentById(99L)).thenReturn(Map.of(
+                "id", 99L, "organizerUsername", "organizer1", "name", "Tour 99"
+        ));
+        when(rankingProviderClient.getCompetitionFormat(10L)).thenReturn(Map.of(
+                "competitionId", 10L, "formatType", "ROUND_ROBIN"
+        ));
+        when(rankingProviderClient.getMatchesByCompetitionId(10L)).thenReturn(List.of());
+
+        // Referee & Team Manager & unauthenticated rejected
+        mockMvc.perform(post("/api/v1/rankings/competition/10/recalculate"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/rankings/competition/10/recalculate")
+                        .header("Authorization", refToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/rankings/competition/10/items")
+                        .header("Authorization", mgrToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[]"))
+                .andExpect(status().isForbidden());
+
+        // Non-owning organizer (organizer2) rejected with 403
+        mockMvc.perform(post("/api/v1/rankings/competition/10/recalculate")
+                        .header("Authorization", org2Token))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/rankings/competition/10/items")
+                        .header("Authorization", org2Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[]"))
+                .andExpect(status().isForbidden());
+
+        // Owning organizer (organizer1) allowed on recalculate & PUT items (with null numeric fields)
+        mockMvc.perform(post("/api/v1/rankings/competition/10/recalculate")
+                        .header("Authorization", org1Token))
+                .andExpect(status().isOk());
+
+        String sparsePayload = """
+                [
+                  {
+                    "participantName": "CLB Null Safe",
+                    "goalsFor": null,
+                    "goalsAgainst": null,
+                    "points": null
+                  }
+                ]
+                """;
+        mockMvc.perform(put("/api/v1/rankings/competition/10/items")
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sparsePayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].participantName").value("CLB Null Safe"))
+                .andExpect(jsonPath("$.items[0].goalDifference").value(0))
+                .andExpect(jsonPath("$.items[0].points").value(0));
+
+        // Admin override allowed regardless of tournament owner
+        mockMvc.perform(put("/api/v1/rankings/competition/10/items")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"participantName\":\"Admin Override\",\"goalsFor\":5,\"goalsAgainst\":2,\"points\":3}]"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].goalDifference").value(3));
+
+        // Invalid sortBy returns 400
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/rankings/paged?sortBy=invalidColumn"))
+                .andExpect(status().isBadRequest());
+    }
 }

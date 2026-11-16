@@ -278,6 +278,9 @@ public class RankingService {
 
     @Transactional
     public RankingResponse updateRankingItems(Long competitionId, List<RankingItem> items) {
+        if (items == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Danh sách bảng xếp hạng không được null");
+        }
         Ranking ranking = rankingRepository.findByCompetitionId(competitionId)
                 .orElseGet(() -> createDefaultRanking(competitionId));
 
@@ -285,10 +288,27 @@ public class RankingService {
 
         int pos = 1;
         for (RankingItem item : items) {
+            if (item == null || item.getParticipantName() == null || item.getParticipantName().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "participantName trong bảng xếp hạng không được để trống");
+            }
             item.setId(null);
             item.setRankingId(ranking.getId());
             item.setRankPosition(pos++);
-            item.setGoalDifference(item.getGoalsFor() - item.getGoalsAgainst());
+            int matchesPlayed = defaultZero(item.getMatchesPlayed());
+            int won = defaultZero(item.getWon());
+            int drawn = defaultZero(item.getDrawn());
+            int lost = defaultZero(item.getLost());
+            int points = defaultZero(item.getPoints());
+            int goalsFor = defaultZero(item.getGoalsFor());
+            int goalsAgainst = defaultZero(item.getGoalsAgainst());
+            item.setMatchesPlayed(matchesPlayed);
+            item.setWon(won);
+            item.setDrawn(drawn);
+            item.setLost(lost);
+            item.setPoints(points);
+            item.setGoalsFor(goalsFor);
+            item.setGoalsAgainst(goalsAgainst);
+            item.setGoalDifference(goalsFor - goalsAgainst);
         }
         List<RankingItem> saved = rankingItemRepository.saveAll(items);
 
@@ -296,6 +316,10 @@ public class RankingService {
         rankingRepository.save(ranking);
 
         return new RankingResponse(ranking, saved);
+    }
+
+    private int defaultZero(Integer val) {
+        return val != null ? val : 0;
     }
 
     private boolean isKnockoutFormat(Map<String, Object> format) {

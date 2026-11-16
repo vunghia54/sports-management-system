@@ -33,8 +33,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/instance-info").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
-                        .requestMatchers(HttpMethod.POST, "/api/v1/rankings/competition/*/recalculate").hasAnyAuthority("ROLE_REFEREE", "ROLE_ORGANIZER", "ROLE_ADMIN", "ROLE_INTERNAL_RESULT_SYNC")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/rankings", "/api/v1/rankings/**").hasAnyAuthority("ROLE_REFEREE", "ROLE_ORGANIZER", "ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/rankings/competition/*/recalculate").hasAnyAuthority("ROLE_ORGANIZER", "ROLE_ADMIN", "ROLE_INTERNAL_RESULT_SYNC")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/rankings", "/api/v1/rankings/**").hasAnyAuthority("ROLE_ORGANIZER", "ROLE_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/rankings", "/api/v1/rankings/**").hasAnyAuthority("ROLE_ORGANIZER", "ROLE_ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/rankings", "/api/v1/rankings/**").hasAnyAuthority("ROLE_ADMIN")
 

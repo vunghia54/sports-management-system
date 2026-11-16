@@ -1,5 +1,6 @@
 package com.sports.management.ranking.controller;
 
+import com.sports.management.exception.ResourceNotFoundException;
 import com.sports.management.ranking.client.RankingProviderClient;
 import com.sports.management.ranking.model.Ranking;
 import com.sports.management.ranking.model.RankingItem;
@@ -10,16 +11,26 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/v1/rankings")
 public class RankingController {
+
+    private static final Set<String> ALLOWED_RANKING_SORT = Set.of("id", "competitionId", "rankingName", "updatedAt");
+    private static final Set<String> ALLOWED_ITEM_SORT = Set.of(
+            "id", "rankPosition", "participantName", "matchesPlayed", "won", "drawn", "lost", "points", "goalsFor", "goalsAgainst", "goalDifference"
+    );
 
     private final RankingService rankingService;
     private final RankingProviderClient rankingProviderClient;
@@ -86,9 +97,10 @@ public class RankingController {
             @RequestParam(defaultValue = "id") String sortBy,
             @RequestParam(defaultValue = "asc") String sortDir) {
 
+        String safeSortBy = validateSortField(sortBy, ALLOWED_RANKING_SORT);
         Sort sort = "desc".equalsIgnoreCase(sortDir)
-                ? Sort.by(sortBy).descending()
-                : Sort.by(sortBy).ascending();
+                ? Sort.by(safeSortBy).descending()
+                : Sort.by(safeSortBy).ascending();
         Pageable pageable = PageRequest.of(page, size, sort);
         return ResponseEntity.ok(rankingService.searchRankings(competitionId, keyword, pageable));
     }
@@ -117,15 +129,19 @@ public class RankingController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "rankPosition") String sortBy,
             @RequestParam(defaultValue = "asc") String sortDir) {
+        String safeSortBy = validateSortField(sortBy, ALLOWED_ITEM_SORT);
         Sort sort = "desc".equalsIgnoreCase(sortDir)
-                ? Sort.by(sortBy).descending()
-                : Sort.by(sortBy).ascending();
+                ? Sort.by(safeSortBy).descending()
+                : Sort.by(safeSortBy).ascending();
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(100, Math.max(1, size)), sort);
         return ResponseEntity.ok(rankingService.searchRankingItemsByCompetition(competitionId, keyword, pageable));
     }
 
     @PostMapping("/competition/{competitionId}/recalculate")
-    public ResponseEntity<RankingResponse> recalculateRanking(@PathVariable Long competitionId) {
+    public ResponseEntity<RankingResponse> recalculateRanking(
+            @PathVariable Long competitionId,
+            Authentication authentication) {
+        assertAuthorizedForRankingWrite(competitionId, authentication, true);
         return ResponseEntity.ok()
                 .header("X-Instance-Id", instanceId)
                 .body(rankingService.recalculateRanking(competitionId));
@@ -134,7 +150,9 @@ public class RankingController {
     @PutMapping("/competition/{competitionId}/items")
     public ResponseEntity<RankingResponse> updateRankingItems(
             @PathVariable Long competitionId,
-            @RequestBody List<RankingItem> items) {
+            @RequestBody List<RankingItem> items,
+            Authentication authentication) {
+        assertAuthorizedForRankingWrite(competitionId, authentication, false);
         return ResponseEntity.ok()
                 .header("X-Instance-Id", instanceId)
                 .body(rankingService.updateRankingItems(competitionId, items));
@@ -144,5 +162,62 @@ public class RankingController {
     public ResponseEntity<Void> deleteRanking(@PathVariable Long id) {
         rankingService.deleteRanking(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private String validateSortField(String sortBy, Set<String> allowlist) {
+        String resolved = (sortBy == null || sortBy.isBlank()) ? "id" : sortBy.trim();
+        if (!allowlist.contains(resolved)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "sortBy không hợp lệ: '" + sortBy + "'. Cho phép: " + allowlist);
+        }
+        return resolved;
+    }
+
+    private void assertAuthorizedForRankingWrite(Long competitionId, Authentication authentication, boolean allowInternalSync) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication.getName() == null || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Full authentication is required");
+        }
+        if (hasAuthority(authentication, "ROLE_ADMIN")) {
+            return;
+        }
+        if (allowInternalSync && hasAuthority(authentication, "ROLE_INTERNAL_RESULT_SYNC")) {
+            return;
+        }
+        if (!hasAuthority(authentication, "ROLE_ORGANIZER")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access Denied: Bạn không có quyền cập nhật bảng xếp hạng");
+        }
+        Map<String, Object> competition = rankingProviderClient.getCompetitionById(competitionId);
+        if (competition == null) {
+            throw new ResourceNotFoundException("Competition not found with id: " + competitionId);
+        }
+        Object tourIdRaw = competition.get("tournamentId");
+        Long tournamentId = null;
+        if (tourIdRaw != null) {
+            try {
+                tournamentId = Long.valueOf(String.valueOf(tourIdRaw));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        if (tournamentId == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access Denied: Không thể xác minh ban tổ chức sở hữu giải đấu");
+        }
+        Map<String, Object> tournament = rankingProviderClient.getTournamentById(tournamentId);
+        if (tournament == null) {
+            throw new ResourceNotFoundException("Tournament not found with id: " + tournamentId);
+        }
+        Object ownerRaw = tournament.get("organizerUsername");
+        String owner = ownerRaw != null ? String.valueOf(ownerRaw) : null;
+        if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(authentication.getName())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access Denied: Bạn không phải ban tổ chức sở hữu giải đấu #" + tournamentId);
+        }
+    }
+
+    private boolean hasAuthority(Authentication auth, String role) {
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> role.toUpperCase(Locale.ROOT).equalsIgnoreCase(a.getAuthority()));
     }
 }

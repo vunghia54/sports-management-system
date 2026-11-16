@@ -31,15 +31,53 @@ public class RankingProviderClient {
             @Value("${services.match.url:http://match-service}") String matchServiceUrl,
             @Value("${services.result.url:http://result-service}") String resultServiceUrl) {
 
-        this.tournamentRestClient = loadBalancedRestClientBuilder.clone()
-                .baseUrl(tournamentServiceUrl)
+        String normTour = normalizeUrl(tournamentServiceUrl, "http://tournament-service");
+        String normMatch = normalizeUrl(matchServiceUrl, "http://match-service");
+        String normResult = normalizeUrl(resultServiceUrl, "http://result-service");
+
+        this.tournamentRestClient = selectBuilder(loadBalancedRestClientBuilder, normTour)
+                .baseUrl(normTour)
                 .build();
-        this.matchRestClient = loadBalancedRestClientBuilder.clone()
-                .baseUrl(matchServiceUrl)
+        this.matchRestClient = selectBuilder(loadBalancedRestClientBuilder, normMatch)
+                .baseUrl(normMatch)
                 .build();
-        this.resultRestClient = loadBalancedRestClientBuilder.clone()
-                .baseUrl(resultServiceUrl)
+        this.resultRestClient = selectBuilder(loadBalancedRestClientBuilder, normResult)
+                .baseUrl(normResult)
                 .build();
+    }
+
+    private static String normalizeUrl(String raw, String fallback) {
+        String candidate = (raw == null || raw.isBlank()) ? fallback : raw.trim();
+        return candidate.endsWith("/") ? candidate.substring(0, candidate.length() - 1) : candidate;
+    }
+
+    private static RestClient.Builder selectBuilder(RestClient.Builder lbBuilder, String baseUrl) {
+        if (baseUrl.startsWith("http://localhost") || baseUrl.startsWith("http://127.0.0.1")) {
+            return RestClient.builder();
+        }
+        return lbBuilder != null ? lbBuilder.clone() : RestClient.builder();
+    }
+
+    public Map<String, Object> getTournamentById(Long tournamentId) {
+        if (tournamentId == null) {
+            return null;
+        }
+        try {
+            var spec = tournamentRestClient.get()
+                    .uri("/api/v1/tournaments/{id}", tournamentId);
+            String auth = getCurrentAuthHeader();
+            if (auth != null) spec.header("Authorization", auth);
+            return spec.retrieve()
+                    .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+        } catch (HttpClientErrorException.NotFound nf) {
+            return null;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Tournament Service is unavailable when loading Tournament ID: " + tournamentId,
+                    ex
+            );
+        }
     }
 
     public Map<String, Object> getCompetitionById(Long competitionId) {
