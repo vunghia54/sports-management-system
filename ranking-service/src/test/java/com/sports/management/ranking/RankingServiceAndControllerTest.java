@@ -118,10 +118,9 @@ class RankingServiceAndControllerTest {
     @Test
     void recalculateRanking_twoCompetitionsInSameTournament_onlyUsesTargetCompetitionMatches() {
         Ranking r11 = new Ranking(11L, 11L, "Nội dung chưa có trận", LocalDateTime.now());
+        when(rankingProviderClient.getCompetitionById(11L)).thenReturn(Map.of("id", 11L, "name", "Nội dung 11"));
+        when(rankingProviderClient.getCompetitionFormat(11L)).thenReturn(Map.of("competitionId", 11L, "formatType", "ROUND_ROBIN"));
         when(rankingProviderClient.getMatchesByCompetitionId(11L)).thenReturn(List.of());
-        when(rankingProviderClient.getAllResults()).thenReturn(List.of(
-                Map.of("matchId", 101L, "status", "CONFIRMED", "scoreParticipant1", 3, "scoreParticipant2", 1)
-        ));
         when(rankingRepository.findByCompetitionId(11L)).thenReturn(Optional.of(r11));
         when(rankingRepository.save(any(Ranking.class))).thenAnswer(inv -> inv.getArgument(0));
         when(rankingItemRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
@@ -135,12 +134,14 @@ class RankingServiceAndControllerTest {
     @Test
     void recalculateRanking_excludesPendingConfirmationEvenWhenMatchStatusIsFinished() {
         Ranking r10 = new Ranking(10L, 10L, "BXH Nội dung 10", LocalDateTime.now());
+        when(rankingProviderClient.getCompetitionById(10L)).thenReturn(Map.of("id", 10L, "name", "Nội dung 10"));
+        when(rankingProviderClient.getCompetitionFormat(10L)).thenReturn(Map.of("competitionId", 10L, "formatType", "ROUND_ROBIN"));
         when(rankingProviderClient.getMatchesByCompetitionId(10L)).thenReturn(List.of(
                 Map.of("id", 100L, "tournamentId", 1L, "competitionId", 10L, "participant1", "Hà Nội", "participant2", "Nam Định", "status", "FINISHED"),
                 Map.of("id", 101L, "tournamentId", 1L, "competitionId", 10L, "participant1", "Viettel", "participant2", "CAHN", "status", "FINISHED")
         ));
         // Match 100 result was edited and awaits re-confirmation -> PENDING_CONFIRMATION (must NOT count even though match.status == FINISHED!)
-        when(rankingProviderClient.getAllResults()).thenReturn(List.of(
+        when(rankingProviderClient.getResultsByMatchIds(List.of(100L, 101L))).thenReturn(List.of(
                 Map.of("matchId", 100L, "status", "PENDING_CONFIRMATION", "scoreParticipant1", 5, "scoreParticipant2", 0),
                 Map.of("matchId", 101L, "status", "CONFIRMED", "scoreParticipant1", 2, "scoreParticipant2", 1)
         ));
@@ -163,6 +164,8 @@ class RankingServiceAndControllerTest {
     @Test
     void recalculateRanking_groupsByParticipantIdFirstAndFallsBackToNameForLegacy() {
         Ranking r10 = new Ranking(10L, 10L, "BXH Theo ParticipantId", LocalDateTime.now());
+        when(rankingProviderClient.getCompetitionById(10L)).thenReturn(Map.of("id", 10L, "name", "Nội dung 10"));
+        when(rankingProviderClient.getCompetitionFormat(10L)).thenReturn(Map.of("competitionId", 10L, "formatType", "ROUND_ROBIN"));
         when(rankingProviderClient.getMatchesByCompetitionId(10L)).thenReturn(List.of(
                 Map.of("id", 201L, "tournamentId", 1L, "competitionId", 10L,
                         "participant1Id", 50L, "participant2Id", 51L,
@@ -174,7 +177,7 @@ class RankingServiceAndControllerTest {
                 Map.of("id", 203L, "tournamentId", 1L, "competitionId", 10L,
                         "participant1", "Legacy A", "participant2", "Legacy B", "status", "FINISHED")
         ));
-        when(rankingProviderClient.getAllResults()).thenReturn(List.of(
+        when(rankingProviderClient.getResultsByMatchIds(List.of(201L, 202L, 203L))).thenReturn(List.of(
                 Map.of("matchId", 201L, "status", "CONFIRMED", "scoreParticipant1", 2, "scoreParticipant2", 0),
                 Map.of("matchId", 202L, "status", "CONFIRMED", "scoreParticipant1", 1, "scoreParticipant2", 1),
                 Map.of("matchId", 203L, "status", "CONFIRMED", "scoreParticipant1", 3, "scoreParticipant2", 0)
@@ -203,6 +206,8 @@ class RankingServiceAndControllerTest {
 
     @Test
     void recalculateRanking_whenUpstreamFails_throws503AndPreservesExistingStandings() {
+        when(rankingProviderClient.getCompetitionById(10L)).thenReturn(Map.of("id", 10L, "name", "Nội dung 10"));
+        when(rankingProviderClient.getCompetitionFormat(10L)).thenReturn(Map.of("competitionId", 10L, "formatType", "ROUND_ROBIN"));
         when(rankingProviderClient.getMatchesByCompetitionId(10L))
                 .thenThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "match-service down"));
 
@@ -212,6 +217,42 @@ class RankingServiceAndControllerTest {
         verify(rankingItemRepository, never()).deleteByRankingId(any());
         verify(rankingItemRepository, never()).saveAll(any());
         verify(rankingRepository, never()).save(any());
+    }
+
+    @Test
+    void recalculateRanking_returns404WhenMissing_rejectsKnockout_skipsCancelled_andSortsStableByName() {
+        // 1. Missing competition -> ResourceNotFoundException (404) & never saves Ranking
+        when(rankingProviderClient.getCompetitionById(404L)).thenReturn(null);
+        assertThrows(com.sports.management.exception.ResourceNotFoundException.class,
+                () -> rankingService.recalculateRanking(404L));
+        verify(rankingRepository, never()).save(any());
+
+        // 2. KNOCKOUT competition -> 400 Bad Request
+        when(rankingProviderClient.getCompetitionById(20L)).thenReturn(Map.of("id", 20L, "name", "Cúp Knockout"));
+        when(rankingProviderClient.getCompetitionFormat(20L)).thenReturn(Map.of("competitionId", 20L, "formatType", "KNOCKOUT"));
+        ResponseStatusException koEx = assertThrows(ResponseStatusException.class,
+                () -> rankingService.recalculateRanking(20L));
+        assertEquals(HttpStatus.BAD_REQUEST, koEx.getStatusCode());
+
+        // 3. Skips CANCELLED matches & breaks equal points/diff/goals tie alphabetically by participantName
+        Ranking r30 = new Ranking(30L, 30L, "BXH Chuẩn", LocalDateTime.now());
+        when(rankingProviderClient.getCompetitionById(30L)).thenReturn(Map.of("id", 30L, "name", "Giải Vòng Tròn"));
+        when(rankingProviderClient.getCompetitionFormat(30L)).thenReturn(Map.of("competitionId", 30L, "formatType", "ROUND_ROBIN"));
+        when(rankingProviderClient.getMatchesByCompetitionId(30L)).thenReturn(List.of(
+                Map.of("id", 301L, "competitionId", 30L, "participant1", "Zebra FC", "participant2", "Alpha FC", "status", "FINISHED"),
+                Map.of("id", 302L, "competitionId", 30L, "participant1", "Cancelled Team", "participant2", "Alpha FC", "status", "CANCELLED")
+        ));
+        when(rankingProviderClient.getResultsByMatchIds(List.of(301L))).thenReturn(List.of(
+                Map.of("matchId", 301L, "status", "CONFIRMED", "scoreParticipant1", 1, "scoreParticipant2", 1)
+        ));
+        when(rankingRepository.findByCompetitionId(30L)).thenReturn(Optional.of(r30));
+        when(rankingRepository.save(any(Ranking.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(rankingItemRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        RankingResponse res = rankingService.recalculateRanking(30L);
+        assertEquals(2, res.getItems().size(), "Cancelled team must be ignored cleanly");
+        assertEquals("Alpha FC", res.getItems().get(0).getParticipantName());
+        assertEquals("Zebra FC", res.getItems().get(1).getParticipantName());
     }
 
     @Test

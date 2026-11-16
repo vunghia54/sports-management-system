@@ -1,8 +1,11 @@
 package com.sports.management.result.service;
 
+import com.sports.management.result.model.RankingSyncTask;
 import com.sports.management.result.model.Result;
+import com.sports.management.result.repository.RankingSyncTaskRepository;
 import com.sports.management.result.repository.ResultRepository;
 import com.sports.management.result.security.JwtTokenProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -16,6 +19,7 @@ import java.util.List;
 public class ResultSyncRecoveryWorker {
 
     private final ResultRepository resultRepository;
+    private final RankingSyncTaskRepository rankingSyncTaskRepository;
     private final ResultService resultService;
     private final JwtTokenProvider jwtTokenProvider;
     private final boolean syncEnabled;
@@ -24,8 +28,19 @@ public class ResultSyncRecoveryWorker {
             ResultRepository resultRepository,
             ResultService resultService,
             JwtTokenProvider jwtTokenProvider,
+            boolean syncEnabled) {
+        this(resultRepository, null, resultService, jwtTokenProvider, syncEnabled);
+    }
+
+    @Autowired
+    public ResultSyncRecoveryWorker(
+            ResultRepository resultRepository,
+            RankingSyncTaskRepository rankingSyncTaskRepository,
+            ResultService resultService,
+            JwtTokenProvider jwtTokenProvider,
             @Value("${app.result.sync-enabled:true}") boolean syncEnabled) {
         this.resultRepository = resultRepository;
+        this.rankingSyncTaskRepository = rankingSyncTaskRepository;
         this.resultService = resultService;
         this.jwtTokenProvider = jwtTokenProvider;
         this.syncEnabled = syncEnabled;
@@ -52,7 +67,10 @@ public class ResultSyncRecoveryWorker {
                 ResultService.MAX_AUTO_SYNC_ATTEMPTS,
                 LocalDateTime.now()
         );
-        if (dueJobs.isEmpty()) {
+        List<RankingSyncTask> dueRankingTasks = rankingSyncTaskRepository != null
+                ? rankingSyncTaskRepository.findDueTasks(ResultService.MAX_AUTO_SYNC_ATTEMPTS, LocalDateTime.now())
+                : List.of();
+        if (dueJobs.isEmpty() && dueRankingTasks.isEmpty()) {
             return 0;
         }
         String internalBearer = jwtTokenProvider.generateInternalSyncToken();
@@ -63,6 +81,14 @@ public class ResultSyncRecoveryWorker {
                 processed++;
             } catch (Exception ex) {
                 System.out.println("[WARN] Sync worker failed processing resultId=" + job.getId() + ": " + ex.getMessage());
+            }
+        }
+        for (RankingSyncTask task : dueRankingTasks) {
+            try {
+                resultService.executeRankingSyncTask(task.getId(), internalBearer);
+                processed++;
+            } catch (Exception ex) {
+                System.out.println("[WARN] Sync worker failed processing rankingSyncTaskId=" + task.getId() + ": " + ex.getMessage());
             }
         }
         return processed;

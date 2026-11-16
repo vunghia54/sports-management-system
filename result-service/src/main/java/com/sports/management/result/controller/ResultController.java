@@ -72,10 +72,22 @@ public class ResultController {
     @PostMapping
     public ResponseEntity<ResultResponse> recordResult(
             @Valid @RequestBody RecordResultRequest request,
-            Authentication authentication) {
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
         assertAuthenticated(authentication);
         Map<String, Object> match = verifyCanRecordOrEditResult(request.getMatchId(), authentication);
-        ResultResponse response = resultService.recordResult(request, match);
+        resultService.findByMatchId(request.getMatchId()).ifPresent(existing -> {
+            if ("CONFIRMED".equalsIgnoreCase(existing.getStatus())
+                    && !hasAuthority(authentication, "ROLE_ADMIN")
+                    && !hasAuthority(authentication, "ROLE_ORGANIZER")) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Access Denied: Kết quả đã xác nhận chính thức (CONFIRMED). Trọng tài không được ghi đè; chỉ Ban tổ chức sở hữu giải hoặc Admin được mở lại."
+                );
+            }
+        });
+        String authHeader = httpRequest != null ? httpRequest.getHeader("Authorization") : null;
+        ResultResponse response = resultService.recordResult(request, match, authHeader);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header("X-Instance-Id", instanceId)
                 .header("X-Match-Provider-Instance", matchAndRankingClient.getLastHandledMatchInstance())
@@ -183,10 +195,20 @@ public class ResultController {
     public ResponseEntity<Result> patchResult(
             @PathVariable Long id,
             @RequestBody Map<String, Object> updates,
-            Authentication authentication) {
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
         assertAuthenticated(authentication);
         Result existing = resultService.getResultById(id);
         verifyCanRecordOrEditResult(existing.getMatchId(), authentication);
+
+        if ("CONFIRMED".equalsIgnoreCase(existing.getStatus())
+                && !hasAuthority(authentication, "ROLE_ADMIN")
+                && !hasAuthority(authentication, "ROLE_ORGANIZER")) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Access Denied: Trọng tài không được sửa kết quả đã xác nhận (CONFIRMED)."
+            );
+        }
 
         if (updates != null) {
             if (updates.containsKey("status")) {
@@ -222,18 +244,21 @@ public class ResultController {
             }
         }
 
-        return ResponseEntity.ok(resultService.patchNotesOnly(id, updates));
+        String authHeader = httpRequest != null ? httpRequest.getHeader("Authorization") : null;
+        return ResponseEntity.ok(resultService.patchNotesOnly(id, updates, authHeader));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteResult(
             @PathVariable Long id,
-            Authentication authentication) {
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
         assertAuthenticated(authentication);
         if (!hasAuthority(authentication, "ROLE_ADMIN")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access Denied: Only Admin can delete results");
         }
-        resultService.deleteResult(id);
+        String authHeader = httpRequest != null ? httpRequest.getHeader("Authorization") : null;
+        resultService.deleteResult(id, authHeader);
         return ResponseEntity.noContent().build();
     }
 

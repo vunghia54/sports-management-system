@@ -146,6 +146,30 @@ public interface ResultRepository extends JpaRepository<Result, Long>, JpaSpecif
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             UPDATE Result r
+            SET r.matchSynced = TRUE,
+                r.rankingSynced = FALSE,
+                r.syncStatus = 'SYNCED',
+                r.syncError = NULL,
+                r.syncPermanentFailure = FALSE,
+                r.nextRetryAt = NULL,
+                r.syncAttempts = COALESCE(r.syncAttempts, 0) + 1,
+                r.lastSyncAttemptAt = :now,
+                r.syncClaimId = NULL,
+                r.syncLeaseUntil = NULL
+            WHERE r.id = :id
+              AND COALESCE(r.resultVersion, 1L) = :expectedVersion
+              AND r.syncClaimId = :claimId
+              AND UPPER(r.status) = 'CONFIRMED'
+            """)
+    int markCompletedWithoutRankingIfVersion(
+            @Param("id") Long id,
+            @Param("expectedVersion") Long expectedVersion,
+            @Param("claimId") String claimId,
+            @Param("now") LocalDateTime now);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            UPDATE Result r
             SET r.syncClaimId = NULL,
                 r.syncLeaseUntil = NULL
             WHERE r.id = :id

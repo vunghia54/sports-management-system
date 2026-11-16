@@ -4,12 +4,15 @@ import com.sports.management.exception.PermanentSyncException;
 import com.sports.management.exception.ResourceNotFoundException;
 import com.sports.management.exception.TransientSyncException;
 import com.sports.management.result.client.MatchAndRankingClient;
+import com.sports.management.result.model.RankingSyncTask;
 import com.sports.management.result.model.RecordResultRequest;
 import com.sports.management.result.model.Result;
 import com.sports.management.result.model.ResultDetail;
 import com.sports.management.result.model.ResultResponse;
+import com.sports.management.result.repository.RankingSyncTaskRepository;
 import com.sports.management.result.repository.ResultDetailRepository;
 import com.sports.management.result.repository.ResultRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -20,6 +23,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -31,16 +36,28 @@ public class ResultService {
     private final ResultDetailRepository resultDetailRepository;
     private final ResultPersistenceService persistenceService;
     private final MatchAndRankingClient matchAndRankingClient;
+    private final RankingSyncTaskRepository rankingSyncTaskRepository;
 
     public ResultService(
             ResultRepository resultRepository,
             ResultDetailRepository resultDetailRepository,
             ResultPersistenceService persistenceService,
             MatchAndRankingClient matchAndRankingClient) {
+        this(resultRepository, resultDetailRepository, persistenceService, matchAndRankingClient, null);
+    }
+
+    @Autowired
+    public ResultService(
+            ResultRepository resultRepository,
+            ResultDetailRepository resultDetailRepository,
+            ResultPersistenceService persistenceService,
+            MatchAndRankingClient matchAndRankingClient,
+            RankingSyncTaskRepository rankingSyncTaskRepository) {
         this.resultRepository = resultRepository;
         this.resultDetailRepository = resultDetailRepository;
         this.persistenceService = persistenceService;
         this.matchAndRankingClient = matchAndRankingClient;
+        this.rankingSyncTaskRepository = rankingSyncTaskRepository;
     }
 
     public List<Result> getAllResults() {
@@ -98,16 +115,28 @@ public class ResultService {
         return new ResultResponse(result, details);
     }
 
+    public Optional<Result> findByMatchId(Long matchId) {
+        return matchId != null ? resultRepository.findByMatchId(matchId) : Optional.empty();
+    }
+
     public ResultResponse recordResult(RecordResultRequest request, Map<String, Object> verifiedMatch) {
+        return recordResult(request, verifiedMatch, null);
+    }
+
+    public ResultResponse recordResult(RecordResultRequest request, Map<String, Object> verifiedMatch, String callerBearerToken) {
         int s1 = request.getScoreParticipant1() != null ? request.getScoreParticipant1() : 0;
         int s2 = request.getScoreParticipant2() != null ? request.getScoreParticipant2() : 0;
-        if (s1 < 0 || s2 < 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tỷ số thi đấu không được âm");
+        Integer pen1 = request.getPenaltyScore1();
+        Integer pen2 = request.getPenaltyScore2();
+        if (s1 < 0 || s2 < 0 || (pen1 != null && pen1 < 0) || (pen2 != null && pen2 < 0)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tỷ số thi đấu và điểm luân lưu không được âm");
         }
 
         Map<String, Object> match = verifiedMatch != null
                 ? verifiedMatch
                 : matchAndRankingClient.getMatchById(request.getMatchId());
+
+        assertMatchEligibleForResult(match, request.getMatchId());
 
         String participant1 = match != null && match.get("participant1") != null
                 ? String.valueOf(match.get("participant1")) : "PARTICIPANT_1";
@@ -115,24 +144,43 @@ public class ResultService {
                 ? String.valueOf(match.get("participant2")) : "PARTICIPANT_2";
         Long competitionId = extractCompetitionId(match);
 
+        if (s1 == s2 && competitionId != null && isKnockoutCompetition(competitionId)) {
+            if (pen1 == null || pen2 == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Nội dung loại trực tiếp (KNOCKOUT) có tỉ số hòa phải nhập tỷ số luân lưu (penaltyScore1, penaltyScore2)");
+            }
+            if (Objects.equals(pen1, pen2)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Tỷ số luân lưu (penaltyScore1, penaltyScore2) trong thể thức KNOCKOUT phải phân định thắng thua");
+            }
+        }
+
         String winner;
         if (s1 > s2) {
             winner = participant1;
         } else if (s2 > s1) {
             winner = participant2;
+        } else if (pen1 != null && pen2 != null && !Objects.equals(pen1, pen2)) {
+            winner = pen1 > pen2 ? participant1 : participant2;
         } else {
             winner = "DRAW";
         }
 
-        return persistenceService.saveRecordedResult(
+        ResultPersistenceService.SaveOutcome outcome = persistenceService.saveRecordedResultAndCheckRecalc(
                 request.getMatchId(),
                 s1,
                 s2,
+                pen1,
+                pen2,
                 winner,
                 request.getNotes(),
                 competitionId,
                 request.getDetails()
         );
+        if (outcome.rankingSyncTaskId() != null) {
+            executeRankingSyncTask(outcome.rankingSyncTaskId(), callerBearerToken);
+        }
+        return outcome.response();
     }
 
     public ResultResponse confirmResult(
@@ -262,13 +310,16 @@ public class ResultService {
                     }
                 }
 
-                // Step 2: Recalculate standings in Ranking Service (mandatory before marking SYNCED)
-                if (!initial.isRankingSynced()) {
-                    matchAndRankingClient.recalculateRanking(competitionId, bearerToken);
+                // Step 2: Recalculate standings in Ranking Service (skip point table for KNOCKOUT)
+                boolean isKnockout = isKnockoutCompetition(competitionId);
+                if (isKnockout) {
+                    persistenceService.markCompletedWithoutRankingIfVersion(resultId, jobVersion, claimId, competitionId);
+                } else {
+                    if (!initial.isRankingSynced()) {
+                        matchAndRankingClient.recalculateRanking(competitionId, bearerToken);
+                    }
+                    persistenceService.markAllSyncedIfVersion(resultId, jobVersion, claimId, competitionId);
                 }
-
-                // Only commit SYNCED/rankingSynced=true if resultVersion & claimId still match the active job
-                persistenceService.markAllSyncedIfVersion(resultId, jobVersion, claimId, competitionId);
                 return toResultResponse(getResultById(resultId));
 
             } catch (PermanentSyncException ex) {
@@ -308,11 +359,118 @@ public class ResultService {
     }
 
     public Result patchNotesOnly(Long id, Map<String, Object> updates) {
-        return persistenceService.patchNotesOnly(id, updates);
+        return patchNotesOnly(id, updates, null);
+    }
+
+    public Result patchNotesOnly(Long id, Map<String, Object> updates, String callerBearerToken) {
+        ResultPersistenceService.PatchOutcome outcome = persistenceService.patchNotesOnlyWithRecalc(id, updates);
+        if (outcome.rankingSyncTaskId() != null) {
+            executeRankingSyncTask(outcome.rankingSyncTaskId(), callerBearerToken);
+        }
+        return outcome.result();
     }
 
     public void deleteResult(Long id) {
-        persistenceService.deleteResultById(id);
+        deleteResult(id, null);
+    }
+
+    public void deleteResult(Long id, String callerBearerToken) {
+        Long taskId = persistenceService.deleteResultByIdWithRecalc(id);
+        if (taskId != null) {
+            executeRankingSyncTask(taskId, callerBearerToken);
+        }
+    }
+
+    public void executeRankingSyncTask(Long taskId, String bearerToken) {
+        if (rankingSyncTaskRepository == null || taskId == null) {
+            return;
+        }
+        Optional<RankingSyncTask> taskOpt = rankingSyncTaskRepository.findById(taskId);
+        if (taskOpt.isEmpty()) {
+            return;
+        }
+        RankingSyncTask task = taskOpt.get();
+        if ("SYNCED".equalsIgnoreCase(task.getStatus()) || task.isPermanentFailure()) {
+            return;
+        }
+        try {
+            if (isKnockoutCompetition(task.getCompetitionId())) {
+                persistenceService.markRankingTaskSynced(taskId);
+                return;
+            }
+            matchAndRankingClient.recalculateRanking(task.getCompetitionId(), bearerToken);
+            persistenceService.markRankingTaskSynced(taskId);
+        } catch (PermanentSyncException ex) {
+            persistenceService.markRankingTaskFailed(taskId, ex.getMessage(), true, null);
+        } catch (TransientSyncException ex) {
+            int nextAttempt = task.getAttempts() + 1;
+            long backoffSeconds = Math.min(300L, 15L * nextAttempt);
+            persistenceService.markRankingTaskFailed(taskId, ex.getMessage(), false,
+                    LocalDateTime.now().plusSeconds(backoffSeconds));
+        } catch (ResponseStatusException ex) {
+            boolean perm = ex.getStatusCode().is4xxClientError()
+                    && ex.getStatusCode().value() != 408
+                    && ex.getStatusCode().value() != 429;
+            int nextAttempt = task.getAttempts() + 1;
+            LocalDateTime nextRetry = perm ? null : LocalDateTime.now().plusSeconds(Math.min(300L, 15L * nextAttempt));
+            persistenceService.markRankingTaskFailed(taskId,
+                    ex.getReason() != null ? ex.getReason() : ex.getMessage(), perm, nextRetry);
+        } catch (Exception ex) {
+            int nextAttempt = task.getAttempts() + 1;
+            persistenceService.markRankingTaskFailed(taskId, ex.getMessage(), false,
+                    LocalDateTime.now().plusSeconds(Math.min(300L, 15L * nextAttempt)));
+        }
+    }
+
+    private void assertMatchEligibleForResult(Map<String, Object> match, Long matchId) {
+        if (match == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không tìm thấy thông tin trận đấu #" + matchId);
+        }
+        String mStatus = match.get("status") != null ? String.valueOf(match.get("status")).trim().toUpperCase() : "";
+        if (!"ONGOING".equals(mStatus) && !"FINISHED".equals(mStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Chỉ được ghi kết quả khi trận đấu đang diễn ra (ONGOING) hoặc đã kết thúc (FINISHED); trạng thái hiện tại: " + mStatus);
+        }
+        LocalDateTime matchTime = parseLocalDateTime(match.get("matchTime"));
+        if (matchTime != null && matchTime.isAfter(LocalDateTime.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Trận đấu #" + matchId + " chưa tới giờ thi đấu (" + matchTime + "), chưa thể ghi kết quả");
+        }
+    }
+
+    private boolean isKnockoutCompetition(Long competitionId) {
+        if (competitionId == null) {
+            return false;
+        }
+        Map<String, Object> fmtMap = matchAndRankingClient.getCompetitionFormat(competitionId);
+        if (fmtMap == null || fmtMap.get("formatType") == null) {
+            return false;
+        }
+        String fmt = String.valueOf(fmtMap.get("formatType")).trim().toUpperCase();
+        return "KNOCKOUT".equals(fmt) || "SINGLE_ELIMINATION".equals(fmt);
+    }
+
+    private LocalDateTime parseLocalDateTime(Object val) {
+        if (val == null) return null;
+        if (val instanceof LocalDateTime ldt) return ldt;
+        if (val instanceof List<?> arr && arr.size() >= 5) {
+            int sec = arr.size() >= 6 ? Integer.parseInt(String.valueOf(arr.get(5))) : 0;
+            return LocalDateTime.of(
+                    Integer.parseInt(String.valueOf(arr.get(0))),
+                    Integer.parseInt(String.valueOf(arr.get(1))),
+                    Integer.parseInt(String.valueOf(arr.get(2))),
+                    Integer.parseInt(String.valueOf(arr.get(3))),
+                    Integer.parseInt(String.valueOf(arr.get(4))),
+                    sec
+            );
+        }
+        String text = String.valueOf(val).trim();
+        if (text.isEmpty() || "null".equalsIgnoreCase(text)) return null;
+        try {
+            return LocalDateTime.parse(text);
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private Long extractCompetitionId(Map<String, Object> match) {

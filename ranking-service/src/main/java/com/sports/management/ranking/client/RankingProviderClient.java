@@ -12,6 +12,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,6 +61,25 @@ public class RankingProviderClient {
         }
     }
 
+    public Map<String, Object> getCompetitionFormat(Long competitionId) {
+        try {
+            var spec = tournamentRestClient.get()
+                    .uri("/api/v1/competitions/{id}/format", competitionId);
+            String auth = getCurrentAuthHeader();
+            if (auth != null) spec.header("Authorization", auth);
+            return spec.retrieve()
+                    .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+        } catch (HttpClientErrorException.NotFound nf) {
+            return null;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Tournament Service is unavailable when loading format for Competition ID: " + competitionId,
+                    ex
+            );
+        }
+    }
+
     public List<Map<String, Object>> getMatchesByCompetitionId(Long competitionId) {
         try {
             var spec = matchRestClient.get()
@@ -73,6 +93,30 @@ public class RankingProviderClient {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "Match Service is unavailable when recalculating ranking for competition " + competitionId,
+                    ex
+            );
+        }
+    }
+
+    public List<Map<String, Object>> getResultsByMatchIds(Collection<Long> matchIds) {
+        if (matchIds == null || matchIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            var spec = resultRestClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/v1/results/by-matches")
+                            .queryParam("matchIds", matchIds.toArray())
+                            .build());
+            String auth = getCurrentAuthHeader();
+            if (auth != null) spec.header("Authorization", auth);
+            List<Map<String, Object>> results = spec.retrieve()
+                    .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+            return results != null ? results : Collections.emptyList();
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Result Service is unavailable when recalculating ranking",
                     ex
             );
         }

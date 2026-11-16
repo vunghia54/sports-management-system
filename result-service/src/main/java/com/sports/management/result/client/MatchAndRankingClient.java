@@ -125,6 +125,33 @@ public class MatchAndRankingClient {
         }
     }
 
+    public Map<String, Object> getCompetitionFormat(Long competitionId) {
+        if (competitionId == null) {
+            return null;
+        }
+        try {
+            var requestSpec = tournamentRestClient.get()
+                    .uri("/api/v1/competitions/{id}/format", competitionId);
+            String authHeader = getCurrentAuthHeader();
+            if (authHeader != null && !authHeader.isBlank()) {
+                requestSpec.header("Authorization", authHeader);
+            }
+            return requestSpec.retrieve()
+                    .onStatus(status -> status.value() == 404, (req, res) -> {
+                        throw new TournamentNotFoundException();
+                    })
+                    .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+        } catch (TournamentNotFoundException ex) {
+            return null;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Tournament Service is unavailable when verifying competition format #" + competitionId,
+                    ex
+            );
+        }
+    }
+
     public void markMatchFinished(Long matchId) {
         markMatchFinished(matchId, null);
     }

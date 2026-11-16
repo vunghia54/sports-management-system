@@ -20,6 +20,10 @@ public class Result {
 
     private Integer scoreParticipant2 = 0;
 
+    private Integer penaltyScore1;
+
+    private Integer penaltyScore2;
+
     private String winner; // participant1, participant2, or DRAW
 
     private String status = "PENDING_CONFIRMATION"; // PENDING_CONFIRMATION, CONFIRMED
@@ -100,6 +104,22 @@ public class Result {
 
     public void setScoreParticipant2(Integer scoreParticipant2) {
         this.scoreParticipant2 = scoreParticipant2;
+    }
+
+    public Integer getPenaltyScore1() {
+        return penaltyScore1;
+    }
+
+    public void setPenaltyScore1(Integer penaltyScore1) {
+        this.penaltyScore1 = penaltyScore1;
+    }
+
+    public Integer getPenaltyScore2() {
+        return penaltyScore2;
+    }
+
+    public void setPenaltyScore2(Integer penaltyScore2) {
+        this.penaltyScore2 = penaltyScore2;
     }
 
     public String getWinner() {

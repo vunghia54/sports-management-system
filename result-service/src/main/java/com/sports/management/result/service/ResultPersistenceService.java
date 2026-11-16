@@ -1,11 +1,14 @@
 package com.sports.management.result.service;
 
 import com.sports.management.exception.ResourceNotFoundException;
+import com.sports.management.result.model.RankingSyncTask;
 import com.sports.management.result.model.Result;
 import com.sports.management.result.model.ResultDetail;
 import com.sports.management.result.model.ResultResponse;
+import com.sports.management.result.repository.RankingSyncTaskRepository;
 import com.sports.management.result.repository.ResultDetailRepository;
 import com.sports.management.result.repository.ResultRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,14 +20,27 @@ import java.util.Map;
 @Service
 public class ResultPersistenceService {
 
+    public record SaveOutcome(ResultResponse response, Long rankingSyncTaskId) {}
+    public record PatchOutcome(Result result, Long rankingSyncTaskId) {}
+
     private final ResultRepository resultRepository;
     private final ResultDetailRepository resultDetailRepository;
+    private final RankingSyncTaskRepository rankingSyncTaskRepository;
 
     public ResultPersistenceService(
             ResultRepository resultRepository,
             ResultDetailRepository resultDetailRepository) {
+        this(resultRepository, resultDetailRepository, null);
+    }
+
+    @Autowired
+    public ResultPersistenceService(
+            ResultRepository resultRepository,
+            ResultDetailRepository resultDetailRepository,
+            RankingSyncTaskRepository rankingSyncTaskRepository) {
         this.resultRepository = resultRepository;
         this.resultDetailRepository = resultDetailRepository;
+        this.rankingSyncTaskRepository = rankingSyncTaskRepository;
     }
 
     @Transactional
@@ -36,19 +52,39 @@ public class ResultPersistenceService {
             String notes,
             Long competitionId,
             List<ResultDetail> details) {
+        return saveRecordedResultAndCheckRecalc(matchId, score1, score2, null, null, winner, notes, competitionId, details).response();
+    }
+
+    @Transactional
+    public SaveOutcome saveRecordedResultAndCheckRecalc(
+            Long matchId,
+            Integer score1,
+            Integer score2,
+            Integer penaltyScore1,
+            Integer penaltyScore2,
+            String winner,
+            String notes,
+            Long competitionId,
+            List<ResultDetail> details) {
 
         Result result = resultRepository.findByMatchId(matchId).orElse(null);
+        boolean wasSyncedToRanking = false;
+        Long oldCompId = null;
         long nextVersion;
         if (result == null) {
             result = new Result();
             nextVersion = 1L;
         } else {
             nextVersion = result.getResultVersion() + 1L;
+            wasSyncedToRanking = "CONFIRMED".equalsIgnoreCase(result.getStatus()) && result.isRankingSynced();
+            oldCompId = result.getCompetitionId();
         }
 
         result.setMatchId(matchId);
         result.setScoreParticipant1(score1);
         result.setScoreParticipant2(score2);
+        result.setPenaltyScore1(penaltyScore1);
+        result.setPenaltyScore2(penaltyScore2);
         result.setWinner(winner);
         result.setNotes(notes);
         result.setCompetitionId(competitionId);
@@ -71,16 +107,23 @@ public class ResultPersistenceService {
 
         Result savedResult = resultRepository.saveAndFlush(result);
 
+        resultDetailRepository.deleteByResultId(savedResult.getId());
         List<ResultDetail> savedDetails = Collections.emptyList();
         if (details != null && !details.isEmpty()) {
-            resultDetailRepository.deleteByResultId(savedResult.getId());
             for (ResultDetail detail : details) {
+                detail.setId(null);
                 detail.setResultId(savedResult.getId());
             }
             savedDetails = resultDetailRepository.saveAll(details);
         }
 
-        return new ResultResponse(savedResult, savedDetails);
+        Long targetCompId = competitionId != null ? competitionId : oldCompId;
+        Long taskId = null;
+        if (wasSyncedToRanking && targetCompId != null && rankingSyncTaskRepository != null) {
+            taskId = rankingSyncTaskRepository.saveAndFlush(new RankingSyncTask(targetCompId, "RESULT_EDITED")).getId();
+        }
+
+        return new SaveOutcome(new ResultResponse(savedResult, savedDetails), taskId);
     }
 
     @Transactional
@@ -152,6 +195,14 @@ public class ResultPersistenceService {
     }
 
     @Transactional
+    public boolean markCompletedWithoutRankingIfVersion(Long resultId, long expectedVersion, String claimId, Long competitionId) {
+        if (competitionId != null) {
+            resultRepository.updateCompetitionIdIfVersion(resultId, expectedVersion, claimId, competitionId);
+        }
+        return resultRepository.markCompletedWithoutRankingIfVersion(resultId, expectedVersion, claimId, LocalDateTime.now()) > 0;
+    }
+
+    @Transactional
     public boolean markSyncFailedIfVersion(
             Long resultId,
             long expectedVersion,
@@ -181,16 +232,26 @@ public class ResultPersistenceService {
 
     @Transactional
     public Result patchNotesOnly(Long id, Map<String, Object> updates) {
+        return patchNotesOnlyWithRecalc(id, updates).result();
+    }
+
+    @Transactional
+    public PatchOutcome patchNotesOnlyWithRecalc(Long id, Map<String, Object> updates) {
         Result existing = resultRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Result not found with id: " + id));
         if (updates != null && updates.containsKey("notes")) {
             Object rawNotes = updates.get("notes");
             existing.setNotes(rawNotes != null ? String.valueOf(rawNotes) : null);
         }
+        Long taskId = null;
         if (updates != null && updates.containsKey("status")) {
             Object rawStatus = updates.get("status");
             String nextStatus = rawStatus != null ? String.valueOf(rawStatus).trim().toUpperCase() : "";
             if ("PENDING_CONFIRMATION".equals(nextStatus) && !"PENDING_CONFIRMATION".equalsIgnoreCase(existing.getStatus())) {
+                boolean wasSyncedToRanking = "CONFIRMED".equalsIgnoreCase(existing.getStatus())
+                        && (existing.isRankingSynced() || "SYNCED".equalsIgnoreCase(existing.getSyncStatus()))
+                        && existing.getCompetitionId() != null;
+                Long compId = existing.getCompetitionId();
                 existing.setResultVersion(existing.getResultVersion() + 1L);
                 existing.setStatus("PENDING_CONFIRMATION");
                 existing.setConfirmedBy(null);
@@ -204,16 +265,62 @@ public class ResultPersistenceService {
                 existing.setNextRetryAt(null);
                 existing.setSyncClaimId(null);
                 existing.setSyncLeaseUntil(null);
+                if (wasSyncedToRanking && rankingSyncTaskRepository != null) {
+                    taskId = rankingSyncTaskRepository.saveAndFlush(new RankingSyncTask(compId, "RESULT_REOPENED")).getId();
+                }
             }
         }
-        return resultRepository.saveAndFlush(existing);
+        return new PatchOutcome(resultRepository.saveAndFlush(existing), taskId);
     }
 
     @Transactional
     public void deleteResultById(Long id) {
+        deleteResultByIdWithRecalc(id);
+    }
+
+    @Transactional
+    public Long deleteResultByIdWithRecalc(Long id) {
         Result existing = resultRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Result not found with id: " + id));
+        boolean needsRankingRecalc = "CONFIRMED".equalsIgnoreCase(existing.getStatus())
+                && existing.getCompetitionId() != null
+                && (existing.isRankingSynced() || "SYNCED".equalsIgnoreCase(existing.getSyncStatus()));
+        Long compId = existing.getCompetitionId();
         resultDetailRepository.deleteByResultId(existing.getId());
         resultRepository.delete(existing);
+        resultRepository.flush();
+        if (needsRankingRecalc && rankingSyncTaskRepository != null) {
+            return rankingSyncTaskRepository.saveAndFlush(new RankingSyncTask(compId, "RESULT_DELETED")).getId();
+        }
+        return null;
+    }
+
+    @Transactional
+    public void markRankingTaskSynced(Long taskId) {
+        if (rankingSyncTaskRepository == null || taskId == null) return;
+        rankingSyncTaskRepository.findById(taskId).ifPresent(t -> {
+            t.setStatus("SYNCED");
+            t.setAttempts(t.getAttempts() + 1);
+            t.setLastAttemptAt(LocalDateTime.now());
+            t.setNextRetryAt(null);
+            t.setLastError(null);
+            t.setPermanentFailure(false);
+            rankingSyncTaskRepository.save(t);
+        });
+    }
+
+    @Transactional
+    public void markRankingTaskFailed(Long taskId, String error, boolean permanent, LocalDateTime nextRetryAt) {
+        if (rankingSyncTaskRepository == null || taskId == null) return;
+        rankingSyncTaskRepository.findById(taskId).ifPresent(t -> {
+            String safeErr = error != null ? error : "";
+            t.setStatus("FAILED");
+            t.setAttempts(t.getAttempts() + 1);
+            t.setLastAttemptAt(LocalDateTime.now());
+            t.setLastError(safeErr.length() > 950 ? safeErr.substring(0, 950) : safeErr);
+            t.setPermanentFailure(permanent);
+            t.setNextRetryAt(permanent ? null : nextRetryAt);
+            rankingSyncTaskRepository.save(t);
+        });
     }
 }

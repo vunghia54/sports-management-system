@@ -872,19 +872,16 @@
           ]
         },
         {
-          "name": "6.2 Trọng tài Xác nhận Kết quả (Tự động kết thúc Match & Tính lại Ranking qua Eureka) [TH4, TH5, TH7]",
+          "name": "6.2 Ban tổ chức Xác nhận Kết quả (Tự động kết thúc Match & Tính lại Ranking qua Eureka) [TH4, TH5, TH7]",
           "request": {
             "method": "PUT",
             "header": [
               { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
             ],
             "url": {
-              "raw": "{{resultUrl}}/api/v1/results/{{resultId}}/confirm?confirmedBy=TrongTaiChinh",
+              "raw": "{{resultUrl}}/api/v1/results/{{resultId}}/confirm",
               "host": ["{{resultUrl}}"],
-              "path": ["api", "v1", "results", "{{resultId}}", "confirm"],
-              "query": [
-                { "key": "confirmedBy", "value": "TrongTaiChinh" }
-              ]
+              "path": ["api", "v1", "results", "{{resultId}}", "confirm"]
             }
           },
           "event": [

@@ -57,6 +57,9 @@ Hệ thống Quản lý Thể thao định nghĩa 5 vai trò rõ rệt (`ROLE_AD
 | 15c | `PUT` | `/api/v1/registrations/{id}/approve` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Chỉ Organizer sở hữu giải (hoặc Admin) | 200 OK / 400 / 403 / 409 |
 | 15d | `PUT` | `/api/v1/registrations/{id}/reject` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Organizer sở hữu giải (409 nếu đã có trận) | 200 OK / 400 / 403 / 409 |
 | 15e | `PUT` | `/api/v1/registrations/{id}/withdraw` | Match | Bảo vệ | Người đã đăng ký (`registeredBy`), `ROLE_ADMIN` | Rút đơn (409 nếu đã có trận) | 200 OK / 400 / 403 / 409 |
+| 16 | `POST` | `/api/v1/results` | Result | Bảo vệ | `ROLE_REFEREE` (được phân công), `ROLE_ORGANIZER` (sở hữu giải), `ROLE_ADMIN` | Trọng tài không ghi đè được `CONFIRMED`; KNOCKOUT hòa phải có luân lưu | 201 Created / 400 / 403 |
+| 17 | `PUT` | `/api/v1/results/{id}/confirm` | Result | Bảo vệ | `ROLE_ORGANIZER` (sở hữu giải), `ROLE_ADMIN` | Xác nhận chính thức & đồng bộ Match/Ranking | 200 / 202 / 403 |
+| 18 | `PATCH` | `/api/v1/results/{id}` | Result | Bảo vệ | Trọng tài (`notes` khi chưa confirm); Organizer/Admin được mở lại `PENDING_CONFIRMATION` | Mở lại/xóa kết quả tự tính lại BXH | 200 OK / 400 / 403 |
 
 ---
 

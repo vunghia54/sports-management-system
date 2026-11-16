@@ -9,8 +9,10 @@ import com.sports.management.ranking.repository.RankingItemRepository;
 import com.sports.management.ranking.repository.RankingRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -91,6 +93,10 @@ public class RankingService {
             comp = rankingProviderClient.getCompetitionById(competitionId);
         } catch (Exception ignored) {
         }
+        return createDefaultRanking(competitionId, comp);
+    }
+
+    private Ranking createDefaultRanking(Long competitionId, Map<String, Object> comp) {
         String compName = (comp != null && comp.get("competitionName") != null)
                 ? String.valueOf(comp.get("competitionName"))
                 : (comp != null && comp.get("name") != null
@@ -106,20 +112,40 @@ public class RankingService {
 
     @Transactional
     public RankingResponse recalculateRanking(Long competitionId) {
-        // 1. Lay du lieu tran dau DUNG cua competitionId & ket qua truoc khi thay doi DB
-        //    (Neu upstream service loi, throw 503 ngay — khong xoa hoac ghi de BXH hien co)
+        // 1. Verify competition exists (404 if absent) and check format != KNOCKOUT before mutating DB
+        Map<String, Object> competition = rankingProviderClient.getCompetitionById(competitionId);
+        if (competition == null) {
+            throw new ResourceNotFoundException("Competition not found with id: " + competitionId);
+        }
+        Map<String, Object> format = rankingProviderClient.getCompetitionFormat(competitionId);
+        if (isKnockoutFormat(format)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Nội dung thi đấu thể thức loại trực tiếp (KNOCKOUT) không áp dụng bảng xếp hạng tính điểm");
+        }
+
+        // 2. Load matches of competitionId (skipping CANCELLED) and load results only by matchIds
         List<Map<String, Object>> rawMatches = rankingProviderClient.getMatchesByCompetitionId(competitionId);
         List<Map<String, Object>> matches = rawMatches.stream()
                 .filter(m -> m.get("competitionId") == null || competitionId.equals(Long.valueOf(String.valueOf(m.get("competitionId")))))
+                .filter(m -> !"CANCELLED".equalsIgnoreCase(String.valueOf(m.get("status"))))
                 .toList();
 
-        List<Map<String, Object>> allResults = rankingProviderClient.getAllResults();
+        List<Long> matchIds = matches.stream()
+                .map(m -> m.get("id"))
+                .filter(Objects::nonNull)
+                .map(v -> Long.valueOf(String.valueOf(v)))
+                .distinct()
+                .toList();
+
+        List<Map<String, Object>> batchResults = matchIds.isEmpty()
+                ? Collections.emptyList()
+                : rankingProviderClient.getResultsByMatchIds(matchIds);
 
         Ranking ranking = rankingRepository.findByCompetitionId(competitionId)
-                .orElseGet(() -> createDefaultRanking(competitionId));
+                .orElseGet(() -> createDefaultRanking(competitionId, competition));
 
         Map<Long, Map<String, Object>> resultByMatchId = new HashMap<>();
-        for (Map<String, Object> r : allResults) {
+        for (Map<String, Object> r : batchResults) {
             if (r.get("matchId") != null) {
                 Long mId = Long.valueOf(String.valueOf(r.get("matchId")));
                 resultByMatchId.put(mId, r);
@@ -228,7 +254,11 @@ public class RankingService {
             if (cmpPoints != 0) return cmpPoints;
             int cmpDiff = Integer.compare(b.getGoalDifference(), a.getGoalDifference());
             if (cmpDiff != 0) return cmpDiff;
-            return Integer.compare(b.getGoalsFor(), a.getGoalsFor());
+            int cmpGoals = Integer.compare(b.getGoalsFor(), a.getGoalsFor());
+            if (cmpGoals != 0) return cmpGoals;
+            String n1 = a.getParticipantName() != null ? a.getParticipantName() : "";
+            String n2 = b.getParticipantName() != null ? b.getParticipantName() : "";
+            return String.CASE_INSENSITIVE_ORDER.compare(n1, n2);
         });
 
         rankingItemRepository.deleteByRankingId(ranking.getId());
@@ -266,6 +296,14 @@ public class RankingService {
         rankingRepository.save(ranking);
 
         return new RankingResponse(ranking, saved);
+    }
+
+    private boolean isKnockoutFormat(Map<String, Object> format) {
+        if (format == null || format.get("formatType") == null) {
+            return false;
+        }
+        String fmt = String.valueOf(format.get("formatType")).trim().toUpperCase(Locale.ROOT);
+        return "KNOCKOUT".equals(fmt) || "SINGLE_ELIMINATION".equals(fmt);
     }
 
     private String resolveParticipantKey(Long participantId, String displayName) {

@@ -80,10 +80,12 @@ class RankingSecurityIntegrationTest {
     void internalResultSyncScope_canTriggerRecalculateOnlyAndCannotOverwriteOrDeleteRankings() throws Exception {
         String internalSyncToken = issueToken("result-sync-worker", "ROLE_INTERNAL_RESULT_SYNC");
 
+        when(rankingProviderClient.getCompetitionById(10L)).thenReturn(Map.of("id", 10L, "name", "BXH 10"));
+        when(rankingProviderClient.getCompetitionFormat(10L)).thenReturn(Map.of("competitionId", 10L, "formatType", "ROUND_ROBIN"));
         when(rankingProviderClient.getMatchesByCompetitionId(10L)).thenReturn(List.of(
-                Map.of("id", 1L, "competitionId", 10L, "participant1", "Hà Nội", "participant2", "Nam Định")
+                Map.of("id", 1L, "competitionId", 10L, "participant1", "Hà Nội", "participant2", "Nam Định", "status", "FINISHED")
         ));
-        when(rankingProviderClient.getAllResults()).thenReturn(List.of(
+        when(rankingProviderClient.getResultsByMatchIds(List.of(1L))).thenReturn(List.of(
                 Map.of("matchId", 1L, "status", "CONFIRMED", "scoreParticipant1", 2, "scoreParticipant2", 1)
         ));
 

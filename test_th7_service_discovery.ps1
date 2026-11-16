@@ -297,13 +297,14 @@ try {
         participant1Id  = $p1Obj.id
         participant2Id  = $p2Obj.id
         location        = "SVD My Dinh"
-        matchTime       = "2026-11-15T19:00:00"
+        matchTime       = "2026-11-15T08:00:00"
         refereeUsername = "referee1"
         status          = "SCHEDULED"
     } | ConvertTo-Json
     $matchWebResp = Invoke-WebRequest -Uri "http://localhost:8082/api/v1/matches" -Method Post -Body $matchBody -ContentType "application/json" -Headers $authHeaders -UseBasicParsing
     $createdMatch = $matchWebResp.Content | ConvertFrom-Json
     $providerHeader = $matchWebResp.Headers["X-Tournament-Provider-Instance"]
+    Invoke-RestMethod -Uri "http://localhost:8080/api/v1/matches/$($createdMatch.id)" -Method Patch -Body (@{ status = "ONGOING" } | ConvertTo-Json) -ContentType "application/json" -Headers $refHeaders | Out-Null
     Write-Host "  [5. MATCH-SERVICE -> TOURNAMENT & TEAM-SERVICE] Da duyet 2 doi tham gia & tao Match ID=$($createdMatch.id) (Instance xu ly: $providerHeader)" -ForegroundColor Green
 
     # 6. RESULT-SERVICE (:8087) -> Goi MATCH-SERVICE & RANKING-SERVICE qua Eureka Service Discovery

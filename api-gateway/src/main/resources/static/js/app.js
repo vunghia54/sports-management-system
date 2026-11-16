@@ -3530,7 +3530,11 @@ function renderResultsTableInner() {
                 <td class="tabular-nums"><strong>#${String(startIdx + idx + 1).padStart(2, '0')}</strong></td>
                 <td><strong>${escapeHtml(matchTitle)}</strong></td>
                 <td><span class="badge badge-neutral">${escapeHtml(m.round || '—')}</span></td>
-                <td class="tabular-nums"><strong style="font-size:1.02rem;color:var(--color-primary)">${r.scoreParticipant1} - ${r.scoreParticipant2}</strong></td>
+                <td class="tabular-nums">
+                  <strong style="font-size:1.02rem;color:var(--color-primary)">${r.scoreParticipant1} - ${r.scoreParticipant2}</strong>
+                  ${r.penaltyScore1 !== null && r.penaltyScore1 !== undefined && r.penaltyScore2 !== null && r.penaltyScore2 !== undefined
+                    ? `<div style="font-size:0.75rem;color:var(--text-secondary);">Luân lưu: ${r.penaltyScore1} - ${r.penaltyScore2}</div>` : ''}
+                </td>
                 <td>${escapeHtml(r.notes || '—')}</td>
                 <td>${escapeHtml(r.confirmedBy || 'Chưa xác nhận')}</td>
                 <td>
@@ -3543,6 +3547,7 @@ function renderResultsTableInner() {
                     ${canSubmit && !isConfirmed ? `<button class="btn btn-secondary btn-sm" onclick="openRecordResultModal(${r.matchId})">Sửa</button>` : ''}
                     ${canApprove && !isConfirmed ? `<button class="btn btn-primary btn-sm" onclick="confirmMatchResult(${r.id}, this)">✓ Xác nhận</button>` : ''}
                     ${isConfirmed && String(r.syncStatus || 'SYNCED').toUpperCase() === 'SYNCED' ? `<span class="badge badge-success">Hoàn tất</span>` : ''}
+                    ${canApprove && isConfirmed ? `<button class="btn btn-secondary btn-sm" onclick="reopenResultById(${r.id}, ${r.matchId}, this)">Mở lại</button>` : ''}
                     ${isConfirmed && String(r.syncStatus || 'SYNCED').toUpperCase() !== 'SYNCED' && canApprove ? `<button class="btn btn-secondary btn-sm" onclick="retrySyncResultNow(${r.id}, ${r.matchId}, this)">↻ Đồng bộ lại</button>` : ''}
                   </div>
                 </td>
@@ -5660,6 +5665,10 @@ async function openRecordResultModal(preselectedMatchId = null) {
         <div class="form-group"><label for="mResS1">Điểm / Bàn Đội 1 *</label><input id="mResS1" data-field="scoreParticipant1" type="number" min="0" class="input" value="${existingRes ? existingRes.scoreParticipant1 : 0}" required /></div>
         <div class="form-group"><label for="mResS2">Điểm / Bàn Đội 2 *</label><input id="mResS2" data-field="scoreParticipant2" type="number" min="0" class="input" value="${existingRes ? existingRes.scoreParticipant2 : 0}" required /></div>
       </div>
+      <div class="form-grid">
+        <div class="form-group"><label for="mResPen1">Luân lưu Đội 1 (Knockout hòa)</label><input id="mResPen1" data-field="penaltyScore1" type="number" min="0" class="input" value="${existingRes?.penaltyScore1 ?? ''}" placeholder="Bỏ trống nếu không luân lưu" /></div>
+        <div class="form-group"><label for="mResPen2">Luân lưu Đội 2 (Knockout hòa)</label><input id="mResPen2" data-field="penaltyScore2" type="number" min="0" class="input" value="${existingRes?.penaltyScore2 ?? ''}" placeholder="Bỏ trống nếu không luân lưu" /></div>
+      </div>
       <div class="form-group"><label for="mResNotes">Ghi chú biên bản</label><input id="mResNotes" data-field="notes" class="input" value="${escapeHtml(existingRes?.notes || '')}" placeholder="Diễn biến chính / ghi chú trọng tài" /></div>
       <div class="page-actions" style="justify-content:flex-end;">
         <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
@@ -5674,11 +5683,15 @@ async function prefillExistingResultScores(matchId) {
   const seq = ++AppState.modalSeq.resultForm;
   const s1 = document.getElementById('mResS1');
   const s2 = document.getElementById('mResS2');
+  const pen1 = document.getElementById('mResPen1');
+  const pen2 = document.getElementById('mResPen2');
   const notes = document.getElementById('mResNotes');
 
   // Clear previous match inputs immediately so old match score never persists if fetch fails
   if (s1) s1.value = 0;
   if (s2) s2.value = 0;
+  if (pen1) pen1.value = '';
+  if (pen2) pen2.value = '';
   if (notes) notes.value = '';
 
   let existing = AppState.caches.resultsByMatchId[String(mid)]
@@ -5704,6 +5717,8 @@ async function prefillExistingResultScores(matchId) {
   if (activeMid !== mid) return;
   if (s1) s1.value = existing ? existing.scoreParticipant1 : 0;
   if (s2) s2.value = existing ? existing.scoreParticipant2 : 0;
+  if (pen1) pen1.value = existing?.penaltyScore1 ?? '';
+  if (pen2) pen2.value = existing?.penaltyScore2 ?? '';
   if (notes) notes.value = existing?.notes || '';
 }
 
@@ -5714,7 +5729,11 @@ async function submitRecordResult(e) {
 
   const s1 = Number(document.getElementById('mResS1').value);
   const s2 = Number(document.getElementById('mResS2').value);
-  if (s1 < 0 || s2 < 0) {
+  const rawPen1 = document.getElementById('mResPen1')?.value ?? '';
+  const rawPen2 = document.getElementById('mResPen2')?.value ?? '';
+  const pen1 = rawPen1 !== '' ? Number(rawPen1) : null;
+  const pen2 = rawPen2 !== '' ? Number(rawPen2) : null;
+  if (s1 < 0 || s2 < 0 || (pen1 !== null && pen1 < 0) || (pen2 !== null && pen2 < 0)) {
     if (s1 < 0) setFieldError(form, 'scoreParticipant1', 'Tỷ số không được âm');
     if (s2 < 0) setFieldError(form, 'scoreParticipant2', 'Tỷ số không được âm');
     return;
@@ -5729,6 +5748,8 @@ async function submitRecordResult(e) {
         matchId,
         scoreParticipant1: s1,
         scoreParticipant2: s2,
+        penaltyScore1: pen1,
+        penaltyScore2: pen2,
         notes: document.getElementById('mResNotes').value.trim()
       })
     });
@@ -5749,6 +5770,37 @@ async function submitRecordResult(e) {
     showFormError(form, err);
   } finally {
     unlock();
+  }
+}
+
+async function reopenResultById(resultId, matchId = null, btn = null) {
+  if (!hasPermission('results.approve')) {
+    showToast('Chỉ Ban tổ chức sở hữu giải hoặc Admin mới được mở lại kết quả', 'error');
+    return;
+  }
+  if (!confirm('Mở lại kết quả đã xác nhận? Kết quả sẽ chuyển về Chờ xác nhận và BXH sẽ được tính lại.')) return;
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await apiCall(`/api/v1/results/${resultId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'PENDING_CONFIRMATION' })
+    });
+    const saved = resp?.data || null;
+    if (saved && saved.matchId) {
+      AppState.caches.resultsByMatchId[String(saved.matchId)] = saved;
+    }
+    showToast('Đã mở lại kết quả sang Chờ xác nhận và cập nhật BXH.');
+    await refreshAfterMutation({
+      clearCache: ['results', 'rankings'],
+      paged: ['results', 'rankingItems'],
+      reloadMatchId: matchId || saved?.matchId,
+      reloadTournamentId: AppState.selectedTournamentId
+    });
+    renderCurrentPage(false);
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn && document.contains(btn)) btn.disabled = false;
   }
 }
 
