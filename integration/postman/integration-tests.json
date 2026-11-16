@@ -1,0 +1,192 @@
+{
+  "info": {
+    "_postman_id": "th6-sports-integration-tests",
+    "name": "TH6 - Sports Service Integration & Consumption Suite",
+    "description": "Bộ kiểm thử tích hợp và tiêu thụ dịch vụ (Buổi thực hành 6) - Kiểm chứng Consumer Match Service gọi Provider Tournament Service và phát Event sang Notification Service.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "authUrl", "value": "http://localhost:8083" },
+    { "key": "tournamentUrl", "value": "http://localhost:8081" },
+    { "key": "matchUrl", "value": "http://localhost:8082" },
+    { "key": "notificationUrl", "value": "http://localhost:8084" },
+    { "key": "token", "value": "" },
+    { "key": "testMatchId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "1. [Auth] Lấy JWT Token (ROLE_ORGANIZER)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"organizer_th6\",\n  \"password\": \"password123\",\n  \"role\": \"ROLE_ORGANIZER\"\n}"
+        },
+        "url": { "raw": "{{authUrl}}/api/v1/auth/login", "host": ["{{authUrl}}"], "path": ["api", "v1", "auth", "login"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 400 || pm.response.code === 401) {",
+              "    pm.sendRequest({",
+              "        url: pm.collectionVariables.get('authUrl') + '/api/v1/auth/register',",
+              "        method: 'POST',",
+              "        header: {'Content-Type': 'application/json'},",
+              "        body: { mode: 'raw', raw: JSON.stringify({username: 'organizer_th6', password: 'password123', role: 'ROLE_ORGANIZER', email: 'th6@sports.vn', fullName: 'BTC TH6'}) }",
+              "    }, function() {",
+              "        // Re-login",
+              "    });",
+              "}",
+              "var res = pm.response.json();",
+              "if (res.accessToken) { pm.collectionVariables.set('token', res.accessToken); }"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. [Tích hợp Thành công] Match Service gọi Tournament Service (200 OK -> 201 Created)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tournamentId\": 1,\n  \"competitionId\": 1,\n  \"round\": \"Vòng 1 - TH6 Integration\",\n  \"participant1\": \"Đại Học Bách Khoa\",\n  \"participant2\": \"Đại Học Quốc Gia\",\n  \"location\": \"Sân Vận Động Quốc Gia\",\n  \"status\": \"SCHEDULED\"\n}"
+        },
+        "url": { "raw": "{{matchUrl}}/api/v1/matches", "host": ["{{matchUrl}}"], "path": ["api", "v1", "matches"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Tích hợp thành công: Match được tạo (201 Created)\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "var res = pm.response.json();",
+              "if (res.id) { pm.collectionVariables.set('testMatchId', res.id.toString()); }"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. [Tích hợp Xử lý Lỗi] Tạo Match với Tournament không tồn tại (ID 999999 -> 400 Bad Request)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tournamentId\": 999999,\n  \"competitionId\": 1,\n  \"round\": \"Vòng Lỗi\",\n  \"participant1\": \"Đội A\",\n  \"participant2\": \"Đội B\",\n  \"status\": \"SCHEDULED\"\n}"
+        },
+        "url": { "raw": "{{matchUrl}}/api/v1/matches", "host": ["{{matchUrl}}"], "path": ["api", "v1", "matches"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Bắt lỗi tích hợp: Provider trả về 404 dẫn đến Consumer trả về 400 Bad Request\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "pm.test(\"Thông báo lỗi đúng nghiệp vụ giải đấu không tồn tại\", function () {",
+              "    pm.expect(pm.response.text()).to.include(\"Tournament does not exist\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. [Tích hợp Bảo mật] Gọi API Match Service không có Token (401 Unauthorized)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tournamentId\": 1,\n  \"round\": \"Không token\"\n}"
+        },
+        "url": { "raw": "{{matchUrl}}/api/v1/matches", "host": ["{{matchUrl}}"], "path": ["api", "v1", "matches"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Chặn truy cập trái phép khi thiếu Token (401 Unauthorized)\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. [Tích hợp Bất đồng bộ] Kết thúc trận đấu -> Match Service phát Event sang RabbitMQ",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tournamentId\": 1,\n  \"competitionId\": 1,\n  \"round\": \"Chung kết\",\n  \"participant1\": \"Đại Học Bách Khoa\",\n  \"participant2\": \"Đại Học Quốc Gia\",\n  \"status\": \"FINISHED\"\n}"
+        },
+        "url": { "raw": "{{matchUrl}}/api/v1/matches/{{testMatchId}}", "host": ["{{matchUrl}}"], "path": ["api", "v1", "matches", "{{testMatchId}}"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Cập nhật trạng thái trận đấu = FINISHED thành công 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. [Kiểm chứng Consumer] Notification Service nhận Event từ RabbitMQ và lưu Thông báo",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{notificationUrl}}/api/v1/notifications", "host": ["{{notificationUrl}}"], "path": ["api", "v1", "notifications"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Lấy danh sách thông báo thành công 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var notifs = pm.response.json();",
+              "pm.test(\"Đã nhận được thông báo kết thúc trận đấu qua RabbitMQ Consumer\", function () {",
+              "    pm.expect(notifs.length).to.be.above(0);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

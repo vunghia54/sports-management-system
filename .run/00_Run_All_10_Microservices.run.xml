@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="00_Run_All_10_Microservices" type="CompoundRunConfigurationType">
+    <toRun name="01_ServiceRegistry_8761" type="Application" />
+    <toRun name="02_AuthService_8083" type="Application" />
+    <toRun name="03_TournamentService1_8081" type="Application" />
+    <toRun name="04_TournamentService2_8091" type="Application" />
+    <toRun name="05_TeamService_8085" type="Application" />
+    <toRun name="06_AthleteService_8086" type="Application" />
+    <toRun name="07_MatchService_8082" type="Application" />
+    <toRun name="08_ResultService_8087" type="Application" />
+    <toRun name="09_RankingService_8088" type="Application" />
+    <toRun name="10_NotificationService_8084" type="Application" />
+    <toRun name="11_ApiGateway_8080" type="Application" />
+    <method v="2" />
+  </configuration>
+</component>
+

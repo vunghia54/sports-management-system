@@ -1,0 +1,436 @@
+{
+  "info": {
+    "_postman_id": "th7-service-discovery-sports-collection",
+    "name": "Sports Management System - TH7 Microservices & Service Registry (Eureka)",
+    "description": "Bộ kiểm thử Postman cho Bài thực hành số 7: Service Registry (Eureka Server), Service Discovery, Multi-Instance Load Balancing, Failover (TC01 - TC06) và API Gateway.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "eurekaUrl",
+      "value": "http://localhost:8761"
+    },
+    {
+      "key": "gatewayUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "tournamentInstance1Url",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "tournamentInstance2Url",
+      "value": "http://localhost:8091"
+    },
+    {
+      "key": "matchServiceUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "authServiceUrl",
+      "value": "http://localhost:8083"
+    },
+    {
+      "key": "jwtToken",
+      "value": ""
+    },
+    {
+      "key": "tournamentId",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. TC01 - Kiểm tra Service Registry (Eureka Server :8761)",
+      "item": [
+        {
+          "name": "TC01.1 - Xem danh sách tất cả Microservices đã đăng ký trên Eureka",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Eureka Registry contains TOURNAMENT-SERVICE and MATCH-SERVICE', function () {",
+                  "    var bodyText = pm.response.text();",
+                  "    pm.expect(bodyText).to.include('TOURNAMENT-SERVICE');",
+                  "    pm.expect(bodyText).to.include('MATCH-SERVICE');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{eurekaUrl}}/eureka/apps",
+              "host": [
+                "{{eurekaUrl}}"
+              ],
+              "path": [
+                "eureka",
+                "apps"
+              ]
+            }
+          }
+        },
+        {
+          "name": "TC01.2 - Kiểm tra các instance của TOURNAMENT-SERVICE trên Eureka",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{eurekaUrl}}/eureka/apps/TOURNAMENT-SERVICE",
+              "host": [
+                "{{eurekaUrl}}"
+              ],
+              "path": [
+                "eureka",
+                "apps",
+                "TOURNAMENT-SERVICE"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. TC02 & TC03 - Kiểm tra Multi-Instance & Load Balancing qua Service Discovery",
+      "item": [
+        {
+          "name": "TC02.1 - Kiểm tra trực tiếp Instance Info của Tournament Service 1 (Port 8081)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Instance 1 returns port 8081', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.serviceName).to.eql('TOURNAMENT-SERVICE');",
+                  "    pm.expect(json.instancePort).to.eql(8081);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tournamentInstance1Url}}/api/v1/instance-info",
+              "host": [
+                "{{tournamentInstance1Url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "instance-info"
+              ]
+            }
+          }
+        },
+        {
+          "name": "TC02.2 - Kiểm tra trực tiếp Instance Info của Tournament Service 2 (Port 8091)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Instance 2 returns port 8091', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.serviceName).to.eql('TOURNAMENT-SERVICE');",
+                  "    pm.expect(json.instancePort).to.eql(8091);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tournamentInstance2Url}}/api/v1/instance-info",
+              "host": [
+                "{{tournamentInstance2Url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "instance-info"
+              ]
+            }
+          }
+        },
+        {
+          "name": "TC03.1 - Consumer (Match Service) gọi Provider (Tournament Service) qua Service ID & LoadBalancer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Service Discovery & LoadBalancer returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.consumerService).to.eql('MATCH-SERVICE');",
+                  "    pm.expect(json.discoveryTarget).to.eql('http://tournament-service');",
+                  "    pm.expect(json.providerInstance.serviceName).to.eql('TOURNAMENT-SERVICE');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{matchServiceUrl}}/api/v1/matches/discovery/tournament-instance",
+              "host": [
+                "{{matchServiceUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "matches",
+                "discovery",
+                "tournament-instance"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Luồng nghiệp vụ Tạo Lịch Thi Đấu qua Service Discovery (Match -> Tournament)",
+      "item": [
+        {
+          "name": "3.1 - Đăng nhập lấy JWT Token (ROLE_ORGANIZER)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('jwtToken', json.accessToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"organizer1\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{authServiceUrl}}/api/v1/auth/login",
+              "host": [
+                "{{authServiceUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.2 - Tạo Giải đấu mới trên Tournament Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tournament created 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('tournamentId', json.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Giải Vô Địch Bóng Đá Sinh Viên Toàn Quốc 2026\",\n  \"description\": \"Giải đấu kiểm thử Service Discovery TH7\",\n  \"startDate\": \"2026-11-20\",\n  \"endDate\": \"2026-12-10\",\n  \"location\": \"Hà Nội\",\n  \"registrationStartDate\": \"2026-10-01\",\n  \"registrationEndDate\": \"2026-11-15\",\n  \"status\": \"UPCOMING\"\n}"
+            },
+            "url": {
+              "raw": "{{tournamentInstance1Url}}/api/v1/tournaments",
+              "host": [
+                "{{tournamentInstance1Url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tournaments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.3 - Tạo Trận đấu trên Match Service (Khám phá Tournament Service qua Eureka)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Match created 201 via Service Discovery', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.expect(pm.response.headers.get('X-Tournament-Provider-Instance')).to.include('tournament-service:');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": 1,\n  \"round\": \"Chung kết\",\n  \"participant1\": \"CLB Hà Nội\",\n  \"participant2\": \"CLB Viettel\",\n  \"location\": \"SVĐ Mỹ Đình\",\n  \"scheduledTime\": \"2026-11-28T19:30:00\",\n  \"status\": \"SCHEDULED\"\n}"
+            },
+            "url": {
+              "raw": "{{matchServiceUrl}}/api/v1/matches",
+              "host": [
+                "{{matchServiceUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "matches"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. API Gateway (:8080) - Định tuyến động theo Service ID",
+      "item": [
+        {
+          "name": "4.1 - Xem danh sách Routes và Instances khám phá được tại API Gateway",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/gateway/routes",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "gateway",
+                "routes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.2 - Gọi Tournament Service qua API Gateway (:8080 -> lb://TOURNAMENT-SERVICE)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/tournaments/instance-info",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tournaments",
+                "instance-info"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.3 - Gọi Match Service qua API Gateway (:8080 -> lb://MATCH-SERVICE)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/matches",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "matches"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,1108 @@
+{
+  "info": {
+    "_postman_id": "sports-soa-full-collection-2026-th1-th7",
+    "name": "Sports Management System - SOA Full 10 Microservices (TH1 - TH7)",
+    "description": "Bộ Postman Collection kiểm thử toàn diện 10 Microservices từ Thực hành 1 đến Thực hành 7:\n0. Service Registry (Eureka Server :8761)\n1. Auth Service (:8083)\n2. Tournament Service (:8081 & :8091)\n3. Athlete Service (:8086)\n4. Team Service (:8085)\n5. Match Service (:8082)\n6. Result Service (:8087)\n7. Ranking Service (:8088)\n8. Notification Service (:8084)\n9. API Gateway (:8080)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "registryUrl", "value": "http://localhost:8761" },
+    { "key": "gatewayUrl", "value": "http://localhost:8080" },
+    { "key": "authUrl", "value": "http://localhost:8083" },
+    { "key": "tournamentUrl", "value": "http://localhost:8081" },
+    { "key": "tournamentUrl2", "value": "http://localhost:8091" },
+    { "key": "matchUrl", "value": "http://localhost:8082" },
+    { "key": "notificationUrl", "value": "http://localhost:8084" },
+    { "key": "teamUrl", "value": "http://localhost:8085" },
+    { "key": "athleteUrl", "value": "http://localhost:8086" },
+    { "key": "resultUrl", "value": "http://localhost:8087" },
+    { "key": "rankingUrl", "value": "http://localhost:8088" },
+    { "key": "organizerToken", "value": "" },
+    { "key": "sportId", "value": "1" },
+    { "key": "tournamentId", "value": "1" },
+    { "key": "competitionId", "value": "1" },
+    { "key": "athlete1Id", "value": "1" },
+    { "key": "athlete2Id", "value": "2" },
+    { "key": "team1Id", "value": "1" },
+    { "key": "team2Id", "value": "2" },
+    { "key": "registrationId", "value": "1" },
+    { "key": "matchId", "value": "1" },
+    { "key": "resultId", "value": "1" },
+    { "key": "notificationId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "0. Service Registry - Eureka Server (Port 8761) [TH7]",
+      "item": [
+        {
+          "name": "0.1 Kiểm tra danh sách Microservices đã đăng ký trên Eureka (JSON)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{registryUrl}}/eureka/apps",
+              "host": ["{{registryUrl}}"],
+              "path": ["eureka", "apps"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Eureka Server trả về HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "var res = pm.response.json();",
+                  "pm.test('Có danh sách applications đăng ký', function () { pm.expect(res.applications).to.be.an('object'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Auth Service (Port 8083) [TH1 - TH7]",
+      "item": [
+        {
+          "name": "1.1 Kiểm tra thông tin Service (/info - TH1)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{authUrl}}/api/v1/auth/info",
+              "host": ["{{authUrl}}"],
+              "path": ["api", "v1", "auth", "info"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Đăng ký tài khoản Ban Tổ Chức (ROLE_ORGANIZER - TH6)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"organizer_postman\",\n  \"password\": \"password123\",\n  \"fullName\": \"Ban Tổ Chức Giải Đấu\",\n  \"email\": \"btc_postman@sports.vn\",\n  \"role\": \"ROLE_ORGANIZER\"\n}"
+            },
+            "url": {
+              "raw": "{{authUrl}}/api/v1/auth/register",
+              "host": ["{{authUrl}}"],
+              "path": ["api", "v1", "auth", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200/201 hoặc 400/409 (nếu đã tồn tại)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 400, 409]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Đăng nhập Organizer & Tự động lưu JWT Token (TH6)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"organizer_postman\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{authUrl}}/api/v1/auth/login",
+              "host": ["{{authUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Đăng nhập thành công 200', function () { pm.response.to.have.status(200); });",
+                  "var res = pm.response.json();",
+                  "pm.test('Nhận được accessToken', function () { pm.expect(res.accessToken).to.be.a('string'); });",
+                  "pm.collectionVariables.set('organizerToken', res.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.4 Xác thực Profile Người dùng (/me) với JWT (TH6)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "url": {
+              "raw": "{{authUrl}}/api/v1/auth/me",
+              "host": ["{{authUrl}}"],
+              "path": ["api", "v1", "auth", "me"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Xác thực Token thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Tournament Service (Port 8081 & 8091) [TH1 - TH7]",
+      "item": [
+        {
+          "name": "2.1 Kiểm tra Info & Port đang xử lý (/info - TH1 & TH7)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{tournamentUrl}}/api/v1/tournaments/info",
+              "host": ["{{tournamentUrl}}"],
+              "path": ["api", "v1", "tournaments", "info"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Tạo Môn thể thao (Sport - Bóng đá) [TH2 & TH3]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bóng đá Nam 11 người\",\n  \"category\": \"TEAM\",\n  \"description\": \"Môn bóng đá sân 11 tiêu chuẩn FIFA\"\n}"
+            },
+            "url": {
+              "raw": "{{tournamentUrl}}/api/v1/sports",
+              "host": ["{{tournamentUrl}}"],
+              "path": ["api", "v1", "sports"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tạo môn thể thao thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.id) { pm.collectionVariables.set('sportId', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Tạo Giải đấu mới (JWT ROLE_ORGANIZER) [TH2, TH3, TH6]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Giải Bóng Đá Vô Địch Sinh Viên Toàn Quốc 2026\",\n  \"description\": \"Giải bóng đá cúp đại học mùa xuân 2026\",\n  \"startDate\": \"2026-11-20\",\n  \"endDate\": \"2026-12-05\",\n  \"location\": \"Sân Vận Động Mỹ Đình, Hà Nội\",\n  \"registrationStartDate\": \"2026-10-01\",\n  \"registrationEndDate\": \"2026-11-15\",\n  \"status\": \"UPCOMING\",\n  \"maxParticipants\": 16\n}"
+            },
+            "url": {
+              "raw": "{{tournamentUrl}}/api/v1/tournaments",
+              "host": ["{{tournamentUrl}}"],
+              "path": ["api", "v1", "tournaments"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tạo giải đấu thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.id) { pm.collectionVariables.set('tournamentId', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 Tạo Nội dung thi đấu (Competition) thuộc Giải đấu [TH2, TH3]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bóng đá Nam Đại học\",\n  \"sportId\": {{sportId}},\n  \"ageGroup\": \"U23\",\n  \"gender\": \"MALE\",\n  \"maxParticipants\": 16,\n  \"description\": \"Nội dung bóng đá nam sinh viên\"\n}"
+            },
+            "url": {
+              "raw": "{{tournamentUrl}}/api/v1/tournaments/{{tournamentId}}/competitions",
+              "host": ["{{tournamentUrl}}"],
+              "path": ["api", "v1", "tournaments", "{{tournamentId}}", "competitions"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tạo nội dung thi đấu thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.id) { pm.collectionVariables.set('competitionId', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.5 Cập nhật một phần Giải đấu (PATCH Status -> ONGOING) [TH3]",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ONGOING\"\n}"
+            },
+            "url": {
+              "raw": "{{tournamentUrl}}/api/v1/tournaments/{{tournamentId}}",
+              "host": ["{{tournamentUrl}}"],
+              "path": ["api", "v1", "tournaments", "{{tournamentId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('PATCH giải đấu thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.6 Tìm kiếm, Lọc & Phân trang Giải đấu (/paged) [TH5]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{tournamentUrl}}/api/v1/tournaments/paged?status=ONGOING&page=0&size=5",
+              "host": ["{{tournamentUrl}}"],
+              "path": ["api", "v1", "tournaments", "paged"],
+              "query": [
+                { "key": "status", "value": "ONGOING" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "5" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Phân trang thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.7 Thống kê Giải đấu (/statistics) [TH5]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{tournamentUrl}}/api/v1/tournaments/statistics",
+              "host": ["{{tournamentUrl}}"],
+              "path": ["api", "v1", "tournaments", "statistics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Thống kê giải đấu thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Athlete Service (Port 8086) [TH1 - TH7]",
+      "item": [
+        {
+          "name": "3.1 Tạo Vận động viên 1 (Nguyễn Quang Hải) [TH2, TH3, TH6]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Nguyễn Quang Hải\",\n  \"dateOfBirth\": \"1997-04-12\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"001097888999\",\n  \"phoneNumber\": \"0901234567\",\n  \"email\": \"quanghai19@sports.vn\",\n  \"healthStatus\": \"FIT\"\n}"
+            },
+            "url": {
+              "raw": "{{athleteUrl}}/api/v1/athletes",
+              "host": ["{{athleteUrl}}"],
+              "path": ["api", "v1", "athletes"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tạo VĐV 1 thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.id) { pm.collectionVariables.set('athlete1Id', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Tạo Vận động viên 2 (Nguyễn Hoàng Đức) [TH2, TH3, TH6]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Nguyễn Hoàng Đức\",\n  \"dateOfBirth\": \"1998-01-11\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"001098777666\",\n  \"phoneNumber\": \"0902345678\",\n  \"email\": \"hoangduc14@sports.vn\",\n  \"healthStatus\": \"FIT\"\n}"
+            },
+            "url": {
+              "raw": "{{athleteUrl}}/api/v1/athletes",
+              "host": ["{{athleteUrl}}"],
+              "path": ["api", "v1", "athletes"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tạo VĐV 2 thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.id) { pm.collectionVariables.set('athlete2Id', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 Cập nhật một phần Hồ sơ VĐV (PATCH) [TH3]",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"healthStatus\": \"FIT\",\n  \"phoneNumber\": \"0988999888\"\n}"
+            },
+            "url": {
+              "raw": "{{athleteUrl}}/api/v1/athletes/{{athlete1Id}}",
+              "host": ["{{athleteUrl}}"],
+              "path": ["api", "v1", "athletes", "{{athlete1Id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('PATCH VĐV thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 Thống kê Vận động viên (/statistics) [TH5]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{athleteUrl}}/api/v1/athletes/statistics",
+              "host": ["{{athleteUrl}}"],
+              "path": ["api", "v1", "athletes", "statistics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Thống kê VĐV thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Team Service (Port 8085) [TH1 - TH7]",
+      "item": [
+        {
+          "name": "4.1 Tạo Đội thi đấu 1 (CLB Bóng Đá Hà Nội) [TH2, TH3, TH6]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"CLB Bóng Đá Hà Nội\",\n  \"shortName\": \"HNFC\",\n  \"managerName\": \"HLV Nguyễn Văn A\",\n  \"contactPhone\": \"0988111222\",\n  \"contactEmail\": \"hanoifc@sports.vn\"\n}"
+            },
+            "url": {
+              "raw": "{{teamUrl}}/api/v1/teams",
+              "host": ["{{teamUrl}}"],
+              "path": ["api", "v1", "teams"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tạo đội 1 thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.id) { pm.collectionVariables.set('team1Id', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Tạo Đội thi đấu 2 (CLB Thể Công Viettel) [TH2, TH3, TH6]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"CLB Thể Công Viettel\",\n  \"shortName\": \"VTFC\",\n  \"managerName\": \"HLV Trần Văn B\",\n  \"contactPhone\": \"0912333444\",\n  \"contactEmail\": \"viettelfc@sports.vn\"\n}"
+            },
+            "url": {
+              "raw": "{{teamUrl}}/api/v1/teams",
+              "host": ["{{teamUrl}}"],
+              "path": ["api", "v1", "teams"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tạo đội 2 thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.id) { pm.collectionVariables.set('team2Id', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 Thêm VĐV vào Đội 1 (Team gọi Athlete Service qua Eureka) [TH4 & TH7]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"athleteId\": {{athlete1Id}},\n  \"jerseyNumber\": 19,\n  \"position\": \"Tiền vệ tấn công\"\n}"
+            },
+            "url": {
+              "raw": "{{teamUrl}}/api/v1/teams/{{team1Id}}/members",
+              "host": ["{{teamUrl}}"],
+              "path": ["api", "v1", "teams", "{{team1Id}}", "members"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Thêm thành viên vào đội thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 Kiểm tra Service Discovery: Team gọi Athlete Instance [TH7]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{teamUrl}}/api/v1/teams/discovery/athlete-instance",
+              "host": ["{{teamUrl}}"],
+              "path": ["api", "v1", "teams", "discovery", "athlete-instance"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Discovery Athlete thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.5 Thống kê Đội thi đấu (/statistics) [TH5]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{teamUrl}}/api/v1/teams/statistics",
+              "host": ["{{teamUrl}}"],
+              "path": ["api", "v1", "teams", "statistics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Thống kê đội thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Match Service (Port 8082) [TH1 - TH7]",
+      "item": [
+        {
+          "name": "5.1 Đăng ký Đội 1 tham gia Giải đấu (Match gọi Tournament & Team qua Eureka) [TH4 & TH7]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": {{competitionId}},\n  \"participantName\": \"CLB Bóng Đá Hà Nội\",\n  \"participantType\": \"TEAM\",\n  \"teamId\": {{team1Id}},\n  \"notes\": \"Đăng ký tham dự giải chính thức\"\n}"
+            },
+            "url": {
+              "raw": "{{matchUrl}}/api/v1/registrations",
+              "host": ["{{matchUrl}}"],
+              "path": ["api", "v1", "registrations"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Đăng ký giải đấu thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.id) { pm.collectionVariables.set('registrationId', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 Duyệt Hồ sơ Đăng ký (Approve Registration) [TH3 & TH5]",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "url": {
+              "raw": "{{matchUrl}}/api/v1/registrations/{{registrationId}}/status?status=APPROVED",
+              "host": ["{{matchUrl}}"],
+              "path": ["api", "v1", "registrations", "{{registrationId}}", "status"],
+              "query": [
+                { "key": "status", "value": "APPROVED" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Duyệt đăng ký thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 Tạo Lịch thi đấu Trận đấu (Match gọi Tournament qua Eureka) [TH4, TH6, TH7]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": {{competitionId}},\n  \"round\": \"Vòng Bảng - Bảng A\",\n  \"participant1\": \"CLB Bóng Đá Hà Nội\",\n  \"participant2\": \"CLB Thể Công Viettel\",\n  \"location\": \"Sân Vận Động Mỹ Đình\",\n  \"scheduledTime\": \"2026-11-25T19:00:00\",\n  \"status\": \"SCHEDULED\"\n}"
+            },
+            "url": {
+              "raw": "{{matchUrl}}/api/v1/matches",
+              "host": ["{{matchUrl}}"],
+              "path": ["api", "v1", "matches"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tạo trận đấu thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.id) { pm.collectionVariables.set('matchId', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 Kiểm tra Load Balancing: Match gọi Tournament Instance (Round-Robin 8081 & 8091) [TH7]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{matchUrl}}/api/v1/matches/discovery/tournament-instance",
+              "host": ["{{matchUrl}}"],
+              "path": ["api", "v1", "matches", "discovery", "tournament-instance"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Load Balancing sang Tournament thành công 200', function () { pm.response.to.have.status(200); });",
+                  "var res = pm.response.json();",
+                  "pm.test('Trả về thông tin targetServiceInstance', function () { pm.expect(res.targetServiceInstance).to.be.an('object'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.5 Thống kê Trận đấu (/statistics) [TH5]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{matchUrl}}/api/v1/matches/statistics",
+              "host": ["{{matchUrl}}"],
+              "path": ["api", "v1", "matches", "statistics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Thống kê trận đấu thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Result Service (Port 8087) [TH1 - TH7]",
+      "item": [
+        {
+          "name": "6.1 Ghi nhận Kết quả & Diễn biến Trận đấu (Result gọi Match qua Eureka) [TH4 & TH7]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"matchId\": {{matchId}},\n  \"scoreParticipant1\": 2,\n  \"scoreParticipant2\": 1,\n  \"notes\": \"Hà Nội FC thắng kịch tính 2-1 trước Viettel\",\n  \"details\": [\n    {\n      \"detailType\": \"GOAL\",\n      \"participantName\": \"CLB Bóng Đá Hà Nội\",\n      \"athleteName\": \"Nguyễn Quang Hải\",\n      \"detailTime\": \"23'\",\n      \"detailValue\": \"1-0\"\n    },\n    {\n      \"detailType\": \"GOAL\",\n      \"participantName\": \"CLB Thể Công Viettel\",\n      \"athleteName\": \"Nguyễn Hoàng Đức\",\n      \"detailTime\": \"54'\",\n      \"detailValue\": \"1-1\"\n    },\n    {\n      \"detailType\": \"GOAL\",\n      \"participantName\": \"CLB Bóng Đá Hà Nội\",\n      \"athleteName\": \"Văn Quyết\",\n      \"detailTime\": \"88'\",\n      \"detailValue\": \"2-1\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{resultUrl}}/api/v1/results",
+              "host": ["{{resultUrl}}"],
+              "path": ["api", "v1", "results"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Ghi nhận kết quả thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.result && res.result.id) { pm.collectionVariables.set('resultId', res.result.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.2 Trọng tài Xác nhận Kết quả (Tự động kết thúc Match & Tính lại Ranking qua Eureka) [TH4, TH5, TH7]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "url": {
+              "raw": "{{resultUrl}}/api/v1/results/{{resultId}}/confirm?confirmedBy=TrongTaiChinh",
+              "host": ["{{resultUrl}}"],
+              "path": ["api", "v1", "results", "{{resultId}}", "confirm"],
+              "query": [
+                { "key": "confirmedBy", "value": "TrongTaiChinh" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Xác nhận kết quả thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.3 Thống kê Kết quả (/statistics) [TH5]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{resultUrl}}/api/v1/results/statistics",
+              "host": ["{{resultUrl}}"],
+              "path": ["api", "v1", "results", "statistics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Thống kê kết quả thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Ranking Service (Port 8088) [TH1 - TH7]",
+      "item": [
+        {
+          "name": "7.1 Xem Bảng Xếp Hạng Tự động tính toán theo Nội dung thi đấu [TH4, TH5, TH7]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{rankingUrl}}/api/v1/rankings/competition/{{competitionId}}",
+              "host": ["{{rankingUrl}}"],
+              "path": ["api", "v1", "rankings", "competition", "{{competitionId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lấy BXH thành công 200', function () { pm.response.to.have.status(200); });",
+                  "var res = pm.response.json();",
+                  "pm.test('Có danh sách items BXH', function () { pm.expect(res.items).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.2 Tính toán lại Bảng Xếp Hạng (Recalculate qua Eureka) [TH4 & TH7]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "url": {
+              "raw": "{{rankingUrl}}/api/v1/rankings/competition/{{competitionId}}/recalculate?tournamentId={{tournamentId}}",
+              "host": ["{{rankingUrl}}"],
+              "path": ["api", "v1", "rankings", "competition", "{{competitionId}}", "recalculate"],
+              "query": [
+                { "key": "tournamentId", "value": "{{tournamentId}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tính toán lại BXH thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.3 Thống kê Bảng Xếp Hạng (/statistics) [TH5]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{rankingUrl}}/api/v1/rankings/statistics",
+              "host": ["{{rankingUrl}}"],
+              "path": ["api", "v1", "rankings", "statistics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Thống kê BXH thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Notification Service (Port 8084) [TH1 - TH7]",
+      "item": [
+        {
+          "name": "8.1 Tạo Thông báo Hệ thống mới [TH2 & TH3]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"matchId\": {{matchId}},\n  \"tournamentId\": {{tournamentId}},\n  \"eventType\": \"RESULT_CONFIRMED\",\n  \"message\": \"Kết quả trận đấu Hà Nội FC 2-1 Viettel đã được Trọng tài xác nhận và cập nhật BXH!\"\n}"
+            },
+            "url": {
+              "raw": "{{notificationUrl}}/api/v1/notifications",
+              "host": ["{{notificationUrl}}"],
+              "path": ["api", "v1", "notifications"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tạo thông báo thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var res = pm.response.json();",
+                  "if (res.id) { pm.collectionVariables.set('notificationId', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.2 Đánh dấu Đã đọc Thông báo (PATCH /{id}/read) [TH3]",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{notificationUrl}}/api/v1/notifications/{{notificationId}}/read",
+              "host": ["{{notificationUrl}}"],
+              "path": ["api", "v1", "notifications", "{{notificationId}}", "read"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Đánh dấu đã đọc thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.3 Thống kê Thông báo (/statistics) [TH5]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{notificationUrl}}/api/v1/notifications/statistics",
+              "host": ["{{notificationUrl}}"],
+              "path": ["api", "v1", "notifications", "statistics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Thống kê thông báo thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. API Gateway (Port 8080) - Định tuyến & Load Balancing [TH6 & TH7]",
+      "item": [
+        {
+          "name": "9.1 Gọi Tournament Info qua API Gateway (Load Balancing 8081 & 8091)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/tournaments/info",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "tournaments", "info"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('API Gateway định tuyến sang Tournament thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "9.2 Gọi Dashboard Tổng hợp Giải đấu qua API Gateway",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/tournaments/{{tournamentId}}/dashboard",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "tournaments", "{{tournamentId}}", "dashboard"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lấy Dashboard giải đấu qua Gateway thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "9.3 Gọi Bảng Xếp Hạng qua API Gateway",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/rankings/competition/{{competitionId}}",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "rankings", "competition", "{{competitionId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lấy BXH qua Gateway thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

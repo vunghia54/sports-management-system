@@ -1,0 +1,18 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="04_TournamentService2_8091" type="Application" factoryName="Application" allowRunningInParallel="true">
+    <option name="MAIN_CLASS_NAME" value="com.sports.management.tournament.TournamentServiceApplication" />
+    <module name="tournament-service" />
+    <option name="PROGRAM_PARAMETERS" value="--server.port=8091" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <envs>
+      <env name="SPRING_DATASOURCE_URL" value="jdbc:postgresql://localhost:5432/tournament_db" />
+      <env name="SPRING_DATASOURCE_DRIVER" value="org.postgresql.Driver" />
+      <env name="SPRING_DATASOURCE_USERNAME" value="sports" />
+      <env name="SPRING_DATASOURCE_PASSWORD" value="sports123" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
+

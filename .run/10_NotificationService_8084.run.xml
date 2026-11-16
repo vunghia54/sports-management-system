@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="10_NotificationService_8084" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="com.sports.management.notification.NotificationServiceApplication" />
+    <module name="notification-service" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <envs>
+      <env name="SPRING_DATASOURCE_URL" value="jdbc:postgresql://localhost:5432/notification_db" />
+      <env name="SPRING_DATASOURCE_DRIVER" value="org.postgresql.Driver" />
+      <env name="SPRING_DATASOURCE_USERNAME" value="sports" />
+      <env name="SPRING_DATASOURCE_PASSWORD" value="sports123" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
+

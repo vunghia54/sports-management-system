@@ -1,0 +1,296 @@
+version: '3.8'
+
+services:
+  # =====================================================
+  # 0. INFRASTRUCTURE: POSTGRESQL & RABBITMQ
+  # =====================================================
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: sports-postgres
+    environment:
+      POSTGRES_USER: sports
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sports123}
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-multiple-dbs.sql:/docker-entrypoint-initdb.d/init-multiple-dbs.sql:ro
+    networks:
+      - sports-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sports -d tournament_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: sports-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 1. SERVICE REGISTRY (EUREKA SERVER - PORT 8761) - TH7
+  # =====================================================
+  service-registry:
+    build:
+      context: .
+      dockerfile: service-registry/Dockerfile
+    container_name: sports-service-registry
+    ports:
+      - "8761:8761"
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 2. API GATEWAY (PORT 8080) - TH6 & TH7
+  # =====================================================
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: sports-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      - service-registry
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 3. AUTH SERVICE (PORT 8083) - TH1 -> TH7
+  # =====================================================
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: sports-auth-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/auth_db
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 4A. TOURNAMENT SERVICE - INSTANCE 1 (PORT 8081) - TH1 -> TH7
+  # =====================================================
+  tournament-service:
+    build:
+      context: .
+      dockerfile: tournament-service/Dockerfile
+    container_name: sports-tournament-service-1
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/tournament_db
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 4B. TOURNAMENT SERVICE - INSTANCE 2 (PORT 8091) - TH7 LOAD BALANCING
+  # =====================================================
+  tournament-service-2:
+    build:
+      context: .
+      dockerfile: tournament-service/Dockerfile
+    container_name: sports-tournament-service-2
+    ports:
+      - "8091:8091"
+    environment:
+      SERVER_PORT: 8091
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/tournament_db
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 5. TEAM SERVICE (PORT 8085) - TH1 -> TH7
+  # =====================================================
+  team-service:
+    build:
+      context: .
+      dockerfile: team-service/Dockerfile
+    container_name: sports-team-service
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/team_db
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 6. ATHLETE SERVICE (PORT 8086) - TH1 -> TH7
+  # =====================================================
+  athlete-service:
+    build:
+      context: .
+      dockerfile: athlete-service/Dockerfile
+    container_name: sports-athlete-service
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/athlete_db
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 7. MATCH SERVICE (PORT 8082) - TH1 -> TH7
+  # =====================================================
+  match-service:
+    build:
+      context: .
+      dockerfile: match-service/Dockerfile
+    container_name: sports-match-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/match_db
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SERVICES_TOURNAMENT_URL: http://tournament-service
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      service-registry:
+        condition: service_started
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 8. RESULT SERVICE (PORT 8087) - TH1 -> TH7
+  # =====================================================
+  result-service:
+    build:
+      context: .
+      dockerfile: result-service/Dockerfile
+    container_name: sports-result-service
+    ports:
+      - "8087:8087"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/result_db
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 9. RANKING SERVICE (PORT 8088) - TH1 -> TH7
+  # =====================================================
+  ranking-service:
+    build:
+      context: .
+      dockerfile: ranking-service/Dockerfile
+    container_name: sports-ranking-service
+    ports:
+      - "8088:8088"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/ranking_db
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
+    networks:
+      - sports-net
+
+  # =====================================================
+  # 10. NOTIFICATION SERVICE (PORT 8084) - TH1 -> TH7
+  # =====================================================
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: sports-notification-service
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/notification_db
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: sports
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      service-registry:
+        condition: service_started
+    networks:
+      - sports-net
+
+networks:
+  sports-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
