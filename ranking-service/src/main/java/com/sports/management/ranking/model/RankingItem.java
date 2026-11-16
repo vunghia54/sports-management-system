@@ -19,6 +19,9 @@ public class RankingItem {
     @Column(name = "participant_id")
     private Long participantId;
 
+    @Column(name = "group_name")
+    private String groupName;
+
     private Integer rankPosition = 1;
 
     @NotBlank(message = "Participant name is required")
@@ -161,5 +164,13 @@ public class RankingItem {
 
     public void setGoalDifference(Integer goalDifference) {
         this.goalDifference = goalDifference;
+    }
+
+    public String getGroupName() {
+        return groupName;
+    }
+
+    public void setGroupName(String groupName) {
+        this.groupName = groupName;
     }
 }

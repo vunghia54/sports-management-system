@@ -13,6 +13,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,14 +25,17 @@ public class TournamentClient {
     private final RestClient tournamentRestClient;
     private final RestClient teamRestClient;
     private final RestClient athleteRestClient;
+    private final RestClient resultRestClient;
     private final String tournamentServiceUrl;
     private volatile String lastHandledInstance = "N/A";
 
+    @org.springframework.beans.factory.annotation.Autowired
     public TournamentClient(
             @LoadBalanced RestClient.Builder loadBalancedRestClientBuilder,
             @Value("${services.tournament.url:http://tournament-service}") String tournamentServiceUrl,
             @Value("${services.team.url:http://team-service}") String teamServiceUrl,
-            @Value("${services.athlete.url:http://athlete-service}") String athleteServiceUrl) {
+            @Value("${services.athlete.url:http://athlete-service}") String athleteServiceUrl,
+            @Value("${services.result.url:http://result-service}") String resultServiceUrl) {
 
         this.tournamentServiceUrl = tournamentServiceUrl;
         this.tournamentRestClient = loadBalancedRestClientBuilder.clone()
@@ -43,6 +47,17 @@ public class TournamentClient {
         this.athleteRestClient = loadBalancedRestClientBuilder.clone()
                 .baseUrl(athleteServiceUrl)
                 .build();
+        this.resultRestClient = loadBalancedRestClientBuilder.clone()
+                .baseUrl(resultServiceUrl)
+                .build();
+    }
+
+    public TournamentClient(
+            @LoadBalanced RestClient.Builder loadBalancedRestClientBuilder,
+            String tournamentServiceUrl,
+            String teamServiceUrl,
+            String athleteServiceUrl) {
+        this(loadBalancedRestClientBuilder, tournamentServiceUrl, teamServiceUrl, athleteServiceUrl, "http://result-service");
     }
 
     public boolean tournamentExists(Long tournamentId) {
@@ -301,6 +316,37 @@ public class TournamentClient {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "Tournament Service is unavailable when loading CompetitionFormat for Competition ID: " + competitionId,
+                    ex
+            );
+        }
+    }
+
+    public List<Map<String, Object>> getResultsByMatchIds(Collection<Long> matchIds) {
+        if (matchIds == null || matchIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String joined = matchIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(String::valueOf)
+                .distinct()
+                .collect(java.util.stream.Collectors.joining(","));
+        if (joined.isBlank()) {
+            return Collections.emptyList();
+        }
+        try {
+            var requestSpec = resultRestClient.get()
+                    .uri("/api/v1/results/by-matches?matchIds={ids}", joined);
+            String authHeader = getCurrentAuthHeader();
+            if (authHeader != null && !authHeader.isBlank()) {
+                requestSpec.header("Authorization", authHeader);
+            }
+            List<Map<String, Object>> list = requestSpec.retrieve()
+                    .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+            return list != null ? list : Collections.emptyList();
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Result Service (RESULT-SERVICE) is unavailable when loading results for knockout bracket progression",
                     ex
             );
         }

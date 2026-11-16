@@ -29,7 +29,7 @@ public class RankingController {
 
     private static final Set<String> ALLOWED_RANKING_SORT = Set.of("id", "competitionId", "rankingName", "updatedAt");
     private static final Set<String> ALLOWED_ITEM_SORT = Set.of(
-            "id", "rankPosition", "participantName", "matchesPlayed", "won", "drawn", "lost", "points", "goalsFor", "goalsAgainst", "goalDifference"
+            "id", "groupName", "rankPosition", "participantName", "matchesPlayed", "won", "drawn", "lost", "points", "goalsFor", "goalsAgainst", "goalDifference"
     );
 
     private final RankingService rankingService;

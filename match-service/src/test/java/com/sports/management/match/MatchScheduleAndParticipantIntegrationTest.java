@@ -85,12 +85,13 @@ class MatchScheduleAndParticipantIntegrationTest {
                 "startDate", "2026-10-10", "endDate", "2026-12-20"
         ));
 
-        for (long cid = 100L; cid <= 110L; cid++) {
+        for (long cid = 100L; cid <= 112L; cid++) {
             when(tournamentClient.getCompetitionById(cid))
                     .thenReturn(Map.of("id", cid, "tournamentId", 1, "name", "Nội dung " + cid));
             String fmt = (cid == 101L) ? "ROUND_ROBIN" : "KNOCKOUT";
+            boolean thirdPlace = (cid == 110L);
             when(tournamentClient.getCompetitionFormat(cid))
-                    .thenReturn(Map.of("competitionId", cid, "formatType", fmt, "numberOfGroups", 1, "hasThirdPlaceMatch", false));
+                    .thenReturn(Map.of("competitionId", cid, "formatType", fmt, "numberOfGroups", 1, "hasThirdPlaceMatch", thirdPlace));
         }
         when(tournamentClient.getCompetitionFormat(108L))
                 .thenReturn(Map.of("competitionId", 108L, "formatType", "GROUP_STAGE", "numberOfGroups", 3, "hasThirdPlaceMatch", false));
@@ -357,5 +358,141 @@ class MatchScheduleAndParticipantIntegrationTest {
                         .content("{\"tournamentId\":1,\"competitionId\":106,\"startDate\":\"2026-11-20\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.matches[0].round", startsWith("Chung kết")));
+    }
+
+    @Test
+    void generateNextRound_advances4TeamsWithThirdPlaceAndPenalties_and5TeamsWithByeAcrossAllRounds() throws Exception {
+        String syncToken = issueToken("result-sync-worker", "ROLE_INTERNAL_RESULT_SYNC");
+
+        // === CASE A: 4 teams KNOCKOUT with hasThirdPlaceMatch = true & penalty tie-breaker ===
+        List<Participant> k4 = seedParticipants(110L, 4, "KO4");
+        MvcResult r1Res4 = mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":110,\"startDate\":\"2026-10-12\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.generatedCount").value(2))
+                .andReturn();
+        JsonNode sfMatches = MAPPER.readTree(r1Res4.getResponse().getContentAsString()).get("matches");
+        long sf1Id = sfMatches.get(0).get("id").asLong();
+        long sf2Id = sfMatches.get(1).get("id").asLong();
+
+        // Blocked with 409 before matches finish
+        mockMvc.perform(post("/api/v1/matches/generate-next-round")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":110}"))
+                .andExpect(status().isConflict());
+
+        // Mark both FINISHED via internal sync token; still blocked with 409 while results not CONFIRMED
+        for (long mid : List.of(sf1Id, sf2Id)) {
+            mockMvc.perform(patch("/api/v1/matches/" + mid)
+                            .header("Authorization", syncToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"FINISHED\"}"))
+                    .andExpect(status().isOk());
+        }
+        when(tournamentClient.getResultsByMatchIds(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(Map.of("matchId", sf1Id, "status", "PENDING_CONFIRMATION", "scoreParticipant1", 1, "scoreParticipant2", 1)));
+        mockMvc.perform(post("/api/v1/matches/generate-next-round")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":110}"))
+                .andExpect(status().isConflict());
+
+        // Confirm SF1 (1-1, penalty 5-4 -> KO4 1 wins, KO4 2 loser) and SF2 (0-2 -> KO4 4 wins, KO4 3 loser)
+        when(tournamentClient.getResultsByMatchIds(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(
+                        Map.of("matchId", sf1Id, "status", "CONFIRMED", "scoreParticipant1", 1, "scoreParticipant2", 1, "penaltyScore1", 5, "penaltyScore2", 4),
+                        Map.of("matchId", sf2Id, "status", "CONFIRMED", "scoreParticipant1", 0, "scoreParticipant2", 2)
+                ));
+        MvcResult finalStageRes = mockMvc.perform(post("/api/v1/matches/generate-next-round")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":110,\"startDate\":\"2026-10-16\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.round").value("Chung kết"))
+                .andExpect(jsonPath("$.thirdPlaceGenerated").value(true))
+                .andExpect(jsonPath("$.generatedCount").value(2))
+                .andReturn();
+        JsonNode finalMatches = MAPPER.readTree(finalStageRes.getResponse().getContentAsString()).get("matches");
+        assertEquals(k4.get(0).getId(), finalMatches.get(0).get("participant1Id").asLong());
+        assertEquals(k4.get(3).getId(), finalMatches.get(0).get("participant2Id").asLong());
+        assertEquals("Tranh hạng ba", finalMatches.get(1).get("round").asText());
+        assertEquals(k4.get(1).getId(), finalMatches.get(1).get("participant1Id").asLong());
+        assertEquals(k4.get(2).getId(), finalMatches.get(1).get("participant2Id").asLong());
+
+        // === CASE B: 5 teams KNOCKOUT with round-1 bye advances fairly through SF -> Final ===
+        List<Participant> k5 = seedParticipants(111L, 5, "KO5B");
+        MvcResult r1Res5 = mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":111,\"startDate\":\"2026-11-01\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.generatedCount").value(2))
+                .andExpect(jsonPath("$.byeParticipants[0].displayName").value("KO5B 5"))
+                .andReturn();
+        JsonNode qfMatches = MAPPER.readTree(r1Res5.getResponse().getContentAsString()).get("matches");
+        long qf1Id = qfMatches.get(0).get("id").asLong(); // KO5B 1 vs KO5B 2
+        long qf2Id = qfMatches.get(1).get("id").asLong(); // KO5B 3 vs KO5B 4
+
+        for (long mid : List.of(qf1Id, qf2Id)) {
+            mockMvc.perform(patch("/api/v1/matches/" + mid)
+                            .header("Authorization", syncToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"FINISHED\"}"))
+                    .andExpect(status().isOk());
+        }
+        // QF1 winner = KO5B 1, QF2 winner = KO5B 4; plus bye KO5B 5 -> advancing = [KO5B 5, KO5B 1, KO5B 4]
+        when(tournamentClient.getResultsByMatchIds(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(
+                        Map.of("matchId", qf1Id, "status", "CONFIRMED", "scoreParticipant1", 2, "scoreParticipant2", 0),
+                        Map.of("matchId", qf2Id, "status", "CONFIRMED", "scoreParticipant1", 1, "scoreParticipant2", 2)
+                ));
+        MvcResult sf5Res = mockMvc.perform(post("/api/v1/matches/generate-next-round")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":111,\"startDate\":\"2026-11-05\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.round").value("Bán kết"))
+                .andExpect(jsonPath("$.generatedCount").value(1))
+                .andExpect(jsonPath("$.byeParticipants[0].displayName").value("KO5B 4"))
+                .andReturn();
+        JsonNode sf5Match = MAPPER.readTree(sf5Res.getResponse().getContentAsString()).get("matches").get(0);
+        long sf5Id = sf5Match.get("id").asLong();
+        assertEquals(k5.get(4).getId(), sf5Match.get("participant1Id").asLong()); // KO5B 5
+        assertEquals(k5.get(0).getId(), sf5Match.get("participant2Id").asLong()); // KO5B 1
+
+        // Finish SF -> KO5B 5 beats KO5B 1 -> Final pairs [KO5B 4, KO5B 5]
+        mockMvc.perform(patch("/api/v1/matches/" + sf5Id)
+                        .header("Authorization", syncToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"FINISHED\"}"))
+                .andExpect(status().isOk());
+        when(tournamentClient.getResultsByMatchIds(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(
+                        Map.of("matchId", qf1Id, "status", "CONFIRMED", "scoreParticipant1", 2, "scoreParticipant2", 0),
+                        Map.of("matchId", qf2Id, "status", "CONFIRMED", "scoreParticipant1", 1, "scoreParticipant2", 2),
+                        Map.of("matchId", sf5Id, "status", "CONFIRMED", "scoreParticipant1", 3, "scoreParticipant2", 1)
+                ));
+        MvcResult final5Res = mockMvc.perform(post("/api/v1/matches/generate-next-round")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":111,\"startDate\":\"2026-11-09\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.round").value("Chung kết"))
+                .andExpect(jsonPath("$.generatedCount").value(1))
+                .andExpect(jsonPath("$.byeParticipants", hasSize(0)))
+                .andReturn();
+        JsonNode final5Match = MAPPER.readTree(final5Res.getResponse().getContentAsString()).get("matches").get(0);
+        assertEquals(k5.get(3).getId(), final5Match.get("participant1Id").asLong()); // KO5B 4
+        assertEquals(k5.get(4).getId(), final5Match.get("participant2Id").asLong()); // KO5B 5
+
+        // Calling generate-next-round again after Final created -> 409 Conflict
+        mockMvc.perform(post("/api/v1/matches/generate-next-round")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":111}"))
+                .andExpect(status().isConflict());
     }
 }

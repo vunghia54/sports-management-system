@@ -152,6 +152,7 @@ public class RankingService {
             }
         }
 
+        boolean isGroupStage = isGroupStageFormat(format);
         Map<String, RankingItem> statsMap = new LinkedHashMap<>();
 
         for (Map<String, Object> match : matches) {
@@ -160,9 +161,15 @@ public class RankingService {
             String p1 = match.get("participant1") != null ? String.valueOf(match.get("participant1")) : null;
             String p2 = match.get("participant2") != null ? String.valueOf(match.get("participant2")) : null;
             Long matchId = match.get("id") != null ? Long.valueOf(String.valueOf(match.get("id"))) : null;
+            String rawGroup = match.get("groupName") != null ? String.valueOf(match.get("groupName")).trim() : null;
+            String normalizedGroup = isGroupStage
+                    ? ((rawGroup != null && !rawGroup.isBlank()) ? rawGroup : "Bảng A")
+                    : null;
 
-            String key1 = resolveParticipantKey(p1Id, p1);
-            String key2 = resolveParticipantKey(p2Id, p2);
+            String baseKey1 = resolveParticipantKey(p1Id, p1);
+            String baseKey2 = resolveParticipantKey(p2Id, p2);
+            String key1 = baseKey1 == null ? null : (isGroupStage ? normalizedGroup + "::" + baseKey1 : baseKey1);
+            String key2 = baseKey2 == null ? null : (isGroupStage ? normalizedGroup + "::" + baseKey2 : baseKey2);
 
             if (key1 != null) {
                 RankingItem item1 = statsMap.computeIfAbsent(key1, k -> {
@@ -170,10 +177,14 @@ public class RankingService {
                             (p1 != null && !p1.isBlank()) ? p1 : ("Participant #" + p1Id),
                             0, 0, 0, 0, 0, 0, 0, 0);
                     item.setParticipantId(p1Id);
+                    item.setGroupName(normalizedGroup);
                     return item;
                 });
                 if (item1.getParticipantId() == null && p1Id != null) {
                     item1.setParticipantId(p1Id);
+                }
+                if (isGroupStage && item1.getGroupName() == null) {
+                    item1.setGroupName(normalizedGroup);
                 }
             }
             if (key2 != null) {
@@ -182,10 +193,14 @@ public class RankingService {
                             (p2 != null && !p2.isBlank()) ? p2 : ("Participant #" + p2Id),
                             0, 0, 0, 0, 0, 0, 0, 0);
                     item.setParticipantId(p2Id);
+                    item.setGroupName(normalizedGroup);
                     return item;
                 });
                 if (item2.getParticipantId() == null && p2Id != null) {
                     item2.setParticipantId(p2Id);
+                }
+                if (isGroupStage && item2.getGroupName() == null) {
+                    item2.setGroupName(normalizedGroup);
                 }
             }
 
@@ -249,26 +264,36 @@ public class RankingService {
             item.setGoalDifference(item.getGoalsFor() - item.getGoalsAgainst());
         }
 
-        items.sort((a, b) -> {
-            int cmpPoints = Integer.compare(b.getPoints(), a.getPoints());
-            if (cmpPoints != 0) return cmpPoints;
-            int cmpDiff = Integer.compare(b.getGoalDifference(), a.getGoalDifference());
-            if (cmpDiff != 0) return cmpDiff;
-            int cmpGoals = Integer.compare(b.getGoalsFor(), a.getGoalsFor());
-            if (cmpGoals != 0) return cmpGoals;
-            String n1 = a.getParticipantName() != null ? a.getParticipantName() : "";
-            String n2 = b.getParticipantName() != null ? b.getParticipantName() : "";
-            return String.CASE_INSENSITIVE_ORDER.compare(n1, n2);
-        });
-
+        Comparator<RankingItem> comparator = standingsComparator();
         rankingItemRepository.deleteByRankingId(ranking.getId());
 
-        int position = 1;
-        for (RankingItem item : items) {
-            item.setRankPosition(position++);
-            item.setRankingId(ranking.getId());
+        List<RankingItem> orderedItems;
+        if (isGroupStage) {
+            Map<String, List<RankingItem>> grouped = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            for (RankingItem item : items) {
+                String g = (item.getGroupName() != null && !item.getGroupName().isBlank()) ? item.getGroupName() : "Bảng A";
+                grouped.computeIfAbsent(g, k -> new ArrayList<>()).add(item);
+            }
+            orderedItems = new ArrayList<>(items.size());
+            for (List<RankingItem> groupItems : grouped.values()) {
+                groupItems.sort(comparator);
+                int pos = 1;
+                for (RankingItem item : groupItems) {
+                    item.setRankPosition(pos++);
+                    item.setRankingId(ranking.getId());
+                    orderedItems.add(item);
+                }
+            }
+        } else {
+            items.sort(comparator);
+            int position = 1;
+            for (RankingItem item : items) {
+                item.setRankPosition(position++);
+                item.setRankingId(ranking.getId());
+            }
+            orderedItems = items;
         }
-        List<RankingItem> savedItems = rankingItemRepository.saveAll(items);
+        List<RankingItem> savedItems = rankingItemRepository.saveAll(orderedItems);
 
         ranking.setUpdatedAt(LocalDateTime.now());
         Ranking savedRanking = rankingRepository.save(ranking);
@@ -322,12 +347,34 @@ public class RankingService {
         return val != null ? val : 0;
     }
 
+    private Comparator<RankingItem> standingsComparator() {
+        return (a, b) -> {
+            int cmpPoints = Integer.compare(b.getPoints(), a.getPoints());
+            if (cmpPoints != 0) return cmpPoints;
+            int cmpDiff = Integer.compare(b.getGoalDifference(), a.getGoalDifference());
+            if (cmpDiff != 0) return cmpDiff;
+            int cmpGoals = Integer.compare(b.getGoalsFor(), a.getGoalsFor());
+            if (cmpGoals != 0) return cmpGoals;
+            String n1 = a.getParticipantName() != null ? a.getParticipantName() : "";
+            String n2 = b.getParticipantName() != null ? b.getParticipantName() : "";
+            return String.CASE_INSENSITIVE_ORDER.compare(n1, n2);
+        };
+    }
+
     private boolean isKnockoutFormat(Map<String, Object> format) {
         if (format == null || format.get("formatType") == null) {
             return false;
         }
         String fmt = String.valueOf(format.get("formatType")).trim().toUpperCase(Locale.ROOT);
         return "KNOCKOUT".equals(fmt) || "SINGLE_ELIMINATION".equals(fmt);
+    }
+
+    private boolean isGroupStageFormat(Map<String, Object> format) {
+        if (format == null || format.get("formatType") == null) {
+            return false;
+        }
+        String fmt = String.valueOf(format.get("formatType")).trim().toUpperCase(Locale.ROOT);
+        return "GROUP_STAGE".equals(fmt);
     }
 
     private String resolveParticipantKey(Long participantId, String displayName) {

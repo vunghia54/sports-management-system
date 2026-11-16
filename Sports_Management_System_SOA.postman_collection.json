@@ -904,6 +904,36 @@
           ]
         },
         {
+          "name": "5.3c Sinh Vòng Knockout Tiếp Theo (D1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"competitionId\": {{competitionId}}\n}"
+            },
+            "url": {
+              "raw": "{{matchUrl}}/api/v1/matches/generate-next-round",
+              "host": ["{{matchUrl}}"],
+              "path": ["api", "v1", "matches", "generate-next-round"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sinh vòng knockout tiếp theo thành công 201', function () { pm.response.to.have.status(201); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
           "name": "5.4 Kiểm tra Load Balancing: Match gọi Tournament Instance (Round-Robin 8081 & 8091) [TH7]",
           "request": {
             "method": "GET",

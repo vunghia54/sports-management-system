@@ -349,6 +349,64 @@ public class MatchController {
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 
+    // AUTO GENERATE NEXT KNOCKOUT ROUND (D1)
+    @PostMapping("/generate-next-round")
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<Map<String, Object>> generateNextRound(
+            @RequestBody Map<String, Object> request,
+            Authentication authentication) {
+
+        assertAuthenticated(authentication);
+        if (request == null || request.get("competitionId") == null || String.valueOf(request.get("competitionId")).isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Competition ID is required");
+        }
+        Long competitionId;
+        try {
+            competitionId = Long.valueOf(String.valueOf(request.get("competitionId")));
+        } catch (NumberFormatException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid competitionId");
+        }
+
+        Map<String, Object> comp;
+        try {
+            comp = tournamentClient.getCompetitionById(competitionId);
+        } catch (com.sports.management.exception.ResourceNotFoundException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Competition not found with id: " + competitionId);
+        }
+        if (comp == null || comp.get("tournamentId") == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Competition #" + competitionId + " has no parent tournamentId");
+        }
+        Long tournamentId = Long.valueOf(String.valueOf(comp.get("tournamentId")));
+
+        if (!hasAuthority(authentication, "ROLE_ADMIN")) {
+            if (!hasAuthority(authentication, "ROLE_ORGANIZER")) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access Denied: Only Organizer or Admin can generate next round");
+            }
+            assertTournamentOwnership(tournamentId, authentication.getName());
+        } else {
+            assertTournamentExists(tournamentId);
+        }
+
+        String startDate = request.get("startDate") != null ? String.valueOf(request.get("startDate")) : null;
+        List<String> venues = (List<String>) request.get("venues");
+        List<String> referees = (List<String>) request.get("referees");
+
+        MatchService.NextRoundGenerationResult result = matchService.generateNextKnockoutRound(
+                competitionId, startDate, venues, referees, authentication.getName());
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("tournamentId", result.tournamentId());
+        res.put("competitionId", result.competitionId());
+        res.put("round", result.roundLabel());
+        res.put("format", "KNOCKOUT");
+        res.put("generatedCount", result.matches().size());
+        res.put("matches", result.matches());
+        res.put("byeParticipants", result.byeParticipants());
+        res.put("thirdPlaceGenerated", result.thirdPlaceGenerated());
+        res.put("message", result.message());
+        return ResponseEntity.status(HttpStatus.CREATED).body(res);
+    }
+
     private void verifyMatchUpdatePermission(
             Match existing,
             Long targetTournamentId,

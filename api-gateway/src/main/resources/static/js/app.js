@@ -3055,6 +3055,7 @@ function renderTournamentDetailPage() {
         ` : ''}
         ${canManageTour ? `<button class="btn btn-secondary btn-sm" onclick="openCreateCompetitionModal(${tour.id})">+ Nội dung</button>` : ''}
         ${canManageTour && tourComps.length > 0 ? `<button class="btn btn-secondary btn-sm" onclick="openCompetitionSettingsModal(${tour.id}, '${selectedCid !== 'ALL' ? selectedCid : tourComps[0].id}')">⚙ Luật & Thể thức</button>` : ''}
+        ${canSchedule ? `<button class="btn btn-secondary btn-sm" onclick="openGenerateNextRoundModal(${tour.id})">⏭ Vòng tiếp theo</button>` : ''}
         ${canSchedule ? `<button class="btn btn-primary" onclick="openAutoGenerateScheduleModal(${tour.id})">⚡ Xếp lịch thi đấu</button>` : ''}
       </div>
     </div>
@@ -3277,6 +3278,7 @@ function renderSchedulePage() {
       </div>
       <div class="page-actions">
         ${canSchedule ? `<button class="btn btn-secondary" onclick="openAutoGenerateScheduleModal()">⚡ Tự động xếp lịch</button>` : ''}
+        ${canSchedule ? `<button class="btn btn-secondary" onclick="openGenerateNextRoundModal()">⏭ Tạo vòng Knockout tiếp theo</button>` : ''}
         ${canSchedule ? `<button class="btn btn-primary" onclick="openCreateMatchModal()">+ Tạo trận đấu</button>` : ''}
       </div>
     </div>
@@ -3749,28 +3751,8 @@ function updateRankingsBoardsRegion() {
   if (el) el.innerHTML = renderRankingsBoardsInner(AppState.selectedCompetitionId);
 }
 
-function renderRankingItemsInner(selectedCid = null) {
-  const slice = AppState.paged.rankingItems;
-  const cid = Number(selectedCid || slice.filters.competitionId || AppState.selectedCompetitionId || AppState.data.competitions[0]?.id || 0);
-  const { comp, tour, sport } = getCompetitionMeta(cid);
-
-  const badge = document.getElementById('rankingItemsTotalBadge');
-  if (badge) badge.textContent = `Tổng số: ${slice.totalElements} dòng xếp hạng`;
-
-  const titleEl = document.getElementById('rankingItemsCardTitle');
-  if (titleEl && comp) {
-    titleEl.textContent = `Thứ hạng Đội / VĐV — ${comp.name || comp.competitionName}`;
-  }
-
+function renderStandingRowsTableHtml(rows, pageOffset = 0, loading = false) {
   return `
-    ${renderServiceStateBanner('rankingItems', "fetchPagedResource('rankingItems', updateRankingItemsRegion)")}
-    ${comp ? `
-      <div style="margin-bottom:10px;font-size:0.84rem;color:var(--text-secondary);">
-        Nội dung: <strong>${escapeHtml(comp.name || comp.competitionName)}</strong>
-        ${sport ? ` • Môn: <strong>${escapeHtml(sport.name)}</strong>` : ''}
-        ${tour ? ` • Giải đấu: <strong>${escapeHtml(tour.name)}</strong>` : ''}
-      </div>
-    ` : ''}
     <div class="table-wrap">
       <table class="data-table">
         <thead>
@@ -3788,8 +3770,8 @@ function renderRankingItemsInner(selectedCid = null) {
           </tr>
         </thead>
         <tbody>
-          ${slice.items.map((item, idx) => {
-            const rankPos = item.rankPosition ?? (slice.page * slice.size + idx + 1);
+          ${rows.map((item, idx) => {
+            const rankPos = item.rankPosition ?? (pageOffset + idx + 1);
             const rankBadge = rankPos === 1 ? 'badge-success' : (rankPos === 2 ? 'badge-warning' : (rankPos === 3 ? 'badge-primary' : 'badge-neutral'));
             const diff = item.goalDifference ?? ((item.goalsFor ?? 0) - (item.goalsAgainst ?? 0));
             return `
@@ -3806,11 +3788,71 @@ function renderRankingItemsInner(selectedCid = null) {
                 <td class="tabular-nums"><strong style="font-size:1.05rem;color:var(--color-primary)">${item.points ?? 0}</strong></td>
               </tr>
             `;
-          }).join('') || `<tr><td colspan="10" class="state-empty-box">${slice.loading ? 'Đang tải các dòng xếp hạng...' : 'Chưa có dữ liệu thứ hạng cho nội dung thi đấu này.'}</td></tr>`}
+          }).join('') || `<tr><td colspan="10" class="state-empty-box">${loading ? 'Đang tải các dòng xếp hạng...' : 'Chưa có dữ liệu thứ hạng cho nội dung thi đấu này.'}</td></tr>`}
         </tbody>
       </table>
     </div>
-    ${renderPaginationBar('rankingItems', slice, 'dòng xếp hạng', [5, 10, 20, 50])}
+  `;
+}
+
+function renderRankingItemsInner(selectedCid = null) {
+  const slice = AppState.paged.rankingItems;
+  const cid = Number(selectedCid || slice.filters.competitionId || AppState.selectedCompetitionId || AppState.data.competitions[0]?.id || 0);
+  const { comp, tour, sport } = getCompetitionMeta(cid);
+
+  const badge = document.getElementById('rankingItemsTotalBadge');
+  if (badge) badge.textContent = `Tổng số: ${slice.totalElements} dòng xếp hạng`;
+
+  const titleEl = document.getElementById('rankingItemsCardTitle');
+  if (titleEl && comp) {
+    titleEl.textContent = `Thứ hạng Đội / VĐV — ${comp.name || comp.competitionName}`;
+  }
+
+  const fullBoard = (AppState.data.rankings || []).find(rk => Number(rk.ranking?.competitionId) === cid);
+  const fullItems = Array.isArray(fullBoard?.items) ? fullBoard.items : [];
+  const hasKeyword = Boolean(String(slice.filters.keyword || '').trim());
+  const sourceItems = (!hasKeyword && fullItems.some(it => it.groupName)) ? fullItems : slice.items;
+  const hasGroups = sourceItems.some(it => it.groupName && String(it.groupName).trim().length > 0);
+
+  let tablesHtml = '';
+  if (hasGroups) {
+    const grouped = new Map();
+    for (const item of sourceItems) {
+      const g = (item.groupName && String(item.groupName).trim()) || 'Bảng A';
+      if (!grouped.has(g)) grouped.set(g, []);
+      grouped.get(g).push(item);
+    }
+    const sortedGroupNames = Array.from(grouped.keys()).sort((a, b) => a.localeCompare(b, 'vi'));
+    tablesHtml = sortedGroupNames.map(groupName => {
+      const rows = grouped.get(groupName).slice().sort((a, b) => (a.rankPosition ?? 999) - (b.rankPosition ?? 999));
+      return `
+        <div style="margin-bottom:18px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <h3 style="margin:0;font-size:1rem;color:var(--color-primary);">🏆 ${escapeHtml(groupName)}</h3>
+            <span class="badge badge-neutral">${rows.length} đội</span>
+          </div>
+          ${renderStandingRowsTableHtml(rows, 0, slice.loading)}
+        </div>
+      `;
+    }).join('');
+  } else {
+    tablesHtml = `
+      ${renderStandingRowsTableHtml(slice.items, slice.page * slice.size, slice.loading)}
+      ${renderPaginationBar('rankingItems', slice, 'dòng xếp hạng', [5, 10, 20, 50])}
+    `;
+  }
+
+  return `
+    ${renderServiceStateBanner('rankingItems', "fetchPagedResource('rankingItems', updateRankingItemsRegion)")}
+    ${comp ? `
+      <div style="margin-bottom:10px;font-size:0.84rem;color:var(--text-secondary);">
+        Nội dung: <strong>${escapeHtml(comp.name || comp.competitionName)}</strong>
+        ${sport ? ` • Môn: <strong>${escapeHtml(sport.name)}</strong>` : ''}
+        ${tour ? ` • Giải đấu: <strong>${escapeHtml(tour.name)}</strong>` : ''}
+        ${hasGroups ? ' • <span class="badge badge-primary">Xếp hạng chia bảng</span>' : ''}
+      </div>
+    ` : ''}
+    ${tablesHtml}
   `;
 }
 
@@ -5523,6 +5565,83 @@ async function submitAutoGenerateSchedule(e) {
     });
     closeModal();
     showToast(res.data.message || `Đã tự động tạo ${res.data.generatedCount} trận đấu!`);
+    await refreshAfterMutation({ clearCache: ['matches'], paged: ['matches'], reloadTournamentId: tourId });
+    renderCurrentPage(false);
+  } catch (err) {
+    showFormError(form, err);
+  } finally {
+    unlock();
+  }
+}
+
+async function openGenerateNextRoundModal(preselectedTourId = null) {
+  if (!hasPermission('matches.schedule')) {
+    showToast('Bạn không có quyền sinh vòng đấu tiếp theo', 'error');
+    return;
+  }
+  await ensureMatchFormReferenceData();
+  const d = AppState.data;
+  if (d.tournaments.length === 0) {
+    showToast('Cần ít nhất 1 giải đấu để tạo vòng tiếp theo.', 'warning');
+    return;
+  }
+  const tourId = preselectedTourId || AppState.selectedTournamentId || d.tournaments[0].id;
+  const comps = d.competitions.filter(c => Number(c.tournamentId) === Number(tourId));
+  if (comps.length === 0) {
+    showToast('Giải đấu chưa có nội dung thi đấu nào.', 'warning');
+    return;
+  }
+
+  openModal('Tạo Vòng Knockout Tiếp Theo', `
+    <form id="generateNextRoundForm" onsubmit="submitGenerateNextRound(event)">
+      <div class="form-error-banner" hidden></div>
+      <div class="form-group">
+        <label for="mNextTourId">Giải đấu *</label>
+        <select id="mNextTourId" class="select" onchange="syncCompetitionDropdown('mNextTourId', 'mNextCompId')">
+          ${d.tournaments.map(t => `<option value="${t.id}" ${Number(t.id) === Number(tourId) ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="mNextCompId">Nội dung Knockout *</label>
+        <select id="mNextCompId" data-field="competitionId" class="select" required>
+          ${comps.map(c => `<option value="${c.id}">${escapeHtml(c.name || c.competitionName)}</option>`).join('') || '<option value="">-- Chưa có nội dung --</option>'}
+        </select>
+        <div style="margin-top:6px;font-size:0.82rem;color:var(--text-secondary);">Chỉ chạy khi toàn bộ trận vòng hiện tại đã FINISHED và có kết quả CONFIRMED.</div>
+      </div>
+      <div class="form-group">
+        <label for="mNextDate">Ngày thi đấu vòng mới (tùy chọn)</label>
+        <input id="mNextDate" data-field="startDate" type="date" class="input" />
+      </div>
+      <div class="page-actions" style="justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary">⏭ Sinh vòng tiếp theo</button>
+      </div>
+    </form>
+  `);
+}
+
+async function submitGenerateNextRound(e) {
+  e.preventDefault();
+  const form = e.target;
+  clearFormErrors(form);
+  const tourId = Number(document.getElementById('mNextTourId').value);
+  const compVal = document.getElementById('mNextCompId').value;
+  if (!compVal) {
+    setFieldError(form, 'competitionId', 'Vui lòng chọn nội dung thi đấu hợp lệ');
+    return;
+  }
+  const payload = { competitionId: Number(compVal) };
+  const startDate = document.getElementById('mNextDate')?.value;
+  if (startDate) payload.startDate = startDate;
+
+  const unlock = lockFormSubmit(form, 'Đang tạo vòng tiếp theo...');
+  try {
+    const res = await apiCall('/api/v1/matches/generate-next-round', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    closeModal();
+    showToast(res.data.message || `Đã tạo ${res.data.generatedCount} trận cho vòng ${res.data.round}!`);
     await refreshAfterMutation({ clearCache: ['matches'], paged: ['matches'], reloadTournamentId: tourId });
     renderCurrentPage(false);
   } catch (err) {

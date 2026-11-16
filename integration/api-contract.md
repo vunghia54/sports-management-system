@@ -91,6 +91,11 @@
 - **Nguồn thể thức duy nhất:** `Match Service` đọc `formatType`, `numberOfGroups`, `hasThirdPlaceMatch` từ `GET /api/v1/competitions/{id}/format` tại `Tournament Service`. Client **không** gửi tham số `format` riêng (nếu gửi khác với `formatType` đang cấu hình sẽ trả `400 Bad Request`).
 - **Hỗ trợ:** `KNOCKOUT`, `ROUND_ROBIN`, `GROUP_STAGE` (chia đúng `numberOfGroups` bảng); `HYBRID` trả `400 Bad Request` (`"Thể thức HYBRID chưa hỗ trợ xếp lịch tự động"`).
 
+### API: Sinh vòng loại trực tiếp tiếp theo (D1)
+- **Endpoint:** `POST /api/v1/matches/generate-next-round`
+- **Request Body:** `{ "competitionId": 1 }` (tùy chọn `startDate`, `venues`, `referees`)
+- **Quy tắc:** Chỉ chạy khi toàn bộ trận vòng hiện tại của nội dung `KNOCKOUT` đã `FINISHED` và có kết quả `CONFIRMED` tại `result-service`; đọc đội thắng (kể cả tỉ số luân lưu), cộng đội được miễn vòng trước, đặt nhãn theo số đội còn lại (`Chung kết`, `Bán kết`, `Tứ kết`, ...), và sinh thêm trận `Tranh hạng ba` nếu `hasThirdPlaceMatch=true`.
+
 ---
 
 ## 3. Asynchronous Message Contract: RabbitMQ Broker

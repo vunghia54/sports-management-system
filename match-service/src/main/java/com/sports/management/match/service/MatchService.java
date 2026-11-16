@@ -976,6 +976,346 @@ public class MatchService {
         return "Vòng 1/16";
     }
 
+    public record NextRoundGenerationResult(
+            Long tournamentId,
+            Long competitionId,
+            String roundLabel,
+            List<Match> matches,
+            List<Map<String, Object>> byeParticipants,
+            boolean thirdPlaceGenerated,
+            String message
+    ) {}
+
+    @Transactional
+    public NextRoundGenerationResult generateNextKnockoutRound(
+            Long competitionId,
+            String startDateStr,
+            List<String> venues,
+            List<String> referees,
+            String creatorUsername) {
+
+        if (competitionId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Competition ID is required");
+        }
+        Map<String, Object> comp;
+        try {
+            comp = tournamentClient.getCompetitionById(competitionId);
+        } catch (ResourceNotFoundException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Nội dung thi đấu không tồn tại với id: " + competitionId);
+        }
+        if (comp == null || comp.get("tournamentId") == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nội dung thi đấu #" + competitionId + " không hợp lệ");
+        }
+        Long tournamentId = parseRequiredLong(comp.get("tournamentId"), "Invalid tournamentId on competition #" + competitionId);
+        Map<String, Object> tournament = requireTournamentMap(tournamentId);
+        if (tournament == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tournament ID: " + tournamentId);
+        }
+
+        Map<String, Object> formatConfig = tournamentClient.getCompetitionFormat(competitionId);
+        if (formatConfig == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Nội dung thi đấu #" + competitionId + " chưa có cấu hình thể thức thi đấu");
+        }
+        String fmt = normalizeFormatType(
+                formatConfig.get("formatType") != null ? String.valueOf(formatConfig.get("formatType")) : "KNOCKOUT");
+        if (!"KNOCKOUT".equals(fmt)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Sinh vòng đấu tiếp theo chỉ áp dụng cho thể thức loại trực tiếp (KNOCKOUT), hiện đang là: " + fmt);
+        }
+        boolean hasThirdPlaceMatch = Boolean.parseBoolean(String.valueOf(formatConfig.get("hasThirdPlaceMatch")));
+
+        List<Match> activeMatches = matchRepository.findByCompetitionId(competitionId).stream()
+                .filter(m -> !"CANCELLED".equalsIgnoreCase(m.getStatus()))
+                .filter(m -> knockoutStageOrder(m.getRound()) >= 0)
+                .sorted(Comparator.comparing(Match::getId, Comparator.nullsLast(Long::compareTo)))
+                .toList();
+        if (activeMatches.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Nội dung thi đấu #" + competitionId + " chưa có trận đấu vòng đầu. Hãy chạy tự động xếp lịch trước.");
+        }
+
+        int maxStage = activeMatches.stream()
+                .mapToInt(m -> knockoutStageOrder(m.getRound()))
+                .max()
+                .orElse(0);
+        if (maxStage >= 5) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Vòng Chung kết đã được tạo cho nội dung thi đấu #" + competitionId + "; không còn vòng đấu tiếp theo.");
+        }
+
+        List<Match> currentRoundMatches = activeMatches.stream()
+                .filter(m -> knockoutStageOrder(m.getRound()) == maxStage)
+                .toList();
+        for (Match m : currentRoundMatches) {
+            if (!"FINISHED".equalsIgnoreCase(m.getStatus())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Tất cả trận đấu của vòng hiện tại phải ở trạng thái FINISHED mới có thể sinh vòng tiếp theo (trận #"
+                                + m.getId() + " đang là " + m.getStatus() + ").");
+            }
+        }
+
+        List<Long> allFinishedIds = activeMatches.stream()
+                .filter(m -> "FINISHED".equalsIgnoreCase(m.getStatus()))
+                .map(Match::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        List<Map<String, Object>> fetchedResults = tournamentClient.getResultsByMatchIds(allFinishedIds);
+        Map<Long, Map<String, Object>> resultByMatchId = new HashMap<>();
+        if (fetchedResults != null) {
+            for (Map<String, Object> r : fetchedResults) {
+                if (r != null && r.get("matchId") != null) {
+                    resultByMatchId.put(parseRequiredLong(r.get("matchId"), "Invalid matchId"), r);
+                }
+            }
+        }
+
+        List<Participant> allParticipants = participantRepository.findByCompetitionId(competitionId).stream()
+                .sorted(Comparator.comparing(Participant::getId, Comparator.nullsLast(Long::compareTo)))
+                .toList();
+        Map<Long, Participant> participantById = new LinkedHashMap<>();
+        for (Participant p : allParticipants) {
+            participantById.put(p.getId(), p);
+        }
+
+        Set<Long> eliminatedIds = new HashSet<>();
+        for (Match m : activeMatches) {
+            if (knockoutStageOrder(m.getRound()) < maxStage) {
+                Map<String, Object> priorRes = resultByMatchId.get(m.getId());
+                if (priorRes != null && "CONFIRMED".equalsIgnoreCase(String.valueOf(priorRes.get("status")))) {
+                    OutcomeIds priorOutcome = resolveMatchOutcome(m, priorRes);
+                    eliminatedIds.add(priorOutcome.loserId());
+                }
+            }
+        }
+
+        List<Participant> currentWinners = new ArrayList<>();
+        List<Participant> currentLosers = new ArrayList<>();
+        Set<Long> currentWinnerIds = new HashSet<>();
+        for (Match m : currentRoundMatches) {
+            Map<String, Object> res = resultByMatchId.get(m.getId());
+            if (res == null || !"CONFIRMED".equalsIgnoreCase(String.valueOf(res.get("status")))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Trận #" + m.getId() + " (" + m.getParticipant1() + " vs " + m.getParticipant2()
+                                + ") chưa có kết quả được xác nhận chính thức (CONFIRMED).");
+            }
+            OutcomeIds outcome = resolveMatchOutcome(m, res);
+            Participant winner = participantById.get(outcome.winnerId());
+            Participant loser = participantById.get(outcome.loserId());
+            if (winner == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Không tìm thấy participant thắng #" + outcome.winnerId() + " trong nội dung #" + competitionId);
+            }
+            currentWinners.add(winner);
+            currentWinnerIds.add(winner.getId());
+            eliminatedIds.add(outcome.loserId());
+            if (loser != null) {
+                currentLosers.add(loser);
+            }
+        }
+
+        List<Participant> byeFromPreviousRound = allParticipants.stream()
+                .filter(p -> !eliminatedIds.contains(p.getId()) && !currentWinnerIds.contains(p.getId()))
+                .toList();
+
+        List<Participant> advancing = new ArrayList<>();
+        advancing.addAll(byeFromPreviousRound);
+        advancing.addAll(currentWinners);
+        if (advancing.size() < 2) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cần ít nhất 2 đội còn lại để sinh vòng đấu tiếp theo (hiện có: " + advancing.size() + ").");
+        }
+
+        LocalDate tourStart = parseLocalDate(tournament.get("startDate"));
+        LocalDate tourEnd = parseLocalDate(tournament.get("endDate"));
+        LocalDate latestCurrentDate = currentRoundMatches.stream()
+                .map(Match::getMatchTime)
+                .filter(Objects::nonNull)
+                .map(LocalDateTime::toLocalDate)
+                .max(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+        LocalDate startDate;
+        if (startDateStr != null && !startDateStr.isBlank()) {
+            try {
+                startDate = LocalDate.parse(startDateStr.trim());
+            } catch (Exception ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Định dạng startDate không hợp lệ (YYYY-MM-DD)");
+            }
+        } else {
+            startDate = latestCurrentDate.plusDays(1);
+            if (tourStart != null && startDate.isBefore(tourStart)) {
+                startDate = tourStart;
+            }
+            if (tourEnd != null && startDate.isAfter(tourEnd)) {
+                startDate = tourEnd;
+            }
+        }
+        if (tourStart != null && startDate.isBefore(tourStart)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ngày bắt đầu vòng tiếp theo (" + startDate + ") phải nằm trong thời gian giải đấu [" + tourStart + ", " + tourEnd + "]");
+        }
+        if (tourEnd != null && startDate.isAfter(tourEnd)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ngày bắt đầu vòng tiếp theo (" + startDate + ") không được sau ngày kết thúc giải đấu (" + tourEnd + ")");
+        }
+
+        List<String> venuePool = (venues != null && !venues.isEmpty())
+                ? venues
+                : List.of("SVĐ Quốc Gia Mỹ Đình", "SVĐ Hàng Đẫy", "SVĐ Cẩm Phả");
+        List<String> refPool = (referees != null && !referees.isEmpty())
+                ? referees
+                : List.of("TT FIFA Ngô Duy Lân", "TT Hoàng Ngọc Hà", "TT Nguyễn Mạnh Hải");
+        int stride = Math.max(1, Math.min(venuePool.size(), refPool.size()));
+
+        String nextRoundLabel = resolveKnockoutRoundLabel(advancing.size());
+        List<Match> planned = new ArrayList<>();
+        List<Map<String, Object>> nextRoundByes = new ArrayList<>();
+
+        int matchNum = 1;
+        int slotIdx = 0;
+        for (int i = 0; i + 1 < advancing.size(); i += 2) {
+            Participant p1 = advancing.get(i);
+            Participant p2 = advancing.get(i + 1);
+            int dayOffset = slotIdx / (stride * 2);
+            int slotInDay = (slotIdx % (stride * 2)) / stride;
+            int lane = slotIdx % stride;
+
+            Match m = new Match();
+            m.setTournamentId(tournamentId);
+            m.setCompetitionId(competitionId);
+            m.setRound(nextRoundLabel + " - Trận " + matchNum);
+            m.setGroupName("Nhánh " + matchNum);
+            m.setParticipant1Id(p1.getId());
+            m.setParticipant2Id(p2.getId());
+            m.setParticipant1(p1.getDisplayName());
+            m.setParticipant2(p2.getDisplayName());
+            m.setLocation(venuePool.get(lane));
+            m.setReferee(refPool.get(lane));
+            m.setMatchTime(startDate.plusDays(dayOffset).atTime(LocalTime.of(17, 0).plusMinutes(slotInDay * 150L)));
+            m.setStatus("SCHEDULED");
+            m.setOwnerUsername(creatorUsername);
+            validateDistinctParticipants(m);
+            planned.add(m);
+            matchNum++;
+            slotIdx++;
+        }
+
+        if (advancing.size() % 2 == 1) {
+            Participant byeTeam = advancing.get(advancing.size() - 1);
+            Map<String, Object> byeInfo = new LinkedHashMap<>();
+            byeInfo.put("id", byeTeam.getId());
+            byeInfo.put("displayName", byeTeam.getDisplayName());
+            byeInfo.put("round", nextRoundLabel);
+            byeInfo.put("reason", "Số đội còn lại lẻ (" + advancing.size() + "), được miễn thi đấu vòng " + nextRoundLabel);
+            nextRoundByes.add(byeInfo);
+        }
+
+        boolean thirdPlaceGenerated = false;
+        if (hasThirdPlaceMatch && "Chung kết".equals(nextRoundLabel) && currentLosers.size() >= 2) {
+            Participant l1 = currentLosers.get(0);
+            Participant l2 = currentLosers.get(1);
+            int dayOffset = slotIdx / (stride * 2);
+            int slotInDay = (slotIdx % (stride * 2)) / stride;
+            int lane = slotIdx % stride;
+
+            Match thirdPlace = new Match();
+            thirdPlace.setTournamentId(tournamentId);
+            thirdPlace.setCompetitionId(competitionId);
+            thirdPlace.setRound("Tranh hạng ba");
+            thirdPlace.setGroupName("Tranh hạng ba");
+            thirdPlace.setParticipant1Id(l1.getId());
+            thirdPlace.setParticipant2Id(l2.getId());
+            thirdPlace.setParticipant1(l1.getDisplayName());
+            thirdPlace.setParticipant2(l2.getDisplayName());
+            thirdPlace.setLocation(venuePool.get(lane));
+            thirdPlace.setReferee(refPool.get(lane));
+            thirdPlace.setMatchTime(startDate.plusDays(dayOffset).atTime(LocalTime.of(17, 0).plusMinutes(slotInDay * 150L)));
+            thirdPlace.setStatus("SCHEDULED");
+            thirdPlace.setOwnerUsername(creatorUsername);
+            validateDistinctParticipants(thirdPlace);
+            planned.add(thirdPlace);
+            thirdPlaceGenerated = true;
+        }
+
+        for (Match candidate : planned) {
+            validateMatchTimeWithinTournament(candidate.getMatchTime(), tournament);
+        }
+
+        List<Match> combinedPool = new ArrayList<>(matchRepository.findAll());
+        List<Map<String, Object>> batchConflicts = new ArrayList<>();
+        for (Match candidate : planned) {
+            List<Map<String, Object>> found = detectScheduleConflicts(candidate, null, combinedPool).stream()
+                    .filter(c -> !"SAME_PARTICIPANT".equals(c.get("type")))
+                    .toList();
+            if (!found.isEmpty()) {
+                batchConflicts.addAll(found);
+            }
+            combinedPool.add(candidate);
+        }
+        if (!batchConflicts.isEmpty()) {
+            String summary = batchConflicts.stream()
+                    .map(c -> String.valueOf(c.get("message")))
+                    .distinct()
+                    .reduce((a, b) -> a + "; " + b)
+                    .orElse("Sinh vòng tiếp theo bị xung đột với lịch hiện có");
+            throw new ScheduleConflictException(summary, batchConflicts);
+        }
+
+        List<Match> saved = matchRepository.saveAll(planned);
+        String msg = "Đã tạo " + saved.size() + " trận cho vòng " + nextRoundLabel
+                + (thirdPlaceGenerated ? " (bao gồm trận Tranh hạng ba)" : "")
+                + (nextRoundByes.isEmpty() ? ""
+                        : " (Miễn vòng: " + nextRoundByes.stream().map(b -> String.valueOf(b.get("displayName"))).reduce((a, b) -> a + ", " + b).orElse("") + ")");
+        return new NextRoundGenerationResult(tournamentId, competitionId, nextRoundLabel, saved, nextRoundByes, thirdPlaceGenerated, msg);
+    }
+
+    private record OutcomeIds(Long winnerId, Long loserId) {}
+
+    private OutcomeIds resolveMatchOutcome(Match m, Map<String, Object> res) {
+        if (m.getParticipant1Id() == null || m.getParticipant2Id() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Trận #" + m.getId() + " thiếu participant1Id/participant2Id để xác định đội đi tiếp.");
+        }
+        int s1 = parseOptionalInt(res.get("scoreParticipant1"), "Invalid scoreParticipant1");
+        int s2 = parseOptionalInt(res.get("scoreParticipant2"), "Invalid scoreParticipant2");
+        if (s1 > s2) {
+            return new OutcomeIds(m.getParticipant1Id(), m.getParticipant2Id());
+        }
+        if (s2 > s1) {
+            return new OutcomeIds(m.getParticipant2Id(), m.getParticipant1Id());
+        }
+        Object p1Obj = res.get("penaltyScore1");
+        Object p2Obj = res.get("penaltyScore2");
+        if (p1Obj == null || p2Obj == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Trận #" + m.getId() + " có tỉ số hòa (" + s1 + "-" + s2 + ") nhưng thiếu kết quả luân lưu để xác định đội đi tiếp.");
+        }
+        int pen1 = parseOptionalInt(p1Obj, "Invalid penaltyScore1");
+        int pen2 = parseOptionalInt(p2Obj, "Invalid penaltyScore2");
+        if (pen1 > pen2) {
+            return new OutcomeIds(m.getParticipant1Id(), m.getParticipant2Id());
+        }
+        if (pen2 > pen1) {
+            return new OutcomeIds(m.getParticipant2Id(), m.getParticipant1Id());
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Trận #" + m.getId() + " chưa phân định được đội thắng trên loạt luân lưu.");
+    }
+
+    private int knockoutStageOrder(String round) {
+        if (round == null || round.isBlank()) {
+            return 0;
+        }
+        String r = round.trim().toLowerCase(Locale.ROOT);
+        if (r.contains("tranh hạng ba")) return -1;
+        if (r.startsWith("chung kết")) return 5;
+        if (r.startsWith("bán kết")) return 4;
+        if (r.startsWith("tứ kết")) return 3;
+        if (r.startsWith("vòng 1/8")) return 2;
+        if (r.startsWith("vòng 1/16")) return 1;
+        return 0;
+    }
+
     private void publishIfFinished(String oldStatus, Match savedMatch) {
         boolean wasFinished = "FINISHED".equalsIgnoreCase(oldStatus);
         boolean isFinished = "FINISHED".equalsIgnoreCase(savedMatch.getStatus());

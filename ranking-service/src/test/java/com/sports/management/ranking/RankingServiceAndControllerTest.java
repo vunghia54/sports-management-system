@@ -275,4 +275,48 @@ class RankingServiceAndControllerTest {
                 .andExpect(jsonPath("$.content[0].participantName").value("CLB Hải Phòng"))
                 .andExpect(jsonPath("$.content[0].rankPosition").value(6));
     }
+
+    @Test
+    void recalculateRanking_groupStage2Groups_computesIndependentStandingsAndRanksPerGroup() {
+        Ranking r40 = new Ranking(40L, 40L, "BXH Chia Bảng", LocalDateTime.now());
+        when(rankingProviderClient.getCompetitionById(40L)).thenReturn(Map.of("id", 40L, "name", "Chia 2 Bảng"));
+        when(rankingProviderClient.getCompetitionFormat(40L))
+                .thenReturn(Map.of("competitionId", 40L, "formatType", "GROUP_STAGE", "numberOfGroups", 2));
+        when(rankingProviderClient.getMatchesByCompetitionId(40L)).thenReturn(List.of(
+                Map.of("id", 401L, "competitionId", 40L, "groupName", "Bảng A",
+                        "participant1Id", 1L, "participant2Id", 2L,
+                        "participant1", "Đội A1", "participant2", "Đội A2", "status", "FINISHED"),
+                Map.of("id", 402L, "competitionId", 40L, "groupName", "Bảng B",
+                        "participant1Id", 3L, "participant2Id", 4L,
+                        "participant1", "Đội B1", "participant2", "Đội B2", "status", "FINISHED")
+        ));
+        when(rankingProviderClient.getResultsByMatchIds(List.of(401L, 402L))).thenReturn(List.of(
+                Map.of("matchId", 401L, "status", "CONFIRMED", "scoreParticipant1", 3, "scoreParticipant2", 1),
+                Map.of("matchId", 402L, "status", "CONFIRMED", "scoreParticipant1", 0, "scoreParticipant2", 2)
+        ));
+        when(rankingRepository.findByCompetitionId(40L)).thenReturn(Optional.of(r40));
+        when(rankingRepository.save(any(Ranking.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(rankingItemRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        RankingResponse res = rankingService.recalculateRanking(40L);
+        List<RankingItem> items = res.getItems();
+        assertEquals(4, items.size());
+
+        List<RankingItem> groupA = items.stream().filter(it -> "Bảng A".equals(it.getGroupName())).toList();
+        List<RankingItem> groupB = items.stream().filter(it -> "Bảng B".equals(it.getGroupName())).toList();
+        assertEquals(2, groupA.size());
+        assertEquals(2, groupB.size());
+
+        assertEquals("Đội A1", groupA.get(0).getParticipantName());
+        assertEquals(1, groupA.get(0).getRankPosition());
+        assertEquals(3, groupA.get(0).getPoints());
+        assertEquals(2, groupA.get(1).getRankPosition());
+        assertEquals(0, groupA.get(1).getPoints());
+
+        assertEquals("Đội B2", groupB.get(0).getParticipantName());
+        assertEquals(1, groupB.get(0).getRankPosition());
+        assertEquals(3, groupB.get(0).getPoints());
+        assertEquals("Đội B1", groupB.get(1).getParticipantName());
+        assertEquals(2, groupB.get(1).getRankPosition());
+    }
 }
