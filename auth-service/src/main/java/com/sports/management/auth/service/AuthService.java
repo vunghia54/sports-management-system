@@ -11,8 +11,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Locale;
+import java.util.Set;
+
 @Service
 public class AuthService {
+
+    private static final Set<String> SELF_REGISTER_ROLES = Set.of("ROLE_VIEWER", "ROLE_TEAM_MANAGER");
+    private static final Set<String> ASSIGNABLE_ROLES = Set.of(
+            "ROLE_ADMIN", "ROLE_ORGANIZER", "ROLE_REFEREE", "ROLE_TEAM_MANAGER", "ROLE_VIEWER"
+    );
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -63,6 +71,12 @@ public class AuthService {
     }
 
     public User register(RegisterRequest request) {
+        if (request.getUsername() == null || request.getUsername().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username is required");
+        }
+        if (request.getPassword() == null || request.getPassword().length() < 6) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu đăng ký phải có ít nhất 6 ký tự");
+        }
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -70,24 +84,23 @@ public class AuthService {
             );
         }
 
-        String role = request.getRole();
-        if (role == null || role.isBlank()) {
-            role = "ROLE_VIEWER";
-        } else if (!role.startsWith("ROLE_")) {
-            role = "ROLE_" + role.toUpperCase();
+        String normalizedRole = normalizeRole(request.getRole());
+        if (normalizedRole == null) {
+            normalizedRole = "ROLE_VIEWER";
         }
-
-        // Rule: Không tự động cấp quyền quản trị cho tài khoản mới đăng ký
-        if ("ROLE_ADMIN".equalsIgnoreCase(role)) {
-            role = "ROLE_VIEWER";
+        if (!SELF_REGISTER_ROLES.contains(normalizedRole)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Đăng ký công khai chỉ chấp nhận ROLE_VIEWER hoặc ROLE_TEAM_MANAGER"
+            );
         }
 
         User user = new User();
-        user.setUsername(request.getUsername());
+        user.setUsername(request.getUsername().trim());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setFullName(request.getFullName());
         user.setEmail(request.getEmail());
-        user.setRole(role);
+        user.setRole(normalizedRole);
         user.setActive(true);
 
         return userRepository.save(user);
@@ -127,26 +140,74 @@ public class AuthService {
     }
 
     public User updateUserRole(Long id, String role) {
+        return updateUserRole(id, role, null);
+    }
+
+    public User updateUserRole(Long id, String role, String actorUsername) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng ID: " + id));
-        if (role != null && !role.isBlank()) {
-            String normalized = role.startsWith("ROLE_") ? role.toUpperCase() : "ROLE_" + role.toUpperCase();
-            user.setRole(normalized);
+        String normalized = normalizeRole(role);
+        if (normalized == null || !ASSIGNABLE_ROLES.contains(normalized)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vai trò không hợp lệ. Chỉ chấp nhận: ADMIN, ORGANIZER, REFEREE, TEAM_MANAGER, VIEWER"
+            );
         }
+        boolean currentlyAdmin = "ROLE_ADMIN".equalsIgnoreCase(user.getRole());
+        if (currentlyAdmin && !"ROLE_ADMIN".equals(normalized)) {
+            if (actorUsername != null && actorUsername.equalsIgnoreCase(user.getUsername())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Quản trị viên không thể tự hạ quyền chính mình");
+            }
+            if (user.isActive() && userRepository.countByRoleIgnoreCaseAndActiveTrue("ROLE_ADMIN") <= 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể hạ quyền Quản trị viên hoạt động cuối cùng");
+            }
+        }
+        user.setRole(normalized);
         return userRepository.save(user);
     }
 
     public User updateUserStatus(Long id, boolean active) {
+        return updateUserStatus(id, active, null);
+    }
+
+    public User updateUserStatus(Long id, boolean active, String actorUsername) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng ID: " + id));
+        if (!active) {
+            if (actorUsername != null && actorUsername.equalsIgnoreCase(user.getUsername())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Quản trị viên không thể tự khóa tài khoản của chính mình");
+            }
+            if ("ROLE_ADMIN".equalsIgnoreCase(user.getRole()) && user.isActive()
+                    && userRepository.countByRoleIgnoreCaseAndActiveTrue("ROLE_ADMIN") <= 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể khóa Quản trị viên hoạt động cuối cùng");
+            }
+        }
         user.setActive(active);
         return userRepository.save(user);
     }
 
     public void deleteUser(Long id) {
-        if (!userRepository.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng ID: " + id);
+        deleteUser(id, null);
+    }
+
+    public void deleteUser(Long id, String actorUsername) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng ID: " + id));
+        if (actorUsername != null && actorUsername.equalsIgnoreCase(user.getUsername())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Quản trị viên không thể tự xóa tài khoản của chính mình");
         }
-        userRepository.deleteById(id);
+        if ("ROLE_ADMIN".equalsIgnoreCase(user.getRole()) && user.isActive()
+                && userRepository.countByRoleIgnoreCaseAndActiveTrue("ROLE_ADMIN") <= 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể xóa Quản trị viên hoạt động cuối cùng");
+        }
+        userRepository.delete(user);
+    }
+
+    private String normalizeRole(String rawRole) {
+        if (rawRole == null || rawRole.isBlank()) {
+            return null;
+        }
+        String upper = rawRole.trim().toUpperCase(Locale.ROOT);
+        return upper.startsWith("ROLE_") ? upper : "ROLE_" + upper;
     }
 }

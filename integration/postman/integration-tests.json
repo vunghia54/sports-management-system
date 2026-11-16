@@ -15,13 +15,13 @@
   ],
   "item": [
     {
-      "name": "1. [Auth] Lấy JWT Token (ROLE_ORGANIZER)",
+      "name": "1. [Auth] Lấy JWT Token (organizer1 - ROLE_ORGANIZER)",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"username\": \"organizer_th6\",\n  \"password\": \"password123\",\n  \"role\": \"ROLE_ORGANIZER\"\n}"
+          "raw": "{\n  \"username\": \"organizer1\",\n  \"password\": \"organizer123\"\n}"
         },
         "url": { "raw": "{{authUrl}}/api/v1/auth/login", "host": ["{{authUrl}}"], "path": ["api", "v1", "auth", "login"] }
       },
@@ -30,16 +30,6 @@
           "listen": "test",
           "script": {
             "exec": [
-              "if (pm.response.code === 400 || pm.response.code === 401) {",
-              "    pm.sendRequest({",
-              "        url: pm.collectionVariables.get('authUrl') + '/api/v1/auth/register',",
-              "        method: 'POST',",
-              "        header: {'Content-Type': 'application/json'},",
-              "        body: { mode: 'raw', raw: JSON.stringify({username: 'organizer_th6', password: 'password123', role: 'ROLE_ORGANIZER', email: 'th6@sports.vn', fullName: 'BTC TH6'}) }",
-              "    }, function() {",
-              "        // Re-login",
-              "    });",
-              "}",
               "var res = pm.response.json();",
               "if (res.accessToken) { pm.collectionVariables.set('token', res.accessToken); }"
             ],

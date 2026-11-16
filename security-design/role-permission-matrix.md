@@ -6,23 +6,28 @@
 
 ## 1. Định nghĩa các vai trò (Roles Definition)
 
-Hệ thống Quản lý Thể thao định nghĩa 4 vai trò rõ rệt:
+Hệ thống Quản lý Thể thao định nghĩa 5 vai trò rõ rệt (`ROLE_ADMIN`, `ROLE_ORGANIZER`, `ROLE_REFEREE`, `ROLE_TEAM_MANAGER`, `ROLE_VIEWER`):
 
 1. **`ROLE_ADMIN` (Quản trị viên hệ thống):**
-   * Có toàn quyền trên tất cả các dịch vụ (Auth, Tournament, Match).
-   * Có quyền can thiệp, phê duyệt hoặc sửa đổi bất kỳ giải đấu và trận đấu nào mà không bị ràng buộc bởi quyền sở hữu tài nguyên (Admin Override).
+   * Có toàn quyền trên tất cả các dịch vụ (Auth, Tournament, Team, Athlete, Match, Result, Ranking, Notification).
+   * Có quyền can thiệp, phê duyệt hoặc sửa đổi bất kỳ tài nguyên nào (Admin Override) và cấp/đổi 5 vai trò hợp lệ qua `PUT /api/v1/auth/users/{id}/role`.
 
 2. **`ROLE_ORGANIZER` (Ban tổ chức giải đấu):**
+   * Chỉ do `ROLE_ADMIN` cấp quyền (không thể tự đăng ký công khai).
    * Có quyền khởi tạo giải đấu thể thao mới (`POST /api/v1/tournaments`).
-   * **Quyền sở hữu tài nguyên (Resource Ownership):** Chỉ có quyền chỉnh sửa (`PUT`), cập nhật từng phần (`PATCH`) hoặc xóa (`DELETE`) các giải đấu **do chính mình tạo ra** (`organizerUsername == currentUsername`).
-   * Có quyền lên lịch các trận đấu mới cho giải đấu mà mình tổ chức (`POST /api/v1/matches`).
+   * **Quyền sở hữu tài nguyên (Resource Ownership):** Chỉ có quyền chỉnh sửa (`PUT`), cập nhật từng phần (`PATCH`) hoặc xóa (`DELETE`) các giải đấu **do chính mình tạo ra** (`organizerUsername == currentUsername`), duyệt đăng ký và lên lịch/xác nhận kết quả thuộc giải mình quản lý.
 
 3. **`ROLE_REFEREE` (Trọng tài điều hành trận đấu):**
-   * Có quyền cập nhật tỉ số, thẻ phạt, thời gian và kết quả trận đấu (`PUT /api/v1/matches/{id}`).
-   * Không có quyền tạo giải đấu, xóa giải đấu hoặc xóa trận đấu.
+   * Chỉ do `ROLE_ADMIN` cấp quyền (không thể tự đăng ký công khai).
+   * Có quyền nhập/sửa nháp kết quả cho trận đấu được phân công (`refereeUsername == currentUsername`), không được tự xác nhận kết quả chính thức.
 
-4. **`ROLE_USER` (Người dùng thông thường / Khán giả / Vận động viên):**
-   * Được phép tra cứu công khai danh sách giải đấu, chi tiết giải đấu, lịch thi đấu và kết quả các trận đấu.
+4. **`ROLE_TEAM_MANAGER` (Lãnh đội / Huấn luyện viên):**
+   * Được phép đăng ký công khai (`POST /api/v1/auth/register` chỉ nhận `ROLE_VIEWER` hoặc `ROLE_TEAM_MANAGER`).
+   * Quản lý đội tuyển, thành viên đội, hồ sơ VĐV và gửi đăng ký tham gia giải đấu cho đội của mình.
+
+5. **`ROLE_VIEWER` (Khán giả / Người dùng thông thường):**
+   * Vai trò mặc định khi đăng ký công khai.
+   * Được phép tra cứu công khai danh sách giải đấu, chi tiết giải đấu, lịch thi đấu, kết quả và bảng xếp hạng.
    * Không có quyền thao tác làm biến đổi dữ liệu (Create/Update/Delete).
 
 ---

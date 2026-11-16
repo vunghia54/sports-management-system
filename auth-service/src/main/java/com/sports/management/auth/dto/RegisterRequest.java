@@ -1,6 +1,7 @@
 package com.sports.management.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 public class RegisterRequest {
 
@@ -8,11 +9,12 @@ public class RegisterRequest {
     private String username;
 
     @NotBlank(message = "Password is required")
+    @Size(min = 6, message = "Password must be at least 6 characters")
     private String password;
 
     private String fullName;
     private String email;
-    private String role; // defaults to ROLE_USER if not provided
+    private String role; // defaults to ROLE_VIEWER if not provided (only ROLE_VIEWER / ROLE_TEAM_MANAGER allowed)
 
     public RegisterRequest() {
     }

@@ -290,7 +290,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"username\": \"demo_athlete\",\n  \"password\": \"AthletePass123!\",\n  \"fullName\": \"Tran Van Athlete\",\n  \"email\": \"athlete@example.com\",\n  \"role\": \"ROLE_USER\"\n}"
+							"raw": "{\n  \"username\": \"demo_viewer\",\n  \"password\": \"ViewerPass123!\",\n  \"fullName\": \"Tran Van Viewer\",\n  \"email\": \"viewer@example.com\",\n  \"role\": \"ROLE_VIEWER\"\n}"
 						},
 						"url": {
 							"raw": "{{authUrl}}/api/v1/auth/register",

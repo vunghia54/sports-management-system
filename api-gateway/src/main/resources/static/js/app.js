@@ -2234,11 +2234,9 @@ function renderAuthPage() {
             <select id="regRole" data-field="role" class="select">
               <option value="ROLE_VIEWER">Khán giả theo dõi giải đấu</option>
               <option value="ROLE_TEAM_MANAGER">Lãnh đội / Huấn luyện viên</option>
-              <option value="ROLE_REFEREE">Trọng tài điều hành</option>
-              <option value="ROLE_ORGANIZER">Ban tổ chức giải đấu</option>
             </select>
             <div style="font-size:0.76rem;color:var(--text-secondary);margin-top:4px;">
-              Hệ thống không cho phép tự đăng ký vai trò Quản trị viên.
+              Đăng ký công khai chỉ nhận vai trò Khán giả hoặc Lãnh đội / HLV. Vai trò Ban tổ chức và Trọng tài do Quản trị viên cấp.
             </div>
           </div>
           <button type="submit" class="btn btn-primary" style="width:100%">Tạo Tài khoản mới</button>

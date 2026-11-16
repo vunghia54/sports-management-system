@@ -38,7 +38,7 @@ Hệ thống xác định 4 nhóm tài sản nghiệp vụ quan trọng cần đ
    * *Biện pháp:* Băm mật khẩu một chiều bằng thuật toán `BCrypt` có độ phức tạp cao; cấp phát `JSON Web Token (JWT)` có thời hạn ngắn (15 phút / 900 giây).
 
 3. **Privilege Escalation (Leo thang đặc quyền):**
-   * *Nguy cơ:* Người dùng thông thường (`ROLE_USER`) hoặc khán giả gửi request tạo giải đấu hoặc sửa tỉ số trận đấu.
+   * *Nguy cơ:* Khán giả (`ROLE_VIEWER`) hoặc người dùng công khai tự đăng ký vai trò đặc quyền (`ROLE_ORGANIZER`, `ROLE_REFEREE`, `ROLE_ADMIN`, `ROLE_INTERNAL_RESULT_SYNC`) hoặc gửi request tạo giải đấu / sửa tỉ số trận đấu.
    * *Biện pháp:* Áp dụng kiểm soát truy cập dựa trên vai trò (`RBAC`) chặt chẽ thông qua `@PreAuthorize` và bộ lọc `SecurityFilterChain`.
 
 4. **Information Disclosure qua thông báo lỗi:**

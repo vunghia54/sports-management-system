@@ -89,7 +89,7 @@
           ]
         },
         {
-          "name": "1.2 Đăng ký tài khoản Ban Tổ Chức (ROLE_ORGANIZER - TH6)",
+          "name": "1.2 Đăng ký tài khoản Lãnh đội (ROLE_TEAM_MANAGER - đăng ký công khai chỉ nhận VIEWER/TEAM_MANAGER)",
           "request": {
             "method": "POST",
             "header": [
@@ -97,7 +97,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"organizer_postman\",\n  \"password\": \"password123\",\n  \"fullName\": \"Ban Tổ Chức Giải Đấu\",\n  \"email\": \"btc_postman@sports.vn\",\n  \"role\": \"ROLE_ORGANIZER\"\n}"
+              "raw": "{\n  \"username\": \"manager_postman\",\n  \"password\": \"password123\",\n  \"fullName\": \"Lãnh Đội CLB Postman\",\n  \"email\": \"manager_postman@sports.vn\",\n  \"role\": \"ROLE_TEAM_MANAGER\"\n}"
             },
             "url": {
               "raw": "{{authUrl}}/api/v1/auth/register",
@@ -128,7 +128,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"organizer_postman\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"username\": \"organizer1\",\n  \"password\": \"organizer123\"\n}"
             },
             "url": {
               "raw": "{{authUrl}}/api/v1/auth/login",

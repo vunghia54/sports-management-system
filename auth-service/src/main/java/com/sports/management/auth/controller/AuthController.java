@@ -82,7 +82,7 @@ public class AuthController {
                 .body(response);
     }
 
-    private void assertAdmin(String authHeader) {
+    private String assertAdmin(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing or invalid Authorization header");
         }
@@ -94,6 +94,7 @@ public class AuthController {
         if (!"ROLE_ADMIN".equalsIgnoreCase(role)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access Denied: Only Administrator has permission to access user management");
         }
+        return jwtTokenProvider.getUsernameFromToken(token);
     }
 
     @GetMapping("/users")
@@ -261,9 +262,10 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> updateUserRole(
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @PathVariable Long id,
-            @RequestBody Map<String, String> payload) {
-        assertAdmin(authHeader);
-        User updated = authService.updateUserRole(id, payload.get("role"));
+            @RequestBody(required = false) Map<String, String> payload) {
+        String actor = assertAdmin(authHeader);
+        String role = payload != null ? payload.get("role") : null;
+        User updated = authService.updateUserRole(id, role, actor);
         return ResponseEntity.ok(Map.of(
                 "id", updated.getId(),
                 "username", updated.getUsername(),
@@ -278,9 +280,9 @@ public class AuthController {
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @PathVariable Long id,
             @RequestBody Map<String, Object> payload) {
-        assertAdmin(authHeader);
+        String actor = assertAdmin(authHeader);
         boolean active = payload.get("active") == null || Boolean.parseBoolean(String.valueOf(payload.get("active")));
-        User updated = authService.updateUserStatus(id, active);
+        User updated = authService.updateUserStatus(id, active, actor);
         return ResponseEntity.ok(Map.of(
                 "id", updated.getId(),
                 "username", updated.getUsername(),
@@ -294,8 +296,8 @@ public class AuthController {
     public ResponseEntity<Void> deleteUser(
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @PathVariable Long id) {
-        assertAdmin(authHeader);
-        authService.deleteUser(id);
+        String actor = assertAdmin(authHeader);
+        authService.deleteUser(id, actor);
         return ResponseEntity.noContent().build();
     }
 }

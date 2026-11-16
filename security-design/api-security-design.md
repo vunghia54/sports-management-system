@@ -59,7 +59,7 @@ Token được tạo ra và kiểm tra tính hợp lệ tuân thủ chuẩn RFC 
 ```
 * `sub` (Subject): Tên đăng nhập của người dùng.
 * `userId`: ID định danh duy nhất của tài khoản.
-* `role`: Vai trò của người dùng (`ROLE_ADMIN`, `ROLE_ORGANIZER`, `ROLE_REFEREE`, `ROLE_USER`).
+* `role`: Vai trò của người dùng (`ROLE_ADMIN`, `ROLE_ORGANIZER`, `ROLE_REFEREE`, `ROLE_TEAM_MANAGER`, `ROLE_VIEWER`).
 * `iat` (Issued At): Thời điểm cấp phát token.
 * `exp` (Expiration Time): Thời điểm hết hạn (sau 900 giây / 15 phút).
 
@@ -72,25 +72,25 @@ Token được tạo ra và kiểm tra tính hợp lệ tuân thủ chuẩn RFC 
 ## 3. Thiết kế các API Xác thực (Auth Service)
 
 ### 3.1. Đăng ký tài khoản (Register)
-* **Endpoint:** `POST /api/v1/auth/register`
+* **Endpoint:** `POST /api/v1/auth/register` (Công khai — chỉ chấp nhận `ROLE_VIEWER` hoặc `ROLE_TEAM_MANAGER`; mọi vai trò khác trả `400 Bad Request`; `ROLE_ORGANIZER` và `ROLE_REFEREE` chỉ do Admin cấp qua `PUT /api/v1/auth/users/{id}/role`)
 * **Request Body:**
 ```json
 {
-  "username": "new_organizer",
+  "username": "new_manager",
   "password": "Password123!",
   "fullName": "Nguyen Van A",
-  "email": "organizer@example.com",
-  "role": "ROLE_ORGANIZER"
+  "email": "manager@example.com",
+  "role": "ROLE_TEAM_MANAGER"
 }
 ```
 * **Response:** `201 Created`
 ```json
 {
   "id": 6,
-  "username": "new_organizer",
+  "username": "new_manager",
   "fullName": "Nguyen Van A",
-  "email": "organizer@example.com",
-  "role": "ROLE_ORGANIZER",
+  "email": "manager@example.com",
+  "role": "ROLE_TEAM_MANAGER",
   "message": "User registered successfully"
 }
 ```

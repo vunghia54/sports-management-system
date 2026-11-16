@@ -130,7 +130,7 @@ try {
         $dbDir = (Resolve-Path ".").Path -replace "\\", "/"
         $tourDbArgs  = @("--spring.datasource.url=jdbc:h2:file:$dbDir/logs/h2_tournament_db;AUTO_SERVER=TRUE;MODE=PostgreSQL", "--spring.datasource.driver-class-name=org.h2.Driver", "--spring.datasource.username=sa", "--spring.datasource.password=")
         $matchDbArgs = @("--spring.datasource.url=jdbc:h2:mem:match_db;DB_CLOSE_DELAY=-1;MODE=PostgreSQL", "--spring.datasource.driver-class-name=org.h2.Driver", "--spring.datasource.username=sa", "--spring.datasource.password=")
-        $authDbArgs  = @("--spring.datasource.url=jdbc:h2:mem:auth_db;DB_CLOSE_DELAY=-1;MODE=PostgreSQL", "--spring.datasource.driver-class-name=org.h2.Driver", "--spring.datasource.username=sa", "--spring.datasource.password=")
+        $authDbArgs  = @("--spring.datasource.url=jdbc:h2:mem:auth_db;DB_CLOSE_DELAY=-1;MODE=PostgreSQL", "--spring.datasource.driver-class-name=org.h2.Driver", "--spring.datasource.username=sa", "--spring.datasource.password=", "--spring.profiles.active=demo")
         $notifDbArgs = @("--spring.datasource.url=jdbc:h2:mem:notification_db;DB_CLOSE_DELAY=-1;MODE=PostgreSQL", "--spring.datasource.driver-class-name=org.h2.Driver", "--spring.datasource.username=sa", "--spring.datasource.password=")
     }
 
@@ -176,22 +176,29 @@ try {
     # ------------------------------------------------------------------
     Write-Host "`n>>> [TC02] Kiem thu luong nghiep vu lien thong TOAN BO 8 SERVICES qua Eureka Service Discovery & API Gateway (:8080)" -ForegroundColor Magenta
 
-    # 1. AUTH-SERVICE (:8083)
-    $testUser = "th7_org_" + (Get-Random -Minimum 1000 -Maximum 9999)
-    $regBody = @{
-        username = $testUser
-        password = "password123"
-        fullName = "BTC Giai The Thao TH1-TH7"
-        email    = "$testUser@sports.vn"
-        role     = "ROLE_ORGANIZER"
-    } | ConvertTo-Json
-    Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/register" -Method Post -Body $regBody -ContentType "application/json" | Out-Null
+    # 1. AUTH-SERVICE (:8083) - Dung tai khoan demo admin cap quyen cho Organizer, TEAM_MANAGER dang ky cong khai
+    $adminLogin = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/login" -Method Post -Body (@{ username = "admin"; password = "admin123" } | ConvertTo-Json) -ContentType "application/json"
+    $adminHeaders = @{ Authorization = "Bearer $($adminLogin.accessToken)" }
 
-    $loginBody = @{ username = $testUser; password = "password123" } | ConvertTo-Json
-    $loginResp = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/login" -Method Post -Body $loginBody -ContentType "application/json"
-    $jwtToken = $loginResp.accessToken
-    $authHeaders = @{ Authorization = "Bearer $jwtToken" }
-    Write-Host "  [1. AUTH-SERVICE] Dang ky & Dang nhap JWT thanh cong (User = $testUser, Role = $($loginResp.role))" -ForegroundColor Green
+    $testOrgUser = "th7_org_" + (Get-Random -Minimum 1000 -Maximum 9999)
+    $orgReg = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/register" -Method Post -Body (@{
+        username = $testOrgUser; password = "password123"; fullName = "BTC Giai The Thao TH1-TH7"; email = "$testOrgUser@sports.vn"; role = "ROLE_VIEWER"
+    } | ConvertTo-Json) -ContentType "application/json"
+    Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/users/$($orgReg.id)/role" -Method Put -Body (@{ role = "ROLE_ORGANIZER" } | ConvertTo-Json) -ContentType "application/json" -Headers $adminHeaders | Out-Null
+
+    $loginResp = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/login" -Method Post -Body (@{ username = $testOrgUser; password = "password123" } | ConvertTo-Json) -ContentType "application/json"
+    $authHeaders = @{ Authorization = "Bearer $($loginResp.accessToken)" }
+
+    $testMgrUser = "th7_mgr_" + (Get-Random -Minimum 1000 -Maximum 9999)
+    Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/register" -Method Post -Body (@{
+        username = $testMgrUser; password = "password123"; fullName = "Lanh Doi TH1-TH7"; email = "$testMgrUser@sports.vn"; role = "ROLE_TEAM_MANAGER"
+    } | ConvertTo-Json) -ContentType "application/json" | Out-Null
+    $mgrLogin = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/login" -Method Post -Body (@{ username = $testMgrUser; password = "password123" } | ConvertTo-Json) -ContentType "application/json"
+    $mgrHeaders = @{ Authorization = "Bearer $($mgrLogin.accessToken)" }
+
+    $refLogin = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/login" -Method Post -Body (@{ username = "referee1"; password = "referee123" } | ConvertTo-Json) -ContentType "application/json"
+    $refHeaders = @{ Authorization = "Bearer $($refLogin.accessToken)" }
+    Write-Host "  [1. AUTH-SERVICE] Dang nhap JWT & Admin cap quyen thanh cong (Organizer = $testOrgUser, Manager = $testMgrUser)" -ForegroundColor Green
 
     # 2. TOURNAMENT-SERVICE (:8081 & :8091) - Sport, Tournament, Competition, Rule
     $sportCode = "FOOTBALL_" + (Get-Random -Minimum 100 -Maximum 999)
@@ -231,10 +238,10 @@ try {
         nationality  = "Vietnam"
         healthStatus = "QUALIFIED"
     } | ConvertTo-Json
-    $createdAthlete = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/athletes" -Method Post -Body $athleteBody -ContentType "application/json" -Headers $authHeaders
+    $createdAthlete = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/athletes" -Method Post -Body $athleteBody -ContentType "application/json" -Headers $mgrHeaders
     Write-Host "  [3. ATHLETE-SERVICE] Da tao VDV: $($createdAthlete.fullName) (ID=$($createdAthlete.id))" -ForegroundColor Green
 
-    # 4. TEAM-SERVICE (:8085) -> Goi ATHLETE-SERVICE qua Eureka Service Discovery
+    # 4. TEAM-SERVICE (:8085) -> Dung ROLE_TEAM_MANAGER tao doi & thanh vien qua Eureka Service Discovery
     $team1Code = "HNFC_" + (Get-Random -Minimum 100 -Maximum 999)
     $team1Body = @{
         name         = "CLB Ha Noi ($team1Code)"
@@ -242,7 +249,7 @@ try {
         managerName  = "HLV Chu Dinh Nghiem"
         contactEmail = "hanoifc@sports.vn"
     } | ConvertTo-Json
-    $createdTeam1 = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/teams" -Method Post -Body $team1Body -ContentType "application/json" -Headers $authHeaders
+    $createdTeam1 = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/teams" -Method Post -Body $team1Body -ContentType "application/json" -Headers $mgrHeaders
 
     $team2Code = "VTFC_" + (Get-Random -Minimum 100 -Maximum 999)
     $team2Body = @{
@@ -251,7 +258,7 @@ try {
         managerName  = "HLV Thach Bao Khanh"
         contactEmail = "viettelfc@sports.vn"
     } | ConvertTo-Json
-    $createdTeam2 = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/teams" -Method Post -Body $team2Body -ContentType "application/json" -Headers $authHeaders
+    $createdTeam2 = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/teams" -Method Post -Body $team2Body -ContentType "application/json" -Headers $mgrHeaders
 
     $memberBody = @{
         athleteId    = $createdAthlete.id
@@ -259,7 +266,7 @@ try {
         position     = "Midfielder"
         isCaptain    = $true
     } | ConvertTo-Json
-    $addedMember = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/teams/$($createdTeam1.id)/members" -Method Post -Body $memberBody -ContentType "application/json" -Headers $authHeaders
+    $addedMember = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/teams/$($createdTeam1.id)/members" -Method Post -Body $memberBody -ContentType "application/json" -Headers $mgrHeaders
     Write-Host "  [4. TEAM-SERVICE -> ATHLETE-SERVICE] Da tao 2 Doi ($($createdTeam1.name), $($createdTeam2.name)) & xac thuc VDV '$($addedMember.athleteName)' qua Eureka!" -ForegroundColor Green
 
     # 5. MATCH-SERVICE (:8082) -> Goi TOURNAMENT-SERVICE & TEAM-SERVICE qua Eureka Service Discovery
@@ -268,7 +275,7 @@ try {
         participantType        = "TEAM"
         participantReferenceId = $createdTeam1.id
     } | ConvertTo-Json
-    $reg1 = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/registrations" -Method Post -Body $reg1Body -ContentType "application/json" -Headers $authHeaders
+    $reg1 = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/registrations" -Method Post -Body $reg1Body -ContentType "application/json" -Headers $mgrHeaders
     Invoke-RestMethod -Uri "http://localhost:8080/api/v1/registrations/$($reg1.id)/approve" -Method Put -Headers $authHeaders | Out-Null
 
     $reg2Body = @{
@@ -276,17 +283,18 @@ try {
         participantType        = "TEAM"
         participantReferenceId = $createdTeam2.id
     } | ConvertTo-Json
-    $reg2 = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/registrations" -Method Post -Body $reg2Body -ContentType "application/json" -Headers $authHeaders
+    $reg2 = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/registrations" -Method Post -Body $reg2Body -ContentType "application/json" -Headers $mgrHeaders
     Invoke-RestMethod -Uri "http://localhost:8080/api/v1/registrations/$($reg2.id)/approve" -Method Put -Headers $authHeaders | Out-Null
 
     $matchBody = @{
-        tournamentId  = $createdTour.id
-        competitionId = $createdComp.id
-        round         = "Vong Chung Ket"
-        participant1  = $createdTeam1.name
-        participant2  = $createdTeam2.name
-        location      = "SVD My Dinh"
-        status        = "SCHEDULED"
+        tournamentId    = $createdTour.id
+        competitionId   = $createdComp.id
+        round           = "Vong Chung Ket"
+        participant1    = $createdTeam1.name
+        participant2    = $createdTeam2.name
+        location        = "SVD My Dinh"
+        refereeUsername = "referee1"
+        status          = "SCHEDULED"
     } | ConvertTo-Json
     $matchWebResp = Invoke-WebRequest -Uri "http://localhost:8082/api/v1/matches" -Method Post -Body $matchBody -ContentType "application/json" -Headers $authHeaders -UseBasicParsing
     $createdMatch = $matchWebResp.Content | ConvertFrom-Json
@@ -303,8 +311,8 @@ try {
             @{ detailType = "GOAL"; participantName = $createdTeam1.name; athleteName = "Nguyen Quang Hai"; detailTime = "25'"; detailValue = "Sut phat dep mat" }
         )
     } | ConvertTo-Json -Depth 4
-    $recordedRes = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/results" -Method Post -Body $resultBody -ContentType "application/json" -Headers $authHeaders
-    $confirmedRes = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/results/$($recordedRes.result.id)/confirm" -Method Put -Body (@{ confirmedBy = $testUser } | ConvertTo-Json) -ContentType "application/json" -Headers $authHeaders
+    $recordedRes = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/results" -Method Post -Body $resultBody -ContentType "application/json" -Headers $refHeaders
+    $confirmedRes = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/results/$($recordedRes.result.id)/confirm" -Method Put -Headers $authHeaders
     Write-Host "  [6. RESULT-SERVICE -> MATCH & RANKING-SERVICE] Da ghi nhan & xac nhan ti so 3-1 (Winner: $($confirmedRes.result.winner), Status: $($confirmedRes.result.status))" -ForegroundColor Green
 
     # 7. RANKING-SERVICE (:8088) & COMPOSITE DASHBOARD
@@ -314,7 +322,7 @@ try {
 
     # 8. NOTIFICATION-SERVICE (:8084)
     $notifBody = @{
-        recipient = $testUser
+        recipient = $testOrgUser
         title     = "Ket qua chung ket da duoc xac nhan"
         message   = "Tran dau $($createdTeam1.name) 3-1 $($createdTeam2.name) da ket thuc!"
     } | ConvertTo-Json
