@@ -50,13 +50,6 @@ public class MatchService {
     private final MatchEventProducer matchEventProducer;
     private final ApplicationEventPublisher eventPublisher;
 
-    public MatchService(
-            MatchRepository matchRepository,
-            TournamentClient tournamentClient,
-            MatchEventProducer matchEventProducer) {
-        this(matchRepository, null, tournamentClient, matchEventProducer, null);
-    }
-
     @Autowired
     public MatchService(
             MatchRepository matchRepository,
@@ -65,11 +58,11 @@ public class MatchService {
             MatchEventProducer matchEventProducer,
             ApplicationEventPublisher eventPublisher) {
 
-        this.matchRepository = matchRepository;
-        this.participantRepository = participantRepository;
-        this.tournamentClient = tournamentClient;
-        this.matchEventProducer = matchEventProducer;
-        this.eventPublisher = eventPublisher;
+        this.matchRepository = Objects.requireNonNull(matchRepository, "matchRepository is required");
+        this.participantRepository = Objects.requireNonNull(participantRepository, "participantRepository is required");
+        this.tournamentClient = Objects.requireNonNull(tournamentClient, "tournamentClient is required");
+        this.matchEventProducer = Objects.requireNonNull(matchEventProducer, "matchEventProducer is required");
+        this.eventPublisher = Objects.requireNonNull(eventPublisher, "eventPublisher is required");
     }
 
     // GET ALL
@@ -618,9 +611,6 @@ public class MatchService {
     }
 
     private void resolveAndAssignParticipants(Match match) {
-        if (participantRepository == null) {
-            throw new IllegalStateException("ParticipantRepository is not configured");
-        }
         Participant p1 = participantRepository.findById(match.getParticipant1Id())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Participant 1 không tồn tại với id: " + match.getParticipant1Id()));
@@ -745,9 +735,7 @@ public class MatchService {
                     "Nội dung thi đấu #" + competitionId + " đã có lịch thi đấu. Không thể tự động xếp lịch trùng.");
         }
 
-        List<Participant> participants = participantRepository == null
-                ? List.of()
-                : participantRepository.findByCompetitionId(competitionId);
+        List<Participant> participants = participantRepository.findByCompetitionId(competitionId);
         if (participants.size() < 2) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Cần ít nhất 2 đội/VĐV đã duyệt trong danh sách tham dự của nội dung thi đấu #" + competitionId + " để xếp lịch");
@@ -1004,11 +992,7 @@ public class MatchService {
             event.setPenaltyScore1(savedMatch.getPenaltyScore1());
             event.setPenaltyScore2(savedMatch.getPenaltyScore2());
 
-            if (eventPublisher != null) {
-                eventPublisher.publishEvent(event);
-            } else {
-                matchEventProducer.publishMatchFinished(event);
-            }
+            eventPublisher.publishEvent(event);
             System.out.println("[MATCH FINISHED] Event queued for AFTER_COMMIT publish, Match ID = " + savedMatch.getId());
         }
     }

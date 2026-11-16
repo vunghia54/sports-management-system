@@ -21,7 +21,7 @@ public class JwtTokenProvider implements InitializingBean {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    @Value("${jwt.expiration:900}") // 900 seconds = 15 minutes as in TH5
+    @Value("${jwt.expiration:3600}") // 3600 seconds = 1 hour
     private long jwtExpirationSeconds;
 
     @Override

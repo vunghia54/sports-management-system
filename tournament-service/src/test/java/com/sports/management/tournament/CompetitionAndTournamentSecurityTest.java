@@ -499,4 +499,40 @@ class CompetitionAndTournamentSecurityTest {
         assertEquals(1, root.get("rankingsCount").asInt());
         assertEquals(1, root.get("competitions").size());
     }
+
+    @Test
+    void sportsCatalog_allowsOrganizerCreate_restrictsPutDeleteToAdmin() throws Exception {
+        String org1Token = token("organizer1", "ROLE_ORGANIZER");
+        String adminToken = token("admin", "ROLE_ADMIN");
+
+        // Organizer CAN POST a new sport
+        String createdJson = mockMvc.perform(post("/api/v1/sports")
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Quần vợt C5\",\"sportType\":\"INDIVIDUAL\",\"description\":\"Môn đơn\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long sportId = objectMapper.readTree(createdJson).get("id").asLong();
+
+        // Organizer CANNOT PUT or DELETE shared catalog sport -> 403 Forbidden
+        mockMvc.perform(put("/api/v1/sports/" + sportId)
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Hacked Sport\",\"sportType\":\"INDIVIDUAL\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/v1/sports/" + sportId)
+                        .header("Authorization", org1Token))
+                .andExpect(status().isForbidden());
+
+        // Admin CAN PUT & DELETE sport -> 200 & 204
+        mockMvc.perform(put("/api/v1/sports/" + sportId)
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Quần vợt Quốc gia\",\"sportType\":\"INDIVIDUAL\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name", is("Quần vợt Quốc gia")));
+        mockMvc.perform(delete("/api/v1/sports/" + sportId)
+                        .header("Authorization", adminToken))
+                .andExpect(status().isNoContent());
+    }
 }

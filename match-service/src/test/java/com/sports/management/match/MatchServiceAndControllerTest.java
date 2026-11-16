@@ -5,6 +5,7 @@ import com.sports.management.match.client.TournamentClient;
 import com.sports.management.match.controller.MatchController;
 import com.sports.management.match.model.Match;
 import com.sports.management.match.repository.MatchRepository;
+import com.sports.management.match.repository.ParticipantRepository;
 import com.sports.management.match.service.MatchService;
 import com.sports.management.messaging.producer.MatchEventProducer;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -42,17 +44,29 @@ class MatchServiceAndControllerTest {
     private MatchRepository matchRepository;
 
     @Mock
+    private ParticipantRepository participantRepository;
+
+    @Mock
     private TournamentClient tournamentClient;
 
     @Mock
     private MatchEventProducer matchEventProducer;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private MatchService matchService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        matchService = new MatchService(matchRepository, tournamentClient, matchEventProducer);
+        matchService = new MatchService(
+                matchRepository,
+                participantRepository,
+                tournamentClient,
+                matchEventProducer,
+                eventPublisher
+        );
         MatchController controller = new MatchController(matchService, tournamentClient, "match-service:8083");
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())

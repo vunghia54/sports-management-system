@@ -2,6 +2,7 @@ package com.sports.management.auth;
 
 import com.sports.management.auth.config.DataSeeder;
 import com.sports.management.auth.repository.UserRepository;
+import com.sports.management.auth.util.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,5 +36,7 @@ class DataSeederDemoDisabledTest {
                 "DataSeeder must not be active when app.demo.seed-users is false");
         assertEquals(0L, userRepository.count(),
                 "No demo users may be automatically seeded when demo mode is disabled");
+        assertEquals(3600L, applicationContext.getBean(JwtTokenProvider.class).getJwtExpirationSeconds(),
+                "jwt.expiration must be 3600 seconds (1 hour)");
     }
 }

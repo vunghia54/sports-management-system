@@ -29,23 +29,16 @@ public class RegistrationService {
     private final TournamentClient tournamentClient;
     private final MatchRepository matchRepository;
 
-    public RegistrationService(
-            RegistrationRepository registrationRepository,
-            ParticipantRepository participantRepository,
-            TournamentClient tournamentClient) {
-        this(registrationRepository, participantRepository, tournamentClient, null);
-    }
-
     @Autowired
     public RegistrationService(
             RegistrationRepository registrationRepository,
             ParticipantRepository participantRepository,
             TournamentClient tournamentClient,
             MatchRepository matchRepository) {
-        this.registrationRepository = registrationRepository;
-        this.participantRepository = participantRepository;
-        this.tournamentClient = tournamentClient;
-        this.matchRepository = matchRepository;
+        this.registrationRepository = java.util.Objects.requireNonNull(registrationRepository, "registrationRepository is required");
+        this.participantRepository = java.util.Objects.requireNonNull(participantRepository, "participantRepository is required");
+        this.tournamentClient = java.util.Objects.requireNonNull(tournamentClient, "tournamentClient is required");
+        this.matchRepository = java.util.Objects.requireNonNull(matchRepository, "matchRepository is required");
     }
 
     public record RegistrationPage(
@@ -128,11 +121,6 @@ public class RegistrationService {
     }
 
     @Transactional
-    public Registration register(Registration registration) {
-        return register(registration, registration.getRegisteredBy(), true);
-    }
-
-    @Transactional
     public Registration register(Registration registration, String callerUsername, boolean isAdmin) {
         if (callerUsername == null || callerUsername.isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Full authentication is required to register");
@@ -148,7 +136,7 @@ public class RegistrationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Nội dung thi đấu hiện không mở đăng ký (trạng thái: " + compStatus + ")");
         }
-        if (matchRepository != null && !matchRepository.findByCompetitionId(registration.getCompetitionId()).isEmpty()) {
+        if (!matchRepository.findByCompetitionId(registration.getCompetitionId()).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Nội dung thi đấu #" + registration.getCompetitionId() + " đã có lịch thi đấu, không thể đăng ký thêm");
         }
@@ -327,11 +315,6 @@ public class RegistrationService {
     }
 
     @Transactional
-    public Registration approveRegistration(Long id) {
-        return approveRegistration(id, "admin", true);
-    }
-
-    @Transactional
     public Registration approveRegistration(Long id, String actorUsername, boolean isAdmin) {
         Registration reg = getRegistrationById(id);
         assertOrganizerOrAdminOwnership(reg.getCompetitionId(), actorUsername, isAdmin);
@@ -340,7 +323,7 @@ public class RegistrationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Chỉ có thể duyệt đơn đăng ký đang ở trạng thái PENDING (hiện tại: " + reg.getStatus() + ")");
         }
-        if (matchRepository != null && !matchRepository.findByCompetitionId(reg.getCompetitionId()).isEmpty()) {
+        if (!matchRepository.findByCompetitionId(reg.getCompetitionId()).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Nội dung thi đấu #" + reg.getCompetitionId() + " đã có lịch thi đấu, không thể duyệt thêm đơn đăng ký");
         }
@@ -375,11 +358,6 @@ public class RegistrationService {
         });
 
         return savedReg;
-    }
-
-    @Transactional
-    public Registration rejectRegistration(Long id, String reason) {
-        return rejectRegistration(id, reason, "admin", true);
     }
 
     @Transactional
@@ -464,18 +442,16 @@ public class RegistrationService {
             return;
         }
         Participant participant = participantOpt.get();
-        if (matchRepository != null) {
-            boolean hasMatchById = participant.getId() != null
-                    && matchRepository.existsByParticipant1IdOrParticipant2Id(participant.getId(), participant.getId());
-            boolean hasMatchByName = participant.getDisplayName() != null
-                    && matchRepository.findByCompetitionId(reg.getCompetitionId()).stream().anyMatch(m ->
-                            (m.getParticipant1() != null && m.getParticipant1().equalsIgnoreCase(participant.getDisplayName()))
-                                    || (m.getParticipant2() != null && m.getParticipant2().equalsIgnoreCase(participant.getDisplayName()))
-                    );
-            if (hasMatchById || hasMatchByName) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Không thể hủy tư cách tham dự vì '" + participant.getDisplayName() + "' đã có lịch thi đấu");
-            }
+        boolean hasMatchById = participant.getId() != null
+                && matchRepository.existsByParticipant1IdOrParticipant2Id(participant.getId(), participant.getId());
+        boolean hasMatchByName = participant.getDisplayName() != null
+                && matchRepository.findByCompetitionId(reg.getCompetitionId()).stream().anyMatch(m ->
+                        (m.getParticipant1() != null && m.getParticipant1().equalsIgnoreCase(participant.getDisplayName()))
+                                || (m.getParticipant2() != null && m.getParticipant2().equalsIgnoreCase(participant.getDisplayName()))
+                );
+        if (hasMatchById || hasMatchByName) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Không thể hủy tư cách tham dự vì '" + participant.getDisplayName() + "' đã có lịch thi đấu");
         }
         participantRepository.delete(participant);
     }

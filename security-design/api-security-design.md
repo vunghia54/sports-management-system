@@ -61,7 +61,7 @@ Token được tạo ra và kiểm tra tính hợp lệ tuân thủ chuẩn RFC 
 * `userId`: ID định danh duy nhất của tài khoản.
 * `role`: Vai trò của người dùng (`ROLE_ADMIN`, `ROLE_ORGANIZER`, `ROLE_REFEREE`, `ROLE_TEAM_MANAGER`, `ROLE_VIEWER`).
 * `iat` (Issued At): Thời điểm cấp phát token.
-* `exp` (Expiration Time): Thời điểm hết hạn (sau 900 giây / 15 phút).
+* `exp` (Expiration Time): Thời điểm hết hạn (sau 3600 giây / 1 giờ).
 
 ### 2.3. Signature
 Được ký bằng thuật toán `HMAC-SHA256` sử dụng Secret Key bảo mật chung giữa các dịch vụ:

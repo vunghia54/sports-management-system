@@ -464,7 +464,7 @@ function handleSessionExpired(customMessage) {
     }
     updateHeaderUserUI();
     renderSidebar();
-    if (hadAuth) {
+    if (hadAuth || customMessage) {
       const msg = customMessage || 'Phiên đăng nhập đã hết hạn hoặc không còn hợp lệ. Vui lòng đăng nhập lại.';
       AppState.sessionNotice = msg;
       showToast(msg, 'warning');
@@ -503,7 +503,9 @@ async function initAuthState() {
     }
   } catch (err) {
     if (err.status === 401 || err.status === 403) {
-      handleSessionExpired();
+      if (AppState.currentPage !== 'auth-page') {
+        handleSessionExpired('Phiên đăng nhập đã hết hạn hoặc không còn hợp lệ. Vui lòng đăng nhập lại.');
+      }
     } else {
       setGuestState();
       AppState.errors.users = err.message;
@@ -543,10 +545,10 @@ async function apiCall(path, options = {}) {
 
   if (!resp.ok) {
     if (resp.status === 401 && !isLoginRequest) {
-      if (hadToken) {
-        handleSessionExpired('Phiên đăng nhập đã hết hạn hoặc bị từ chối. Vui lòng đăng nhập lại.');
-      }
-      const msg = (body && (body.message || body.error)) || 'Vui lòng đăng nhập để thực hiện thao tác này.';
+      const msg = hadToken
+        ? 'Phiên đăng nhập đã hết hạn hoặc bị từ chối. Vui lòng đăng nhập lại.'
+        : ((body && (body.message || body.error)) || 'Vui lòng đăng nhập để thực hiện thao tác này.');
+      handleSessionExpired(msg);
       const authErr = new Error(msg);
       authErr.status = 401;
       throw authErr;

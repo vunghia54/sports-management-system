@@ -36,13 +36,6 @@ public class CompetitionController {
     @Value("${server.port:8081}")
     private int serverPort;
 
-    public CompetitionController(CompetitionService competitionService) {
-        this.competitionService = competitionService;
-        this.tournamentService = null;
-        this.matchRestClient = null;
-        this.matchServiceUrl = "http://match-service";
-    }
-
     public CompetitionController(
             CompetitionService competitionService,
             TournamentService tournamentService,
@@ -56,8 +49,8 @@ public class CompetitionController {
             TournamentService tournamentService,
             @LoadBalanced RestClient.Builder loadBalancedRestClientBuilder,
             @Value("${services.match.url:http://match-service}") String matchServiceUrl) {
-        this.competitionService = competitionService;
-        this.tournamentService = tournamentService;
+        this.competitionService = java.util.Objects.requireNonNull(competitionService, "competitionService is required");
+        this.tournamentService = java.util.Objects.requireNonNull(tournamentService, "tournamentService is required");
         String candidate = (matchServiceUrl == null || matchServiceUrl.isBlank()) ? "http://match-service" : matchServiceUrl.trim();
         this.matchServiceUrl = candidate.endsWith("/") ? candidate.substring(0, candidate.length() - 1) : candidate;
         if (this.matchServiceUrl.startsWith("http://localhost") || this.matchServiceUrl.startsWith("http://127.0.0.1")) {
@@ -183,9 +176,6 @@ public class CompetitionController {
         if (authentication == null || !authentication.isAuthenticated()
                 || authentication.getName() == null || authentication.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Full authentication is required");
-        }
-        if (tournamentService == null) {
-            return;
         }
         Tournament tour = tournamentService.getTournamentById(tournamentId);
         if (tour == null) {
