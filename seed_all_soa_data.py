@@ -16,6 +16,7 @@ KỊCH BẢN NẠP DỮ LIỆU TỰ ĐỘNG CHO HỆ THỐNG VN SPORTS SOA (Đ�
 import os
 import sys
 import json
+import datetime
 import urllib.request
 import urllib.error
 
@@ -145,23 +146,38 @@ for tr in SEED.get('tournaments', []):
 current_comps = api_call('/api/v1/competitions') or []
 comp_by_name = {(c.get('competitionName') or c.get('name')): c.get('id') for c in current_comps}
 old_comp_id_to_new = {}
+comp_to_tour = {}
 for cp in SEED.get('competitions', []):
     old_cid = cp.get('id')
     cname = cp.get('competitionName') or cp.get('name')
+    new_tid = old_tour_id_to_new.get(cp.get('tournamentId'), cp.get('tournamentId'))
     if cname not in comp_by_name:
-        new_tid = old_tour_id_to_new.get(cp.get('tournamentId'), cp.get('tournamentId'))
         new_sid = old_sport_id_to_new.get(cp.get('sportId'), cp.get('sportId', 1))
         res = api_call('/api/v1/competitions', 'POST', {
             'tournamentId': new_tid,
             'sportId': new_sid,
             'name': cname,
             'competitionName': cname,
-            'status': cp.get('status', 'OPEN_REGISTRATION')
+            'status': cp.get('status') or 'OPEN_REGISTRATION'
         })
         if res and res.get('id'):
             comp_by_name[cname] = res['id']
-    if old_cid and cname in comp_by_name:
-        old_comp_id_to_new[old_cid] = comp_by_name[cname]
+    if cname in comp_by_name:
+        new_cid = comp_by_name[cname]
+        if old_cid:
+            old_comp_id_to_new[old_cid] = new_cid
+        comp_to_tour[new_cid] = new_tid
+        api_call(f'/api/v1/competitions/{new_cid}/rule', 'PUT', {
+            'maxParticipants': 32,
+            'minTeamMembers': 1,
+            'maxTeamMembers': 25,
+            'scoringMethod': 'POINTS'
+        })
+        api_call(f'/api/v1/competitions/{new_cid}/format', 'PUT', {
+            'formatType': cp.get('formatType', 'ROUND_ROBIN'),
+            'numberOfGroups': cp.get('numberOfGroups', 1),
+            'qualifyingSpotsPerGroup': cp.get('qualifyingSpotsPerGroup', 2)
+        })
 
 print(f" -> Đã đồng bộ {len(sport_by_name)} môn, {len(tour_by_name)} giải đấu, {len(comp_by_name)} nội dung.")
 
@@ -180,7 +196,7 @@ for ath in SEED.get('athletes', []):
             'phone': ath.get('phone', '0901234567'),
             'email': ath.get('email', 'athlete@sports.vn'),
             'nationality': ath.get('nationality', 'Vietnam'),
-            'healthStatus': ath.get('healthStatus', 'FIT')
+            'healthStatus': 'QUALIFIED' if ath.get('healthStatus') in (None, '', 'FIT') else ath.get('healthStatus')
         })
         if res and res.get('id'):
             ath_by_name[fname] = res['id']
@@ -227,11 +243,34 @@ def ensure_participant_map(cid, required_names):
     missing = [n for n in required_names if n and n not in by_name]
     if not missing:
         return by_name
+
+    tid = comp_to_tour.get(cid)
+    orig_tour = api_call(f'/api/v1/tournaments/{tid}') if tid else None
+    orig_comp = api_call(f'/api/v1/competitions/{cid}')
+    today_iso = datetime.date.today().isoformat()
+    if orig_tour and orig_tour.get('id'):
+        orig_end = str(orig_tour.get('endDate') or today_iso)
+        bumped_end = orig_end if orig_end >= today_iso else today_iso
+        api_call(f"/api/v1/tournaments/{tid}", 'PATCH', {
+            'registrationStartDate': str(orig_tour.get('registrationStartDate') or today_iso) if str(orig_tour.get('registrationStartDate') or today_iso) <= today_iso else today_iso,
+            'registrationEndDate': today_iso,
+            'startDate': today_iso,
+            'endDate': bumped_end,
+            'status': 'OPEN_REGISTRATION'
+        })
+    if orig_comp and orig_comp.get('status') != 'OPEN_REGISTRATION':
+        api_call(f"/api/v1/competitions/{cid}", 'PUT', {
+            'tournamentId': orig_comp.get('tournamentId'),
+            'sportId': orig_comp.get('sportId'),
+            'name': orig_comp.get('name'),
+            'status': 'OPEN_REGISTRATION'
+        })
+
     for pname in missing:
-        tid = team_by_name.get(pname)
+        team_id = team_by_name.get(pname)
         aid = ath_by_name.get(pname)
-        ptype = 'TEAM' if tid else 'ATHLETE'
-        ref_id = tid if tid else aid
+        ptype = 'TEAM' if team_id else 'ATHLETE'
+        ref_id = team_id if team_id else aid
         if not ref_id:
             continue
         reg = api_call('/api/v1/registrations', 'POST', {
@@ -242,6 +281,23 @@ def ensure_participant_map(cid, required_names):
         })
         if reg and reg.get('id'):
             api_call(f"/api/v1/registrations/{reg['id']}/approve", 'PUT')
+
+    if orig_comp and orig_comp.get('status') and orig_comp.get('status') != 'OPEN_REGISTRATION':
+        api_call(f"/api/v1/competitions/{cid}", 'PUT', {
+            'tournamentId': orig_comp.get('tournamentId'),
+            'sportId': orig_comp.get('sportId'),
+            'name': orig_comp.get('name'),
+            'status': orig_comp.get('status')
+        })
+    if orig_tour and orig_tour.get('id'):
+        api_call(f"/api/v1/tournaments/{tid}", 'PATCH', {
+            'registrationStartDate': orig_tour.get('registrationStartDate'),
+            'registrationEndDate': orig_tour.get('registrationEndDate'),
+            'startDate': orig_tour.get('startDate'),
+            'endDate': orig_tour.get('endDate'),
+            'status': orig_tour.get('status')
+        })
+
     parts_after = api_call(f'/api/v1/participants/competition/{cid}') or []
     return {p.get('displayName'): p.get('id') for p in parts_after if p.get('id')}
 

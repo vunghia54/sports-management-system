@@ -315,12 +315,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Bóng đá Nam Đại học\",\n  \"sportId\": {{sportId}},\n  \"ageGroup\": \"U23\",\n  \"gender\": \"MALE\",\n  \"maxParticipants\": 16,\n  \"description\": \"Nội dung bóng đá nam sinh viên\"\n}"
+              "raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"sportId\": {{sportId}},\n  \"name\": \"Bóng đá Nam Đại học\",\n  \"status\": \"OPEN_REGISTRATION\"\n}"
             },
             "url": {
-              "raw": "{{tournamentUrl}}/api/v1/tournaments/{{tournamentId}}/competitions",
+              "raw": "{{tournamentUrl}}/api/v1/competitions",
               "host": ["{{tournamentUrl}}"],
-              "path": ["api", "v1", "tournaments", "{{tournamentId}}", "competitions"]
+              "path": ["api", "v1", "competitions"]
             }
           },
           "event": [
@@ -331,6 +331,66 @@
                   "pm.test('Tạo nội dung thi đấu thành công (200/201)', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
                   "var res = pm.response.json();",
                   "if (res.id) { pm.collectionVariables.set('competitionId', res.id.toString()); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4b Cập nhật Luật & Thể thức Nội dung thi đấu (Rule & Format) [B1]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"maxParticipants\": 16,\n  \"minTeamMembers\": 5,\n  \"maxTeamMembers\": 20,\n  \"scoringMethod\": \"POINTS\"\n}"
+            },
+            "url": {
+              "raw": "{{tournamentUrl}}/api/v1/competitions/{{competitionId}}/rule",
+              "host": ["{{tournamentUrl}}"],
+              "path": ["api", "v1", "competitions", "{{competitionId}}", "rule"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Cập nhật quy định thi đấu thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4c Cập nhật Thể thức thi đấu (Format: ROUND_ROBIN/KNOCKOUT) [B1]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"formatType\": \"ROUND_ROBIN\",\n  \"numberOfGroups\": 1,\n  \"qualifyingSpotsPerGroup\": 2,\n  \"hasThirdPlaceMatch\": false\n}"
+            },
+            "url": {
+              "raw": "{{tournamentUrl}}/api/v1/competitions/{{competitionId}}/format",
+              "host": ["{{tournamentUrl}}"],
+              "path": ["api", "v1", "competitions", "{{competitionId}}", "format"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Cập nhật thể thức thi đấu thành công 200', function () { pm.response.to.have.status(200); });"
                 ],
                 "type": "text/javascript"
               }

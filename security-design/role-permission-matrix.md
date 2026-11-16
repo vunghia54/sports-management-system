@@ -45,8 +45,9 @@ Hệ thống Quản lý Thể thao định nghĩa 5 vai trò rõ rệt (`ROLE_AD
 | 5 | `GET` | `/api/v1/tournaments/{id}` | Tournament | Công khai | Mọi người (Kể cả chưa đăng nhập) | Không | 200 OK / 404 Not Found |
 | 6 | `POST` | `/api/v1/tournaments` | Tournament | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Tự động gán quyền sở hữu cho người tạo | 201 Created / 401 / 403 |
 | 7 | `PUT` | `/api/v1/tournaments/{id}` | Tournament | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | **BẮT BUỘC:** Chỉ Admin hoặc chính Organizer tạo giải đấu | 200 OK / 401 / **403 Forbidden** / 404 |
-| 8 | `PATCH` | `/api/v1/tournaments/{id}` | Tournament | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | **BẮT BUỘC:** Chỉ Admin hoặc chính Organizer tạo giải đấu | 200 OK / 401 / **403 Forbidden** / 404 |
-| 9 | `DELETE` | `/api/v1/tournaments/{id}` | Tournament | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | **BẮT BUỘC:** Chỉ Admin hoặc chính Organizer tạo giải đấu | 204 No Content / 401 / **403 Forbidden** / 404 |
+| 8 | `PATCH` | `/api/v1/tournaments/{id}` | Tournament | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | **BẮT BUỘC:** Chỉ Admin hoặc chính Organizer tạo giải đấu (`organizerUsername == null` chỉ Admin sửa) | 200 OK / 401 / **403 Forbidden** / 404 |
+| 9 | `DELETE` | `/api/v1/tournaments/{id}` | Tournament | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | **BẮT BUỘC:** Chỉ Admin hoặc chính Organizer tạo giải đấu (kiểm tra 409 nếu còn nội dung/trận; 503 nếu Match lỗi) | 204 No Content / 401 / **403 Forbidden** / 404 / 409 / 503 |
+| 9b | `POST/PUT/DELETE` | `/api/v1/competitions/**` | Tournament | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Kiểm tra sở hữu giải đấu cha (`tournamentId`); `PUT /{id}/rule`, `PUT /{id}/format`; `DELETE` chặn 409 nếu có trận/đăng ký, 503 nếu Match lỗi | 200/201/204 / 400 / 403 / 409 / 503 |
 | 10 | `GET` | `/api/v1/matches` | Match | Công khai | Mọi người (Kể cả chưa đăng nhập) | Không | 200 OK |
 | 11 | `GET` | `/api/v1/matches/{id}` | Match | Công khai | Mọi người (Kể cả chưa đăng nhập) | Không | 200 OK / 404 Not Found |
 | 12 | `GET` | `/api/v1/matches/tournament/{id}` | Match | Công khai | Mọi người | Không | 200 OK / 404 Not Found |

@@ -20,6 +20,10 @@ import java.util.Set;
 @Service
 public class TournamentService {
 
+    public static final Set<String> ALLOWED_TOURNAMENT_STATUSES = Set.of(
+            "DRAFT", "UPCOMING", "OPEN_REGISTRATION", "ONGOING", "COMPLETED", "FINISHED", "CANCELLED"
+    );
+
     private final TournamentRepository repository;
 
     public TournamentService(TournamentRepository repository) {
@@ -48,6 +52,7 @@ public class TournamentService {
 
     public Tournament createTournament(Tournament tournament) {
         validateTournamentDates(tournament);
+        tournament.setStatus(normalizeAndValidateStatus(tournament.getStatus()));
         tournament.setId(null);
         return repository.save(tournament);
     }
@@ -61,6 +66,7 @@ public class TournamentService {
         }
 
         validateTournamentDates(updated);
+        String validStatus = normalizeAndValidateStatus(updated.getStatus());
 
         tournament.setName(updated.getName());
         tournament.setDescription(updated.getDescription());
@@ -71,9 +77,21 @@ public class TournamentService {
                 updated.getRegistrationStartDate());
         tournament.setRegistrationEndDate(
                 updated.getRegistrationEndDate());
-        tournament.setStatus(updated.getStatus());
+        tournament.setStatus(validStatus);
 
         return repository.save(tournament);
+    }
+
+    public String normalizeAndValidateStatus(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái giải đấu không được để trống");
+        }
+        String normalized = raw.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!ALLOWED_TOURNAMENT_STATUSES.contains(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Trạng thái giải đấu không hợp lệ: " + raw + ". Cho phép: " + ALLOWED_TOURNAMENT_STATUSES);
+        }
+        return normalized;
     }
 
     private void validateTournamentDates(Tournament candidate) {
@@ -157,7 +175,7 @@ public class TournamentService {
                 case "location" ->
                         candidate.setLocation(requiredText(field, value));
                 case "status" ->
-                        candidate.setStatus(requiredText(field, value));
+                        candidate.setStatus(normalizeAndValidateStatus(requiredText(field, value)));
                 case "startDate" ->
                         candidate.setStartDate(requiredDate(field, value));
                 case "endDate" ->

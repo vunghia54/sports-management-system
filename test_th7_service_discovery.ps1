@@ -212,11 +212,11 @@ try {
     $tourBody = @{
         name                  = "Giai Bong Da Sinh Vien Toan Quoc TH7 - 2026"
         description           = "Kiem thu toan dien TH1-TH7 tren 10 Microservices"
-        startDate             = "2026-11-01"
+        startDate             = "2026-11-16"
         endDate               = "2026-12-30"
         location              = "Ha Noi"
-        registrationStartDate = "2026-10-01"
-        registrationEndDate   = "2026-12-15"
+        registrationStartDate = "2026-11-01"
+        registrationEndDate   = "2026-11-16"
         status                = "ONGOING"
     } | ConvertTo-Json
     $createdTour = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/tournaments" -Method Post -Body $tourBody -ContentType "application/json" -Headers $authHeaders
@@ -228,18 +228,29 @@ try {
         status       = "OPEN_REGISTRATION"
     } | ConvertTo-Json
     $createdComp = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/competitions" -Method Post -Body $compBody -ContentType "application/json" -Headers $authHeaders
-    Write-Host "  [2. TOURNAMENT-SERVICE] Da tao Sport ID=$($createdSport.id), Tournament ID=$($createdTour.id), Competition ID=$($createdComp.id)" -ForegroundColor Green
+    Invoke-RestMethod -Uri "http://localhost:8080/api/v1/competitions/$($createdComp.id)/rule" -Method Put -Body (@{ maxParticipants = 16; minTeamMembers = 1; maxTeamMembers = 20; scoringMethod = "POINTS" } | ConvertTo-Json) -ContentType "application/json" -Headers $authHeaders | Out-Null
+    Invoke-RestMethod -Uri "http://localhost:8080/api/v1/competitions/$($createdComp.id)/format" -Method Put -Body (@{ formatType = "ROUND_ROBIN"; numberOfGroups = 1; qualifyingSpotsPerGroup = 2 } | ConvertTo-Json) -ContentType "application/json" -Headers $authHeaders | Out-Null
+    Write-Host "  [2. TOURNAMENT-SERVICE] Da tao Sport ID=$($createdSport.id), Tournament ID=$($createdTour.id), Competition ID=$($createdComp.id) (ROUND_ROBIN)" -ForegroundColor Green
 
     # 3. ATHLETE-SERVICE (:8086)
     $athleteBody = @{
-        fullName     = "Nguyen Quang Hai"
+        fullName     = "Nguyen Quang Hai TH7"
         gender       = "MALE"
         dateOfBirth  = "1997-04-12"
         nationality  = "Vietnam"
         healthStatus = "QUALIFIED"
     } | ConvertTo-Json
     $createdAthlete = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/athletes" -Method Post -Body $athleteBody -ContentType "application/json" -Headers $mgrHeaders
-    Write-Host "  [3. ATHLETE-SERVICE] Da tao VDV: $($createdAthlete.fullName) (ID=$($createdAthlete.id))" -ForegroundColor Green
+
+    $athlete2Body = @{
+        fullName     = "Nguyen Hoang Duc TH7"
+        gender       = "MALE"
+        dateOfBirth  = "1998-01-11"
+        nationality  = "Vietnam"
+        healthStatus = "QUALIFIED"
+    } | ConvertTo-Json
+    $createdAthlete2 = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/athletes" -Method Post -Body $athlete2Body -ContentType "application/json" -Headers $mgrHeaders
+    Write-Host "  [3. ATHLETE-SERVICE] Da tao 2 VDV: $($createdAthlete.fullName), $($createdAthlete2.fullName)" -ForegroundColor Green
 
     # 4. TEAM-SERVICE (:8085) -> Dung ROLE_TEAM_MANAGER tao doi & thanh vien qua Eureka Service Discovery
     $team1Code = "HNFC_" + (Get-Random -Minimum 100 -Maximum 999)
@@ -267,6 +278,14 @@ try {
         isCaptain    = $true
     } | ConvertTo-Json
     $addedMember = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/teams/$($createdTeam1.id)/members" -Method Post -Body $memberBody -ContentType "application/json" -Headers $mgrHeaders
+
+    $member2Body = @{
+        athleteId    = $createdAthlete2.id
+        jerseyNumber = 28
+        position     = "Midfielder"
+        isCaptain    = $true
+    } | ConvertTo-Json
+    Invoke-RestMethod -Uri "http://localhost:8080/api/v1/teams/$($createdTeam2.id)/members" -Method Post -Body $member2Body -ContentType "application/json" -Headers $mgrHeaders | Out-Null
     Write-Host "  [4. TEAM-SERVICE -> ATHLETE-SERVICE] Da tao 2 Doi ($($createdTeam1.name), $($createdTeam2.name)) & xac thuc VDV '$($addedMember.athleteName)' qua Eureka!" -ForegroundColor Green
 
     # 5. MATCH-SERVICE (:8082) -> Goi TOURNAMENT-SERVICE & TEAM-SERVICE qua Eureka Service Discovery
@@ -297,7 +316,7 @@ try {
         participant1Id  = $p1Obj.id
         participant2Id  = $p2Obj.id
         location        = "SVD My Dinh"
-        matchTime       = "2026-11-15T08:00:00"
+        matchTime       = "2026-11-16T08:00:00"
         refereeUsername = "referee1"
         status          = "SCHEDULED"
     } | ConvertTo-Json

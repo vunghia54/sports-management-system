@@ -2545,9 +2545,13 @@ function renderTournamentsPage() {
           <input id="tourFilterKeyword" class="input" value="${escapeHtml(slice.filters.keyword || '')}" placeholder="Tìm tên giải đấu hoặc địa điểm..." oninput="applyPagedFilter('tournaments', { keyword: this.value }, true)" />
           <select id="tourFilterStatus" class="select" onchange="applyPagedFilter('tournaments', { status: this.value })">
             <option value="" ${!slice.filters.status ? 'selected' : ''}>Tất cả trạng thái</option>
+            <option value="DRAFT" ${slice.filters.status === 'DRAFT' ? 'selected' : ''}>Bản nháp</option>
+            <option value="OPEN_REGISTRATION" ${slice.filters.status === 'OPEN_REGISTRATION' ? 'selected' : ''}>Đang mở đăng ký</option>
             <option value="UPCOMING" ${slice.filters.status === 'UPCOMING' ? 'selected' : ''}>Sắp khởi tranh</option>
             <option value="ONGOING" ${slice.filters.status === 'ONGOING' ? 'selected' : ''}>Đang diễn ra</option>
             <option value="COMPLETED" ${slice.filters.status === 'COMPLETED' ? 'selected' : ''}>Đã hoàn thành</option>
+            <option value="FINISHED" ${slice.filters.status === 'FINISHED' ? 'selected' : ''}>Đã kết thúc</option>
+            <option value="CANCELLED" ${slice.filters.status === 'CANCELLED' ? 'selected' : ''}>Đã hủy</option>
           </select>
         </div>
         <span class="badge badge-primary" id="tournamentsTotalBadge">Tổng số: ${slice.totalElements} giải đấu</span>
@@ -3011,6 +3015,9 @@ function renderTournamentDetailPage() {
   const regTotal = AppState.paged.registrations.totalElements;
 
   const canSchedule = hasPermission('matches.schedule');
+  const canManageTour = hasPermission('tournaments.manage')
+    && (String(AppState.user?.role || '').toUpperCase() === 'ROLE_ADMIN'
+      || (tour.organizerUsername && String(tour.organizerUsername).toLowerCase() === String(AppState.user?.username || '').toLowerCase()));
   const canRegister = hasPermission('registrations.manage_own') || hasPermission('tournaments.manage');
   const canReview = hasPermission('registrations.review');
   const currentTab = AppState.tournamentDetailTab || 'bracket';
@@ -3044,6 +3051,8 @@ function renderTournamentDetailPage() {
             ${tourComps.map(c => `<option value="${c.id}" ${String(selectedCid) === String(c.id) ? 'selected' : ''}>${escapeHtml(c.name || c.competitionName)}</option>`).join('')}
           </select>
         ` : ''}
+        ${canManageTour ? `<button class="btn btn-secondary btn-sm" onclick="openCreateCompetitionModal(${tour.id})">+ Nội dung</button>` : ''}
+        ${canManageTour && tourComps.length > 0 ? `<button class="btn btn-secondary btn-sm" onclick="openCompetitionSettingsModal(${tour.id}, '${selectedCid !== 'ALL' ? selectedCid : tourComps[0].id}')">⚙ Luật & Thể thức</button>` : ''}
         ${canSchedule ? `<button class="btn btn-primary" onclick="openAutoGenerateScheduleModal(${tour.id})">⚡ Xếp lịch thi đấu</button>` : ''}
       </div>
     </div>
@@ -4306,9 +4315,13 @@ function renderTournamentFormHtml(editId, t) {
         <div class="form-group">
           <label for="mTourStatus">Trạng thái *</label>
           <select id="mTourStatus" data-field="status" class="select">
+            <option value="DRAFT" ${t.status === 'DRAFT' ? 'selected' : ''}>Bản nháp</option>
+            <option value="OPEN_REGISTRATION" ${t.status === 'OPEN_REGISTRATION' ? 'selected' : ''}>Đang mở đăng ký</option>
             <option value="UPCOMING" ${t.status === 'UPCOMING' ? 'selected' : ''}>Sắp khởi tranh</option>
             <option value="ONGOING" ${t.status === 'ONGOING' ? 'selected' : ''}>Đang diễn ra</option>
             <option value="COMPLETED" ${t.status === 'COMPLETED' ? 'selected' : ''}>Đã hoàn thành</option>
+            <option value="FINISHED" ${t.status === 'FINISHED' ? 'selected' : ''}>Đã kết thúc</option>
+            <option value="CANCELLED" ${t.status === 'CANCELLED' ? 'selected' : ''}>Đã hủy</option>
           </select>
         </div>
       </div>
@@ -4499,6 +4512,218 @@ async function submitCreateSport(e) {
     closeModal();
     showToast('Đã thêm môn thể thao mới!');
     await Promise.all([loadCoreStats(), safeFetchSlice('sports', '/api/v1/sports')]);
+    renderCurrentPage(false);
+  } catch (err) {
+    showFormError(form, err);
+  } finally {
+    unlock();
+  }
+}
+
+async function openCreateCompetitionModal(tournamentId) {
+  if (!hasPermission('tournaments.manage')) {
+    showToast('Bạn không có quyền thêm nội dung thi đấu', 'error');
+    return;
+  }
+  if ((AppState.data.sports || []).length === 0) {
+    await safeFetchSlice('sports', '/api/v1/sports');
+  }
+  const sports = AppState.data.sports || [];
+  if (sports.length === 0) {
+    showToast('Vui lòng thêm môn thể thao trước khi tạo nội dung thi đấu.', 'warning');
+    return;
+  }
+  openModal('Thêm Nội dung thi đấu mới', `
+    <form id="competitionCreateForm" onsubmit="submitCreateCompetitionForm(event, ${tournamentId})">
+      <div class="form-error-banner" hidden></div>
+      <div class="form-group">
+        <label for="mCompName">Tên nội dung thi đấu *</label>
+        <input id="mCompName" data-field="name" class="input" required placeholder="VD: Bóng đá Nam U23" />
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="mCompSportId">Môn thể thao *</label>
+          <select id="mCompSportId" data-field="sportId" class="select" required>
+            ${sports.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.sportType || 'TEAM')})</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="mCompStatus">Trạng thái *</label>
+          <select id="mCompStatus" data-field="status" class="select">
+            <option value="OPEN_REGISTRATION" selected>Mở đăng ký</option>
+            <option value="DRAFT">Bản nháp</option>
+            <option value="SCHEDULED">Đã xếp lịch</option>
+            <option value="ONGOING">Đang diễn ra</option>
+            <option value="COMPLETED">Hoàn thành</option>
+            <option value="FINISHED">Kết thúc</option>
+            <option value="CANCELLED">Đã hủy</option>
+          </select>
+        </div>
+      </div>
+      <div class="page-actions" style="justify-content:flex-end;margin-top:8px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary">Tạo nội dung</button>
+      </div>
+    </form>
+  `);
+}
+
+async function submitCreateCompetitionForm(e, tournamentId) {
+  e.preventDefault();
+  const form = e.target;
+  clearFormErrors(form);
+  const name = document.getElementById('mCompName').value.trim();
+  if (!name) {
+    setFieldError(form, 'name', 'Tên nội dung thi đấu không được để trống');
+    return;
+  }
+  const unlock = lockFormSubmit(form, 'Đang lưu...');
+  try {
+    await apiCall('/api/v1/competitions', {
+      method: 'POST',
+      body: JSON.stringify({
+        tournamentId: Number(tournamentId),
+        sportId: Number(document.getElementById('mCompSportId').value),
+        name,
+        status: document.getElementById('mCompStatus').value
+      })
+    });
+    closeModal();
+    showToast('Đã tạo nội dung thi đấu mới!');
+    await refreshAfterMutation({
+      clearCache: ['competitions'],
+      reloadTournamentId: tournamentId
+    });
+    renderCurrentPage(false);
+  } catch (err) {
+    showFormError(form, err);
+  } finally {
+    unlock();
+  }
+}
+
+async function openCompetitionSettingsModal(tournamentId, competitionId) {
+  if (!hasPermission('tournaments.manage')) {
+    showToast('Bạn không có quyền cấu hình luật & thể thức', 'error');
+    return;
+  }
+  const cid = Number(competitionId);
+  const tourComps = (AppState.detail.tournament.competitions || []).length > 0
+    ? AppState.detail.tournament.competitions
+    : AppState.data.competitions.filter(c => Number(c.tournamentId) === Number(tournamentId));
+  const comp = tourComps.find(c => Number(c.id) === cid) || { id: cid, name: `Nội dung #${cid}`, status: 'OPEN_REGISTRATION' };
+
+  const [ruleRes, fmtRes] = await Promise.all([
+    apiCall(`/api/v1/competitions/${cid}/rule`).catch(() => ({ data: {} })),
+    apiCall(`/api/v1/competitions/${cid}/format`).catch(() => ({ data: {} }))
+  ]);
+  const rule = ruleRes?.data || {};
+  const fmt = fmtRes?.data || {};
+
+  openModal(`Cấu hình Nội dung: ${comp.name}`, `
+    <form id="compSettingsForm" onsubmit="submitCompetitionSettingsForm(event, ${tournamentId}, ${cid})">
+      <div class="form-error-banner" hidden></div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="mCfgStatus">Trạng thái nội dung</label>
+          <select id="mCfgStatus" data-field="status" class="select">
+            <option value="DRAFT" ${comp.status === 'DRAFT' ? 'selected' : ''}>Bản nháp</option>
+            <option value="OPEN_REGISTRATION" ${comp.status === 'OPEN_REGISTRATION' ? 'selected' : ''}>Mở đăng ký</option>
+            <option value="SCHEDULED" ${comp.status === 'SCHEDULED' ? 'selected' : ''}>Đã xếp lịch</option>
+            <option value="ONGOING" ${comp.status === 'ONGOING' ? 'selected' : ''}>Đang diễn ra</option>
+            <option value="COMPLETED" ${comp.status === 'COMPLETED' ? 'selected' : ''}>Hoàn thành</option>
+            <option value="FINISHED" ${comp.status === 'FINISHED' ? 'selected' : ''}>Kết thúc</option>
+            <option value="CANCELLED" ${comp.status === 'CANCELLED' ? 'selected' : ''}>Đã hủy</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="mCfgFormat">Thể thức thi đấu *</label>
+          <select id="mCfgFormat" data-field="formatType" class="select">
+            <option value="ROUND_ROBIN" ${fmt.formatType === 'ROUND_ROBIN' ? 'selected' : ''}>Vòng tròn (ROUND_ROBIN)</option>
+            <option value="KNOCKOUT" ${!fmt.formatType || fmt.formatType === 'KNOCKOUT' ? 'selected' : ''}>Loại trực tiếp (KNOCKOUT)</option>
+            <option value="GROUP_STAGE" ${fmt.formatType === 'GROUP_STAGE' ? 'selected' : ''}>Chia bảng (GROUP_STAGE)</option>
+            <option value="HYBRID" ${fmt.formatType === 'HYBRID' ? 'selected' : ''}>Hỗn hợp (HYBRID)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="mCfgMaxPart">Số đội / VĐV tối đa *</label>
+          <input id="mCfgMaxPart" data-field="maxParticipants" type="number" min="2" class="input" required value="${rule.maxParticipants ?? 16}" />
+        </div>
+        <div class="form-group">
+          <label for="mCfgGroups">Số bảng đấu</label>
+          <input id="mCfgGroups" data-field="numberOfGroups" type="number" min="1" class="input" required value="${fmt.numberOfGroups ?? 1}" />
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="mCfgMinMem">Thành viên tối thiểu / đội *</label>
+          <input id="mCfgMinMem" data-field="minTeamMembers" type="number" min="1" class="input" required value="${rule.minTeamMembers ?? 5}" />
+        </div>
+        <div class="form-group">
+          <label for="mCfgMaxMem">Thành viên tối đa / đội *</label>
+          <input id="mCfgMaxMem" data-field="maxTeamMembers" type="number" min="1" class="input" required value="${rule.maxTeamMembers ?? 20}" />
+        </div>
+      </div>
+      <div class="page-actions" style="justify-content:flex-end;margin-top:8px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary">Lưu cấu hình</button>
+      </div>
+    </form>
+  `);
+}
+
+async function submitCompetitionSettingsForm(e, tournamentId, competitionId) {
+  e.preventDefault();
+  const form = e.target;
+  clearFormErrors(form);
+  const maxParticipants = Number(document.getElementById('mCfgMaxPart').value);
+  const minTeamMembers = Number(document.getElementById('mCfgMinMem').value);
+  const maxTeamMembers = Number(document.getElementById('mCfgMaxMem').value);
+  const numberOfGroups = Number(document.getElementById('mCfgGroups').value);
+  if (minTeamMembers > maxTeamMembers) {
+    setFieldError(form, 'minTeamMembers', 'Số thành viên tối thiểu không được lớn hơn tối đa');
+    return;
+  }
+
+  const tourComps = AppState.detail.tournament.competitions || [];
+  const existingComp = tourComps.find(c => Number(c.id) === Number(competitionId));
+  const nextStatus = document.getElementById('mCfgStatus').value;
+
+  const unlock = lockFormSubmit(form, 'Đang lưu...');
+  try {
+    const requests = [
+      apiCall(`/api/v1/competitions/${competitionId}/rule`, {
+        method: 'PUT',
+        body: JSON.stringify({ maxParticipants, minTeamMembers, maxTeamMembers })
+      }),
+      apiCall(`/api/v1/competitions/${competitionId}/format`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          formatType: document.getElementById('mCfgFormat').value,
+          numberOfGroups
+        })
+      })
+    ];
+    if (existingComp && existingComp.status !== nextStatus) {
+      requests.push(apiCall(`/api/v1/competitions/${competitionId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          tournamentId: existingComp.tournamentId,
+          sportId: existingComp.sportId,
+          name: existingComp.name,
+          status: nextStatus
+        })
+      }));
+    }
+    await Promise.all(requests);
+    closeModal();
+    showToast('Đã cập nhật quy định & thể thức thi đấu!');
+    await refreshAfterMutation({
+      clearCache: ['competitions'],
+      reloadTournamentId: tournamentId
+    });
     renderCurrentPage(false);
   } catch (err) {
     showFormError(form, err);
