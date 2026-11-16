@@ -13,7 +13,9 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -218,6 +220,88 @@ public class TournamentClient {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "Athlete Service (ATHLETE-SERVICE) is unavailable via Service Discovery",
+                    ex
+            );
+        }
+    }
+
+    public Map<String, Object> getSportById(Long sportId) {
+        if (sportId == null) {
+            return null;
+        }
+        try {
+            var requestSpec = tournamentRestClient.get()
+                    .uri("/api/v1/sports/{id}", sportId);
+            String authHeader = getCurrentAuthHeader();
+            if (authHeader != null && !authHeader.isBlank()) {
+                requestSpec.header("Authorization", authHeader);
+            }
+            return requestSpec.retrieve()
+                    .onStatus(status -> status.value() == 404, (req, res) -> {
+                        throw new ResourceNotFoundException("Sport not found with id: " + sportId);
+                    })
+                    .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+        } catch (ResourceNotFoundException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Tournament Service is unavailable when verifying Sport ID: " + sportId,
+                    ex
+            );
+        }
+    }
+
+    public Map<String, Object> getCompetitionRule(Long competitionId) {
+        if (competitionId == null) {
+            return null;
+        }
+        try {
+            var requestSpec = tournamentRestClient.get()
+                    .uri("/api/v1/competitions/{id}/rule", competitionId);
+            String authHeader = getCurrentAuthHeader();
+            if (authHeader != null && !authHeader.isBlank()) {
+                requestSpec.header("Authorization", authHeader);
+            }
+            return requestSpec.retrieve()
+                    .onStatus(status -> status.value() == 404, (req, res) -> {
+                        throw new ResourceNotFoundException("Rule not found for competition: " + competitionId);
+                    })
+                    .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+        } catch (ResourceNotFoundException ex) {
+            return null;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Tournament Service is unavailable when loading CompetitionRule for Competition ID: " + competitionId,
+                    ex
+            );
+        }
+    }
+
+    public List<Map<String, Object>> getTeamMembers(Long teamId) {
+        if (teamId == null) {
+            return Collections.emptyList();
+        }
+        try {
+            var requestSpec = teamRestClient.get()
+                    .uri("/api/v1/teams/{id}/members", teamId);
+            String authHeader = getCurrentAuthHeader();
+            if (authHeader != null && !authHeader.isBlank()) {
+                requestSpec.header("Authorization", authHeader);
+            }
+            List<Map<String, Object>> list = requestSpec.retrieve()
+                    .onStatus(status -> status.value() == 404, (req, res) -> {
+                        throw new ResourceNotFoundException("Team not found with id: " + teamId);
+                    })
+                    .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+            return list != null ? list : Collections.emptyList();
+        } catch (ResourceNotFoundException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Team Service is unavailable when loading members for Team ID: " + teamId,
                     ex
             );
         }

@@ -51,8 +51,12 @@ Hệ thống Quản lý Thể thao định nghĩa 5 vai trò rõ rệt (`ROLE_AD
 | 11 | `GET` | `/api/v1/matches/{id}` | Match | Công khai | Mọi người (Kể cả chưa đăng nhập) | Không | 200 OK / 404 Not Found |
 | 12 | `GET` | `/api/v1/matches/tournament/{id}` | Match | Công khai | Mọi người | Không | 200 OK / 404 Not Found |
 | 13 | `POST` | `/api/v1/matches` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Kiểm tra giải đấu hợp lệ qua Tournament Service | 201 Created / 400 / 401 / 403 |
-| 14 | `PUT` | `/api/v1/matches/{id}` | Match | Bảo vệ | `ROLE_REFEREE`, `ROLE_ORGANIZER`, `ROLE_ADMIN` | Cho phép trọng tài cập nhật tỉ số | 200 OK / 400 / 401 / 403 / 404 |
-| 15 | `DELETE` | `/api/v1/matches/{id}` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Chỉ Admin hoặc Organizer | 204 No Content / 401 / 403 / 404 |
+| 14 | `PUT` | `/api/v1/matches/{id}` | Match | Bảo vệ | `ROLE_REFEREE`, `ROLE_ORGANIZER`, `ROLE_ADMIN` | Cho phép trọng tài cập nhật trạng thái | 200 OK / 400 / 401 / 403 / 404 |
+| 15 | `DELETE` | `/api/v1/matches/{id}` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Chỉ Admin hoặc Organizer sở hữu giải | 204 No Content / 401 / 403 / 404 |
+| 15b | `POST` | `/api/v1/registrations` | Match | Bảo vệ | `ROLE_TEAM_MANAGER`, `ROLE_VIEWER`, `ROLE_ADMIN` | `TEAM_MANAGER` chỉ đăng ký đội/VĐV của mình | 201 Created / 400 / 403 / **409 Conflict** |
+| 15c | `PUT` | `/api/v1/registrations/{id}/approve` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Chỉ Organizer sở hữu giải (hoặc Admin) | 200 OK / 400 / 403 / 409 |
+| 15d | `PUT` | `/api/v1/registrations/{id}/reject` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Organizer sở hữu giải (409 nếu đã có trận) | 200 OK / 400 / 403 / 409 |
+| 15e | `PUT` | `/api/v1/registrations/{id}/withdraw` | Match | Bảo vệ | Người đã đăng ký (`registeredBy`), `ROLE_ADMIN` | Rút đơn (409 nếu đã có trận) | 200 OK / 400 / 403 / 409 |
 
 ---
 

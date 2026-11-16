@@ -18,6 +18,8 @@ public interface MatchRepository extends JpaRepository<Match, Long>, JpaSpecific
 
     List<Match> findByCompetitionId(Long competitionId);
 
+    boolean existsByParticipant1IdOrParticipant2Id(Long participant1Id, Long participant2Id);
+
     long countByStatusIgnoreCase(String status);
 
     default Page<Match> searchMatches(

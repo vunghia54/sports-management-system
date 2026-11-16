@@ -2803,6 +2803,7 @@ function renderTournamentTeamsTableSection(tour, tourComps, canRegister, canRevi
             <option value="PENDING" ${f.status === 'PENDING' ? 'selected' : ''}>Chờ duyệt</option>
             <option value="APPROVED" ${f.status === 'APPROVED' ? 'selected' : ''}>Đã duyệt</option>
             <option value="REJECTED" ${f.status === 'REJECTED' ? 'selected' : ''}>Từ chối</option>
+            <option value="WITHDRAWN" ${f.status === 'WITHDRAWN' ? 'selected' : ''}>Đã rút lui</option>
           </select>
         </div>
         <span class="badge badge-primary" id="tourRegsCountPill">Tổng số: ${slice.totalElements} hồ sơ</span>
@@ -2820,6 +2821,13 @@ function renderTournamentRegistrationsInner(tourComps = null, canReview = null) 
   const comps = tourComps || AppState.detail.tournament.competitions || AppState.data.competitions || [];
   const compNameMap = new Map(comps.map(c => [Number(c.id), c.name || c.competitionName]));
   const reviewAllowed = canReview !== null ? canReview : hasPermission('registrations.review');
+  const currentUsername = String(AppState.user?.username || '').toLowerCase();
+  const isAdmin = String(AppState.user?.role || '').toUpperCase() === 'ROLE_ADMIN';
+  const canWithdrawAny = Boolean(currentUsername) && slice.items.some(r => {
+    const st = String(r.status || '').toUpperCase();
+    return (st === 'PENDING' || st === 'APPROVED') && (isAdmin || String(r.registeredBy || '').toLowerCase() === currentUsername);
+  });
+  const showActionCol = reviewAllowed || canWithdrawAny;
   const startIdx = slice.page * slice.size;
 
   const badgeEl = document.getElementById('tourRegsTotalBadge');
@@ -2839,7 +2847,7 @@ function renderTournamentRegistrationsInner(tourComps = null, canReview = null) 
             <th>Loại hình</th>
             <th>Ghi chú / Lý do</th>
             <th>Trạng thái</th>
-            ${reviewAllowed ? '<th>Thao tác</th>' : ''}
+            ${showActionCol ? '<th>Thao tác</th>' : ''}
           </tr>
         </thead>
         <tbody>
@@ -2847,7 +2855,11 @@ function renderTournamentRegistrationsInner(tourComps = null, canReview = null) 
             const pName = r.participantName || `Đối tượng #${r.participantReferenceId || r.id}`;
             const isAthlete = String(r.participantType || '').toUpperCase() === 'ATHLETE';
             const typeText = isAthlete ? 'Vận động viên' : 'Đội tuyển';
-            const isPending = String(r.status || '').toUpperCase() === 'PENDING';
+            const st = String(r.status || '').toUpperCase();
+            const isPending = st === 'PENDING';
+            const isApproved = st === 'APPROVED';
+            const canWithdrawRow = Boolean(currentUsername) && (isPending || isApproved)
+              && (isAdmin || String(r.registeredBy || '').toLowerCase() === currentUsername);
             const compName = r.competitionName || compNameMap.get(Number(r.competitionId)) || `Nội dung #${r.competitionId}`;
             return `
               <tr>
@@ -2855,26 +2867,29 @@ function renderTournamentRegistrationsInner(tourComps = null, canReview = null) 
                 <td>
                   <div style="display:flex;align-items:center;gap:10px;">
                     <span class="team-crest-circle" style="width:32px;height:32px;font-size:0.74rem;">${escapeHtml(formatTeamCrestInitials(pName))}</span>
-                    <strong>${escapeHtml(pName)}</strong>
+                    <div>
+                      <strong>${escapeHtml(pName)}</strong>
+                      ${r.registeredBy ? `<div style="font-size:0.74rem;color:var(--text-secondary);">Đăng ký bởi: ${escapeHtml(r.registeredBy)}</div>` : ''}
+                    </div>
                   </div>
                 </td>
                 <td>${escapeHtml(compName)}</td>
                 <td><span class="badge ${isAthlete ? 'badge-warning' : 'badge-primary'}">${typeText}</span></td>
                 <td>${escapeHtml(r.rejectionReason || '—')}</td>
                 <td>${statusBadgeHtml(r.status)}</td>
-                ${reviewAllowed ? `
+                ${showActionCol ? `
                   <td>
-                    ${isPending ? `
-                      <div class="page-actions">
-                        <button class="btn btn-primary btn-sm" onclick="approveRegistrationById(${r.id}, this)">Duyệt</button>
-                        <button class="btn btn-danger btn-sm" data-name="${escapeHtml(pName)}" onclick="openRejectRegistrationModal(${r.id}, this.dataset.name)">Từ chối</button>
-                      </div>
-                    ` : '<span style="font-size:0.8rem;color:var(--text-secondary);">Đã xử lý</span>'}
+                    <div class="page-actions">
+                      ${reviewAllowed && isPending ? `<button class="btn btn-primary btn-sm" onclick="approveRegistrationById(${r.id}, this)">Duyệt</button>` : ''}
+                      ${reviewAllowed && (isPending || isApproved) ? `<button class="btn btn-danger btn-sm" data-name="${escapeHtml(pName)}" onclick="openRejectRegistrationModal(${r.id}, this.dataset.name)">${isApproved ? 'Hủy duyệt' : 'Từ chối'}</button>` : ''}
+                      ${canWithdrawRow ? `<button class="btn btn-secondary btn-sm" onclick="withdrawRegistrationById(${r.id}, this)">Rút đơn</button>` : ''}
+                      ${(!reviewAllowed || (!isPending && !isApproved)) && !canWithdrawRow ? '<span style="font-size:0.8rem;color:var(--text-secondary);">Đã xử lý</span>' : ''}
+                    </div>
                   </td>
                 ` : ''}
               </tr>
             `;
-          }).join('') || `<tr><td colspan="${reviewAllowed ? 7 : 6}" class="state-empty-box">${slice.loading ? 'Đang tải danh sách đăng ký...' : 'Chưa có hồ sơ đăng ký nào phù hợp.'}</td></tr>`}
+          }).join('') || `<tr><td colspan="${showActionCol ? 7 : 6}" class="state-empty-box">${slice.loading ? 'Đang tải danh sách đăng ký...' : 'Chưa có hồ sơ đăng ký nào phù hợp.'}</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -4987,6 +5002,21 @@ async function submitRegistrationForm(e) {
     showFormError(form, err);
   } finally {
     unlock();
+  }
+}
+
+async function withdrawRegistrationById(id, btn = null) {
+  if (!confirm('Bạn có chắc chắn muốn rút hồ sơ đăng ký này?')) return;
+  if (btn) btn.disabled = true;
+  try {
+    await apiCall(`/api/v1/registrations/${id}/withdraw`, { method: 'PUT' });
+    showToast('Đã rút hồ sơ đăng ký thành công.');
+    await refreshAfterMutation({ paged: ['registrations'], reloadTournamentId: AppState.selectedTournamentId });
+    renderCurrentPage(false);
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn && document.contains(btn)) btn.disabled = false;
   }
 }
 

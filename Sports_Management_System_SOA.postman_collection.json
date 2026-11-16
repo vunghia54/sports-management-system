@@ -691,11 +691,11 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+              { "key": "Authorization", "value": "Bearer {{managerToken}}" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": {{competitionId}},\n  \"participantName\": \"CLB Bóng Đá Hà Nội\",\n  \"participantType\": \"TEAM\",\n  \"teamId\": {{team1Id}},\n  \"notes\": \"Đăng ký tham dự giải chính thức\"\n}"
+              "raw": "{\n  \"competitionId\": {{competitionId}},\n  \"participantName\": \"CLB Bóng Đá Hà Nội\",\n  \"participantType\": \"TEAM\",\n  \"participantReferenceId\": {{team1Id}}\n}"
             },
             "url": {
               "raw": "{{matchUrl}}/api/v1/registrations",
@@ -720,17 +720,14 @@
         {
           "name": "5.2 Duyệt Hồ sơ Đăng ký (Approve Registration) [TH3 & TH5]",
           "request": {
-            "method": "PATCH",
+            "method": "PUT",
             "header": [
               { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
             ],
             "url": {
-              "raw": "{{matchUrl}}/api/v1/registrations/{{registrationId}}/status?status=APPROVED",
+              "raw": "{{matchUrl}}/api/v1/registrations/{{registrationId}}/approve",
               "host": ["{{matchUrl}}"],
-              "path": ["api", "v1", "registrations", "{{registrationId}}", "status"],
-              "query": [
-                { "key": "status", "value": "APPROVED" }
-              ]
+              "path": ["api", "v1", "registrations", "{{registrationId}}", "approve"]
             }
           },
           "event": [
@@ -744,6 +741,20 @@
               }
             }
           ]
+        },
+        {
+          "name": "5.2b Rút Hồ sơ Đăng ký (Withdraw Registration) [A5]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+            ],
+            "url": {
+              "raw": "{{matchUrl}}/api/v1/registrations/{{registrationId}}/withdraw",
+              "host": ["{{matchUrl}}"],
+              "path": ["api", "v1", "registrations", "{{registrationId}}", "withdraw"]
+            }
+          }
         },
         {
           "name": "5.3 Tạo Lịch thi đấu Trận đấu (Match gọi Tournament qua Eureka) [TH4, TH6, TH7]",

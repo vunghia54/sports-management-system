@@ -2,16 +2,24 @@ package com.sports.management.match.service;
 
 import com.sports.management.exception.ResourceNotFoundException;
 import com.sports.management.match.client.TournamentClient;
+import com.sports.management.match.model.Match;
 import com.sports.management.match.model.Participant;
 import com.sports.management.match.model.Registration;
+import com.sports.management.match.repository.MatchRepository;
 import com.sports.management.match.repository.ParticipantRepository;
 import com.sports.management.match.repository.RegistrationRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class RegistrationService {
@@ -19,14 +27,25 @@ public class RegistrationService {
     private final RegistrationRepository registrationRepository;
     private final ParticipantRepository participantRepository;
     private final TournamentClient tournamentClient;
+    private final MatchRepository matchRepository;
 
     public RegistrationService(
             RegistrationRepository registrationRepository,
             ParticipantRepository participantRepository,
             TournamentClient tournamentClient) {
+        this(registrationRepository, participantRepository, tournamentClient, null);
+    }
+
+    @Autowired
+    public RegistrationService(
+            RegistrationRepository registrationRepository,
+            ParticipantRepository participantRepository,
+            TournamentClient tournamentClient,
+            MatchRepository matchRepository) {
         this.registrationRepository = registrationRepository;
         this.participantRepository = participantRepository;
         this.tournamentClient = tournamentClient;
+        this.matchRepository = matchRepository;
     }
 
     public record RegistrationPage(
@@ -110,52 +129,176 @@ public class RegistrationService {
 
     @Transactional
     public Registration register(Registration registration) {
-        // 1. Kiem tra competition ton tai qua Eureka Service Discovery (TOURNAMENT-SERVICE)
-        tournamentClient.getCompetitionById(registration.getCompetitionId());
+        return register(registration, registration.getRegisteredBy(), true);
+    }
 
-        // 2. Kiem tra doi tuong dang ky (TEAM-SERVICE hoac ATHLETE-SERVICE) qua Eureka Service Discovery
-        String type = registration.getParticipantType().toUpperCase();
-        if ("TEAM".equals(type)) {
-            Map<String, Object> team = tournamentClient.getTeamById(registration.getParticipantReferenceId());
-            if ((registration.getParticipantName() == null || registration.getParticipantName().isBlank())
-                    && team != null && team.get("teamName") != null) {
-                registration.setParticipantName(String.valueOf(team.get("teamName")));
-            }
-        } else if ("ATHLETE".equals(type)) {
-            Map<String, Object> athlete = tournamentClient.getAthleteById(registration.getParticipantReferenceId());
-            if ((registration.getParticipantName() == null || registration.getParticipantName().isBlank())
-                    && athlete != null && athlete.get("fullName") != null) {
-                registration.setParticipantName(String.valueOf(athlete.get("fullName")));
-            }
-        } else {
-            throw new IllegalArgumentException("Unsupported participant type: " + type + ". Must be TEAM or ATHLETE.");
+    @Transactional
+    public Registration register(Registration registration, String callerUsername, boolean isAdmin) {
+        if (callerUsername == null || callerUsername.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Full authentication is required to register");
         }
 
-        // 3. Kiem tra trung lap dang ky
-        registrationRepository.findByCompetitionIdAndParticipantTypeAndParticipantReferenceId(
-                registration.getCompetitionId(), type, registration.getParticipantReferenceId()
-        ).ifPresent(r -> {
-            throw new IllegalStateException("Participant is already registered for this competition with status: " + r.getStatus());
-        });
+        // 1. Verify competition exists & status == OPEN_REGISTRATION
+        Map<String, Object> comp = tournamentClient.getCompetitionById(registration.getCompetitionId());
+        if (comp == null) {
+            throw new ResourceNotFoundException("Competition not found with id: " + registration.getCompetitionId());
+        }
+        String compStatus = comp.get("status") != null ? String.valueOf(comp.get("status")).trim() : "";
+        if (!"OPEN_REGISTRATION".equalsIgnoreCase(compStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Nội dung thi đấu hiện không mở đăng ký (trạng thái: " + compStatus + ")");
+        }
+
+        // 2. Verify registration window [registrationStartDate, registrationEndDate] of tournament
+        Long tournamentId = parseLongField(comp.get("tournamentId"));
+        Map<String, Object> tour = tournamentId != null ? tournamentClient.getTournamentById(tournamentId) : null;
+        if (tour == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không tìm thấy thông tin giải đấu cho nội dung #" + registration.getCompetitionId());
+        }
+        LocalDate regStart = parseLocalDate(tour.get("registrationStartDate"));
+        LocalDate regEnd = parseLocalDate(tour.get("registrationEndDate"));
+        LocalDate today = LocalDate.now();
+        if ((regStart != null && today.isBefore(regStart)) || (regEnd != null && today.isAfter(regEnd))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ngày hiện tại (" + today + ") nằm ngoài thời hạn đăng ký [" + regStart + ", " + regEnd + "]");
+        }
+
+        // 3. Verify participantType matches Sport.sportType
+        String type = registration.getParticipantType() != null
+                ? registration.getParticipantType().trim().toUpperCase(Locale.ROOT)
+                : "";
+        if (!"TEAM".equals(type) && !"ATHLETE".equals(type)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Loại đối tượng đăng ký không hợp lệ: " + type + ". Chỉ chấp nhận TEAM hoặc ATHLETE");
+        }
+        Long sportId = parseLongField(comp.get("sportId"));
+        if (sportId != null) {
+            Map<String, Object> sport = tournamentClient.getSportById(sportId);
+            String sportType = sport != null && sport.get("sportType") != null
+                    ? String.valueOf(sport.get("sportType")).trim().toUpperCase(Locale.ROOT)
+                    : "";
+            if ("TEAM".equals(sportType) && !"TEAM".equals(type)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Môn thể thao đồng đội chỉ chấp nhận đăng ký theo Đội (TEAM)");
+            }
+            if ("INDIVIDUAL".equals(sportType) && !"ATHLETE".equals(type)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Môn thể thao cá nhân chỉ chấp nhận đăng ký theo Vận động viên (ATHLETE)");
+            }
+        }
+
+        // 4. Verify participant (Team / Athlete), ownership, rule bounds & athlete health
+        Map<String, Object> rule = tournamentClient.getCompetitionRule(registration.getCompetitionId());
+        if ("TEAM".equals(type)) {
+            Map<String, Object> team = tournamentClient.getTeamById(registration.getParticipantReferenceId());
+            if (team == null) {
+                throw new ResourceNotFoundException("Team not found with id: " + registration.getParticipantReferenceId());
+            }
+            if (!isAdmin) {
+                String owner = team.get("ownerUsername") != null ? String.valueOf(team.get("ownerUsername")) : null;
+                if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(callerUsername)) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Access Denied: Bạn chỉ được phép đăng ký đội tuyển thuộc quyền sở hữu của mình");
+                }
+            }
+            Object rawName = team.get("name") != null ? team.get("name") : team.get("teamName");
+            if (rawName != null && !String.valueOf(rawName).isBlank()) {
+                registration.setParticipantName(String.valueOf(rawName));
+            }
+            List<Map<String, Object>> members = tournamentClient.getTeamMembers(registration.getParticipantReferenceId());
+            int memberCount = members != null ? members.size() : 0;
+            Integer minMembers = rule != null ? parseIntField(rule.get("minTeamMembers")) : null;
+            Integer maxMembers = rule != null ? parseIntField(rule.get("maxTeamMembers")) : null;
+            if (minMembers != null && memberCount < minMembers) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Đội '" + registration.getParticipantName() + "' mới có " + memberCount
+                                + " thành viên, chưa đạt tối thiểu " + minMembers + " thành viên theo điều lệ");
+            }
+            if (maxMembers != null && memberCount > maxMembers) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Đội '" + registration.getParticipantName() + "' có " + memberCount
+                                + " thành viên, vượt quá tối đa " + maxMembers + " thành viên theo điều lệ");
+            }
+        } else {
+            Map<String, Object> athlete = tournamentClient.getAthleteById(registration.getParticipantReferenceId());
+            if (athlete == null) {
+                throw new ResourceNotFoundException("Athlete not found with id: " + registration.getParticipantReferenceId());
+            }
+            if (!isAdmin) {
+                String owner = athlete.get("ownerUsername") != null ? String.valueOf(athlete.get("ownerUsername")) : null;
+                if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(callerUsername)) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Access Denied: Bạn chỉ được phép đăng ký vận động viên thuộc quyền sở hữu của mình");
+                }
+            }
+            String health = athlete.get("healthStatus") != null ? String.valueOf(athlete.get("healthStatus")).trim() : "";
+            if (!"QUALIFIED".equalsIgnoreCase(health)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Vận động viên chưa đạt trạng thái sức khỏe QUALIFIED (hiện tại: " + health + ")");
+            }
+            if (athlete.get("fullName") != null && !String.valueOf(athlete.get("fullName")).isBlank()) {
+                registration.setParticipantName(String.valueOf(athlete.get("fullName")));
+            }
+        }
+
+        // 5. Duplicate check -> 409 Conflict for PENDING/APPROVED; allow re-register for REJECTED/WITHDRAWN
+        Optional<Registration> existingOpt = registrationRepository
+                .findByCompetitionIdAndParticipantTypeAndParticipantReferenceId(
+                        registration.getCompetitionId(), type, registration.getParticipantReferenceId());
+        if (existingOpt.isPresent()) {
+            Registration existing = existingOpt.get();
+            String st = existing.getStatus() != null ? existing.getStatus().trim().toUpperCase(Locale.ROOT) : "";
+            if ("REJECTED".equals(st) || "WITHDRAWN".equals(st)) {
+                existing.setParticipantName(registration.getParticipantName());
+                existing.setRegisteredBy(callerUsername);
+                existing.setStatus("PENDING");
+                existing.setRejectionReason(null);
+                existing.setRegistrationDate(LocalDateTime.now());
+                return registrationRepository.save(existing);
+            }
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Đối tượng đã đăng ký nội dung này với trạng thái: " + existing.getStatus());
+        }
 
         registration.setId(null);
         registration.setParticipantType(type);
+        registration.setRegisteredBy(callerUsername);
         registration.setStatus("PENDING");
-        if (registration.getRegistrationDate() == null) {
-            registration.setRegistrationDate(LocalDateTime.now());
-        }
+        registration.setRejectionReason(null);
+        registration.setRegistrationDate(LocalDateTime.now());
 
         return registrationRepository.save(registration);
     }
 
     @Transactional
     public Registration approveRegistration(Long id) {
+        return approveRegistration(id, "admin", true);
+    }
+
+    @Transactional
+    public Registration approveRegistration(Long id, String actorUsername, boolean isAdmin) {
         Registration reg = getRegistrationById(id);
+        assertOrganizerOrAdminOwnership(reg.getCompetitionId(), actorUsername, isAdmin);
+
+        if (!"PENDING".equalsIgnoreCase(reg.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Chỉ có thể duyệt đơn đăng ký đang ở trạng thái PENDING (hiện tại: " + reg.getStatus() + ")");
+        }
+
+        Map<String, Object> rule = tournamentClient.getCompetitionRule(reg.getCompetitionId());
+        Integer maxParticipants = rule != null ? parseIntField(rule.get("maxParticipants")) : null;
+        if (maxParticipants != null && maxParticipants > 0) {
+            long currentCount = participantRepository.findByCompetitionId(reg.getCompetitionId()).size();
+            if (currentCount >= maxParticipants) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Nội dung thi đấu #" + reg.getCompetitionId() + " đã đạt giới hạn tối đa " + maxParticipants + " đối tượng tham dự");
+            }
+        }
+
         reg.setStatus("APPROVED");
         reg.setRejectionReason(null);
         Registration savedReg = registrationRepository.save(reg);
 
-        // Tu dong tao Participant cho noi dung thi dau
         participantRepository.findByCompetitionIdAndParticipantTypeAndReferenceId(
                 reg.getCompetitionId(), reg.getParticipantType(), reg.getParticipantReferenceId()
         ).orElseGet(() -> {
@@ -176,10 +319,156 @@ public class RegistrationService {
 
     @Transactional
     public Registration rejectRegistration(Long id, String reason) {
+        return rejectRegistration(id, reason, "admin", true);
+    }
+
+    @Transactional
+    public Registration rejectRegistration(Long id, String reason, String actorUsername, boolean isAdmin) {
         Registration reg = getRegistrationById(id);
+        assertOrganizerOrAdminOwnership(reg.getCompetitionId(), actorUsername, isAdmin);
+
+        if ("WITHDRAWN".equalsIgnoreCase(reg.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể từ chối đơn đăng ký đã được rút");
+        }
+
+        if ("APPROVED".equalsIgnoreCase(reg.getStatus())) {
+            deleteParticipantIfNoMatches(reg);
+        }
+
         reg.setStatus("REJECTED");
         reg.setRejectionReason(reason);
         return registrationRepository.save(reg);
+    }
+
+    @Transactional
+    public Registration withdrawRegistration(Long id, String actorUsername, boolean isAdmin) {
+        if (actorUsername == null || actorUsername.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Full authentication is required to withdraw registration");
+        }
+        Registration reg = getRegistrationById(id);
+
+        if (!isAdmin) {
+            boolean isSubmitter = reg.getRegisteredBy() != null && reg.getRegisteredBy().equalsIgnoreCase(actorUsername);
+            if (!isSubmitter) {
+                boolean isLegacyOwner = false;
+                if (reg.getRegisteredBy() == null || reg.getRegisteredBy().isBlank()) {
+                    isLegacyOwner = checkEntityOwnershipFallback(reg, actorUsername);
+                }
+                if (!isLegacyOwner) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Access Denied: Bạn chỉ có thể rút đơn đăng ký do tài khoản của mình nộp");
+                }
+            }
+        }
+
+        String st = reg.getStatus() != null ? reg.getStatus().trim().toUpperCase(Locale.ROOT) : "";
+        if ("REJECTED".equals(st) || "WITHDRAWN".equals(st)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Đơn đăng ký ở trạng thái " + reg.getStatus() + " không thể rút");
+        }
+        if ("APPROVED".equals(st)) {
+            deleteParticipantIfNoMatches(reg);
+        }
+
+        reg.setStatus("WITHDRAWN");
+        reg.setRejectionReason(null);
+        return registrationRepository.save(reg);
+    }
+
+    private void assertOrganizerOrAdminOwnership(Long competitionId, String actorUsername, boolean isAdmin) {
+        if (isAdmin) {
+            return;
+        }
+        if (actorUsername == null || actorUsername.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Full authentication is required");
+        }
+        Map<String, Object> comp = tournamentClient.getCompetitionById(competitionId);
+        if (comp == null || comp.get("tournamentId") == null) {
+            throw new ResourceNotFoundException("Competition not found with id: " + competitionId);
+        }
+        Long tournamentId = parseLongField(comp.get("tournamentId"));
+        Map<String, Object> tour = tournamentClient.getTournamentById(tournamentId);
+        String owner = tour != null && tour.get("organizerUsername") != null
+                ? String.valueOf(tour.get("organizerUsername"))
+                : null;
+        if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(actorUsername)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access Denied: Bạn không phải ban tổ chức sở hữu giải đấu #" + tournamentId);
+        }
+    }
+
+    private void deleteParticipantIfNoMatches(Registration reg) {
+        Optional<Participant> participantOpt = participantRepository.findByCompetitionIdAndParticipantTypeAndReferenceId(
+                reg.getCompetitionId(), reg.getParticipantType(), reg.getParticipantReferenceId());
+        if (participantOpt.isEmpty()) {
+            return;
+        }
+        Participant participant = participantOpt.get();
+        if (matchRepository != null) {
+            boolean hasMatchById = participant.getId() != null
+                    && matchRepository.existsByParticipant1IdOrParticipant2Id(participant.getId(), participant.getId());
+            boolean hasMatchByName = participant.getDisplayName() != null
+                    && matchRepository.findByCompetitionId(reg.getCompetitionId()).stream().anyMatch(m ->
+                            (m.getParticipant1() != null && m.getParticipant1().equalsIgnoreCase(participant.getDisplayName()))
+                                    || (m.getParticipant2() != null && m.getParticipant2().equalsIgnoreCase(participant.getDisplayName()))
+                    );
+            if (hasMatchById || hasMatchByName) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Không thể hủy tư cách tham dự vì '" + participant.getDisplayName() + "' đã có lịch thi đấu");
+            }
+        }
+        participantRepository.delete(participant);
+    }
+
+    private boolean checkEntityOwnershipFallback(Registration reg, String actorUsername) {
+        try {
+            Map<String, Object> entity = "TEAM".equalsIgnoreCase(reg.getParticipantType())
+                    ? tournamentClient.getTeamById(reg.getParticipantReferenceId())
+                    : tournamentClient.getAthleteById(reg.getParticipantReferenceId());
+            Object owner = entity != null ? entity.get("ownerUsername") : null;
+            return owner != null && String.valueOf(owner).equalsIgnoreCase(actorUsername);
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    private Long parseLongField(Object raw) {
+        if (raw == null) return null;
+        try {
+            return Long.valueOf(String.valueOf(raw));
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private Integer parseIntField(Object raw) {
+        if (raw == null) return null;
+        try {
+            return Integer.valueOf(String.valueOf(raw));
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private LocalDate parseLocalDate(Object val) {
+        if (val == null) return null;
+        if (val instanceof LocalDate ld) return ld;
+        if (val instanceof LocalDateTime ldt) return ldt.toLocalDate();
+        if (val instanceof List<?> arr && arr.size() >= 3) {
+            return LocalDate.of(
+                    Integer.parseInt(String.valueOf(arr.get(0))),
+                    Integer.parseInt(String.valueOf(arr.get(1))),
+                    Integer.parseInt(String.valueOf(arr.get(2)))
+            );
+        }
+        String text = String.valueOf(val).trim();
+        if (text.isEmpty() || "null".equalsIgnoreCase(text)) return null;
+        if (text.length() >= 10) text = text.substring(0, 10);
+        try {
+            return LocalDate.parse(text);
+        } catch (Exception ex) {
+            return null;
+        }
     }
 }
 

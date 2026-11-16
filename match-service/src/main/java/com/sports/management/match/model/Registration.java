@@ -5,7 +5,13 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "registrations")
+@Table(
+        name = "registrations",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_reg_comp_type_ref",
+                columnNames = {"competition_id", "participant_type", "participant_reference_id"}
+        )
+)
 public class Registration {
 
     @Id
@@ -13,16 +19,21 @@ public class Registration {
     private Long id;
 
     @NotNull(message = "Competition ID is required")
-    @Column(nullable = false)
+    @Column(name = "competition_id", nullable = false)
     private Long competitionId;
 
     @NotNull(message = "Participant type is required")
+    @Column(name = "participant_type", nullable = false)
     private String participantType; // TEAM, ATHLETE
 
     @NotNull(message = "Participant reference ID is required")
+    @Column(name = "participant_reference_id", nullable = false)
     private Long participantReferenceId; // teamId or athleteId
 
     private String participantName;
+
+    @Column(name = "registered_by", length = 100)
+    private String registeredBy;
 
     private LocalDateTime registrationDate = LocalDateTime.now();
 
@@ -106,6 +117,14 @@ public class Registration {
 
     public void setRejectionReason(String rejectionReason) {
         this.rejectionReason = rejectionReason;
+    }
+
+    public String getRegisteredBy() {
+        return registeredBy;
+    }
+
+    public void setRegisteredBy(String registeredBy) {
+        this.registeredBy = registeredBy;
     }
 }
 

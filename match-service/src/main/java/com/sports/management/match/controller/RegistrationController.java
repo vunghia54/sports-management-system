@@ -6,7 +6,9 @@ import com.sports.management.match.service.RegistrationService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -22,8 +24,12 @@ public class RegistrationController {
     }
 
     @PostMapping("/registrations")
-    public ResponseEntity<Registration> register(@Valid @RequestBody Registration registration) {
-        Registration created = registrationService.register(registration);
+    public ResponseEntity<Registration> register(
+            @Valid @RequestBody Registration registration,
+            Authentication authentication) {
+        String caller = requireAuthenticatedUsername(authentication);
+        boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
+        Registration created = registrationService.register(registration, caller, isAdmin);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
@@ -66,21 +72,50 @@ public class RegistrationController {
     }
 
     @PutMapping("/registrations/{id}/approve")
-    public ResponseEntity<Registration> approveRegistration(@PathVariable Long id) {
-        return ResponseEntity.ok(registrationService.approveRegistration(id));
+    public ResponseEntity<Registration> approveRegistration(
+            @PathVariable Long id,
+            Authentication authentication) {
+        String actor = requireAuthenticatedUsername(authentication);
+        boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
+        return ResponseEntity.ok(registrationService.approveRegistration(id, actor, isAdmin));
     }
 
     @PutMapping("/registrations/{id}/reject")
     public ResponseEntity<Registration> rejectRegistration(
             @PathVariable Long id,
-            @RequestBody(required = false) Map<String, String> body) {
+            @RequestBody(required = false) Map<String, String> body,
+            Authentication authentication) {
+        String actor = requireAuthenticatedUsername(authentication);
+        boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
         String reason = (body != null && body.containsKey("reason")) ? body.get("reason") : "Registration rejected by organizer";
-        return ResponseEntity.ok(registrationService.rejectRegistration(id, reason));
+        return ResponseEntity.ok(registrationService.rejectRegistration(id, reason, actor, isAdmin));
+    }
+
+    @PutMapping("/registrations/{id}/withdraw")
+    public ResponseEntity<Registration> withdrawRegistration(
+            @PathVariable Long id,
+            Authentication authentication) {
+        String actor = requireAuthenticatedUsername(authentication);
+        boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
+        return ResponseEntity.ok(registrationService.withdrawRegistration(id, actor, isAdmin));
     }
 
     @GetMapping("/participants/competition/{competitionId}")
     public ResponseEntity<List<Participant>> getParticipantsByCompetition(@PathVariable Long competitionId) {
         return ResponseEntity.ok(registrationService.getParticipantsByCompetition(competitionId));
+    }
+
+    private String requireAuthenticatedUsername(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication.getName() == null || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Full authentication is required");
+        }
+        return authentication.getName();
+    }
+
+    private boolean hasRole(Authentication authentication, String role) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> role.equalsIgnoreCase(a.getAuthority()));
     }
 }
 
