@@ -3,16 +3,26 @@ package com.sports.management.athlete.service;
 import com.sports.management.athlete.model.Athlete;
 import com.sports.management.athlete.repository.AthleteRepository;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class AthleteService {
+
+    public static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+            "id", "fullName", "dateOfBirth", "gender", "nationality", "healthStatus"
+    );
+
+    public static final Set<String> ALLOWED_DIRECTIONS = Set.of("asc", "desc");
 
     public record AthletePage(
             List<Athlete> content,
@@ -37,9 +47,20 @@ public class AthleteService {
     }
 
     public List<Athlete> filterAthletes(String name, String keyword, String gender, String healthStatus, String sortBy, String direction) {
-        Sort sort = "desc".equalsIgnoreCase(direction)
-                ? Sort.by(sortBy != null ? sortBy : "id").descending()
-                : Sort.by(sortBy != null ? sortBy : "id").ascending();
+        String resolvedSortBy = (sortBy == null || sortBy.isBlank()) ? "id" : sortBy.trim();
+        if (!ALLOWED_SORT_FIELDS.contains(resolvedSortBy)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "sortBy không hợp lệ: '" + sortBy + "'. Cho phép: " + ALLOWED_SORT_FIELDS);
+        }
+        String resolvedDirection = (direction == null || direction.isBlank()) ? "asc" : direction.trim().toLowerCase(Locale.ROOT);
+        if (!ALLOWED_DIRECTIONS.contains(resolvedDirection)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "direction không hợp lệ: '" + direction + "'. Cho phép: asc, desc");
+        }
+
+        Sort sort = "desc".equals(resolvedDirection)
+                ? Sort.by(resolvedSortBy).descending()
+                : Sort.by(resolvedSortBy).ascending();
 
         String kw = keyword != null && !keyword.isBlank() ? keyword.trim().toLowerCase() : null;
 

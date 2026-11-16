@@ -125,8 +125,12 @@ class TeamServiceAndControllerTest {
     void removeMember_allowsOwnerManagerAndForbidsNonOwner() throws Exception {
         Team t = new Team(1L, "CLB Hà Nội", "HNFC", "HLV A", "0901", "hn@fc.vn", null, LocalDateTime.now());
         t.setOwnerUsername("manager1");
+        TeamMember member = new TeamMember();
+        member.setId(77L);
+        member.setTeamId(1L);
+        member.setAthleteId(10L);
         when(teamRepository.findById(1L)).thenReturn(Optional.of(t));
-        when(memberRepository.existsById(77L)).thenReturn(true);
+        when(memberRepository.findById(77L)).thenReturn(Optional.of(member));
 
         var ownerManager = new UsernamePasswordAuthenticationToken(
                 "manager1", "n/a", List.of(new SimpleGrantedAuthority("ROLE_TEAM_MANAGER")));

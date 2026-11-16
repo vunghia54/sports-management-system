@@ -1,20 +1,25 @@
 package com.sports.management.team.model;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "team_members")
+@Table(
+        name = "team_members",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"team_id", "athlete_id"})
+)
 public class TeamMember {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(name = "team_id", nullable = false)
     private Long teamId;
 
-    @Column(nullable = false)
+    @NotNull(message = "Athlete ID is required")
+    @Column(name = "athlete_id", nullable = false)
     private Long athleteId;
 
     private String athleteName;

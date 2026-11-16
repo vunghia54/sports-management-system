@@ -14,5 +14,7 @@ public interface ParticipantRepository extends JpaRepository<Participant, Long> 
 
     Optional<Participant> findByCompetitionIdAndParticipantTypeAndReferenceId(
             Long competitionId, String participantType, Long referenceId);
+
+    boolean existsByParticipantTypeAndReferenceId(String participantType, Long referenceId);
 }
 

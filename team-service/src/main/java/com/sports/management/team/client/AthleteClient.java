@@ -25,9 +25,16 @@ public class AthleteClient {
     public AthleteClient(
             @LoadBalanced RestClient.Builder loadBalancedRestClientBuilder,
             @Value("${services.athlete.url:http://athlete-service}") String athleteServiceUrl) {
-        this.athleteServiceUrl = athleteServiceUrl;
-        this.restClient = loadBalancedRestClientBuilder
-                .baseUrl(athleteServiceUrl)
+        String candidate = (athleteServiceUrl == null || athleteServiceUrl.isBlank())
+                ? "http://athlete-service"
+                : athleteServiceUrl.trim();
+        this.athleteServiceUrl = candidate.endsWith("/") ? candidate.substring(0, candidate.length() - 1) : candidate;
+        RestClient.Builder builder = (this.athleteServiceUrl.startsWith("http://localhost")
+                || this.athleteServiceUrl.startsWith("http://127.0.0.1"))
+                ? RestClient.builder()
+                : loadBalancedRestClientBuilder;
+        this.restClient = builder
+                .baseUrl(this.athleteServiceUrl)
                 .build();
     }
 

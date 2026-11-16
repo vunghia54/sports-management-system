@@ -105,6 +105,13 @@ public class RegistrationController {
         return ResponseEntity.ok(registrationService.getParticipantsByCompetition(competitionId));
     }
 
+    @GetMapping("/participants/usage")
+    public ResponseEntity<Map<String, Object>> getParticipantUsage(
+            @RequestParam String participantType,
+            @RequestParam Long referenceId) {
+        return ResponseEntity.ok(registrationService.getParticipantUsage(participantType, referenceId));
+    }
+
     private String requireAuthenticatedUsername(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()
                 || authentication.getName() == null || authentication.getName().isBlank()) {

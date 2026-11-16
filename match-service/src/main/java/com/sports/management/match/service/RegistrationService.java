@@ -470,5 +470,23 @@ public class RegistrationService {
             return null;
         }
     }
+
+    public Map<String, Object> getParticipantUsage(String participantType, Long referenceId) {
+        if (participantType == null || participantType.isBlank() || referenceId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "participantType và referenceId là bắt buộc");
+        }
+        String normalizedType = participantType.trim().toUpperCase(Locale.ROOT);
+        boolean hasActiveRegistrations = registrationRepository.existsByParticipantTypeAndParticipantReferenceIdAndStatusIn(
+                normalizedType, referenceId, List.of("PENDING", "APPROVED")
+        );
+        boolean hasParticipants = participantRepository.existsByParticipantTypeAndReferenceId(normalizedType, referenceId);
+        return Map.of(
+                "participantType", normalizedType,
+                "referenceId", referenceId,
+                "hasActiveRegistrations", hasActiveRegistrations,
+                "hasParticipants", hasParticipants,
+                "inUse", hasActiveRegistrations || hasParticipants
+        );
+    }
 }
 

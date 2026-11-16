@@ -9,4 +9,10 @@ import java.util.List;
 @Repository
 public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     List<TeamMember> findByTeamId(Long teamId);
+
+    boolean existsByTeamIdAndAthleteId(Long teamId, Long athleteId);
+
+    boolean existsByTeamIdAndJerseyNumber(Long teamId, Integer jerseyNumber);
+
+    boolean existsByAthleteId(Long athleteId);
 }
