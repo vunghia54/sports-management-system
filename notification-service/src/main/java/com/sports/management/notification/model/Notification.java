@@ -1,6 +1,7 @@
 package com.sports.management.notification.model;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
 import java.time.LocalDateTime;
 
 @Entity
@@ -11,12 +12,15 @@ public class Notification {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "Recipient is required")
     @Column(nullable = false)
     private String recipient;
 
+    @NotBlank(message = "Title is required")
     @Column(nullable = false)
     private String title;
 
+    @NotBlank(message = "Message is required")
     @Column(nullable = false, length = 1000)
     private String message;
 

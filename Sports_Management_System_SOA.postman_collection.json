@@ -1092,11 +1092,12 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"matchId\": {{matchId}},\n  \"tournamentId\": {{tournamentId}},\n  \"eventType\": \"RESULT_CONFIRMED\",\n  \"message\": \"Kết quả trận đấu Hà Nội FC 2-1 Viettel đã được Trọng tài xác nhận và cập nhật BXH!\"\n}"
+              "raw": "{\n  \"recipient\": \"ALL_USERS\",\n  \"title\": \"Kết quả trận đấu đã được xác nhận\",\n  \"message\": \"Kết quả trận đấu Hà Nội FC 2-1 Viettel đã được Trọng tài xác nhận và cập nhật BXH!\",\n  \"type\": \"RESULT_CONFIRMED\",\n  \"referenceId\": {{matchId}}\n}"
             },
             "url": {
               "raw": "{{notificationUrl}}/api/v1/notifications",
@@ -1119,9 +1120,12 @@
           ]
         },
         {
-          "name": "8.2 Đánh dấu Đã đọc Thông báo (PATCH /{id}/read) [TH3]",
+          "name": "8.2 Đánh dấu Đã đọc Thông báo theo User (PUT/PATCH /{id}/read) [TH3, B5]",
           "request": {
-            "method": "PATCH",
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
             "url": {
               "raw": "{{notificationUrl}}/api/v1/notifications/{{notificationId}}/read",
               "host": ["{{notificationUrl}}"],

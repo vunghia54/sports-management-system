@@ -3886,7 +3886,7 @@ function renderNotificationsTableInner() {
               <td class="tabular-nums"><strong>#${String(startIdx + idx + 1).padStart(2, '0')}</strong></td>
               <td><span class="badge badge-primary">${escapeHtml(formatEventType(n.eventType))}</span></td>
               <td>${escapeHtml(n.message || n.title || '')}</td>
-              <td>${n.isRead ? '<span class="badge badge-neutral">Đã đọc</span>' : `<button class="btn btn-secondary btn-sm" onclick="markNotificationRead(${n.id}, this)">Đánh dấu đọc</button>`}</td>
+              <td>${n.isRead ? '<span class="badge badge-neutral">Đã đọc</span>' : (AppState.user ? `<button class="btn btn-secondary btn-sm" onclick="markNotificationRead(${n.id}, this)">Đánh dấu đọc</button>` : '<span class="badge badge-warning">Chưa đọc</span>')}</td>
             </tr>
           `).join('') || `<tr><td colspan="4" class="state-empty-box">${slice.loading ? 'Đang tải thông báo...' : 'Chưa có thông báo nào.'}</td></tr>`}
         </tbody>

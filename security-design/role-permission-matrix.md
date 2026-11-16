@@ -69,6 +69,7 @@ Hệ thống Quản lý Thể thao định nghĩa 5 vai trò rõ rệt (`ROLE_AD
 | 18 | `PATCH` | `/api/v1/results/{id}` | Result | Bảo vệ | Trọng tài (`notes` khi chưa confirm); Organizer/Admin được mở lại `PENDING_CONFIRMATION` | Mở lại/xóa kết quả tự tính lại BXH | 200 OK / 400 / 403 |
 | 19 | `POST` | `/api/v1/rankings/competition/{id}/recalculate` | Ranking | Bảo vệ | `ROLE_ADMIN`, `ROLE_ORGANIZER` (sở hữu giải đấu cha), `ROLE_INTERNAL_RESULT_SYNC` | Trọng tài (`REFEREE`) và Organizer khác không được tính lại BXH giải không sở hữu | 200 OK / 400 / 401 / 403 / 404 |
 | 20 | `PUT` | `/api/v1/rankings/competition/{id}/items` | Ranking | Bảo vệ | `ROLE_ADMIN`, `ROLE_ORGANIZER` (sở hữu giải đấu cha) | Cấm `ROLE_INTERNAL_RESULT_SYNC`, Trọng tài và Organizer không sở hữu giải | 200 OK / 400 / 401 / 403 / 404 |
+| 21 | `PUT/PATCH` | `/api/v1/notifications/{id}/read` | Notification | Bảo vệ | Mọi người dùng đã đăng nhập | Theo dõi trạng thái đọc riêng theo từng user (`notification_reads`); user khác không bị mất trạng thái chưa đọc của thông báo `ALL_USERS` | 200 OK / 401 / 403 / 404 |
 
 ---
 
