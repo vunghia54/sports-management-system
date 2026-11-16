@@ -1,6 +1,9 @@
 # BÁO CÁO TỔNG HỢP & KIỂM TRA ĐỐI CHIẾU THỰC HÀNH 1 – THỰC HÀNH 7
 ## Đề tài: Xây dựng và Phát triển Hệ thống Quản lý Thi đấu Thể thao theo Kiến trúc Hướng Dịch vụ (SOA / Microservices)
 
+> **Ghi chú cập nhật (Ngày lập báo cáo đối chiếu học phần ban đầu: 09/11/2026 — Đã rà soát đồng bộ ngày 16/11/2026):**  
+> Các kết quả `ĐẠT` dưới đây phản ánh lần đối chiếu học phần TH1–TH7 tại thời điểm ban đầu. Mã nguồn sau đó đã được rà soát, chuẩn hóa 5 vai trò RBAC, siết chặt bảo mật và sửa các lỗi logic qua hai vòng (**A1–B6** và **C1–C5+**); kết quả kiểm thử tự động và E2E mới nhất xem chi tiết tại [`KET_QUA_SUA_LOI.md`](KET_QUA_SUA_LOI.md).
+
 ---
 
 ## 1. Tổng quan Kiến trúc Hệ thống (10 Microservices độc lập)
@@ -26,19 +29,19 @@ Hệ thống được thiết kế theo mô hình **Microservices & Database-per
 
 | Bài Thực Hành | Nội dung yêu cầu | Trạng thái trên toàn bộ 8 Business Services + Eureka + Gateway |
 | :--- | :--- | :--- |
-| **TH1** | Xây dựng Web Service cơ bản, CRUD RESTful API (`GET`, `GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`), API `/hello`, `/info`, kiểm thử Postman/Swagger | **ĐẠT 100%** trên cả 8 business services (`tournament`, `team`, `athlete`, `match`, `result`, `ranking`, `notification`, `auth`). |
-| **TH2** | Phân tích thiết kế SOA, tách dịch vụ theo miền nghiệp vụ, kết nối CSDL quan hệ (JPA/Hibernate) theo mô hình **Database-per-Service** | **ĐẠT 100%**: 8 CSDL độc lập (`tournament_db`, `team_db`, `athlete_db`, `match_db`, `result_db`, `ranking_db`, `notification_db`, `auth_db`), không dùng khóa ngoại cứng liên CSDL. |
-| **TH3** | RESTful nâng cao: Tìm kiếm, Lọc nhiều tiêu chí, Sắp xếp, Phân trang (`/paged`), Thống kê (`/statistics`), Cập nhật một phần (`PATCH /{id}`), Bean Validation (`@Valid`), Xử lý lỗi tập trung (`@RestControllerAdvice`), API Versioning (`/api/v1/...`), OpenAPI/Swagger | **ĐẠT 100%** trên tất cả các service. |
-| **TH4** | Giao tiếp đồng bộ (REST Client) và bất đồng bộ (RabbitMQ Message Broker - Event-Driven Architecture) giữa các dịch vụ | **ĐẠT 100%**: Giao tiếp REST liên thông giữa `Team -> Athlete`, `Match -> Tournament/Team/Athlete`, `Result -> Match/Ranking`, `Ranking -> Tournament/Match/Result`, cùng luồng bất đồng bộ `MatchEventProducer -> RabbitMQ -> NotificationConsumer`. |
-| **TH5** | Bảo mật Web Service & Microservices: Đăng ký/Đăng nhập BCrypt, cấp phát JWT (`HMAC-SHA256`), phân quyền RBAC (`ROLE_ADMIN`, `ROLE_ORGANIZER`, `ROLE_REFEREE`, `ROLE_USER`), kiểm soát quyền sở hữu tài nguyên (`ownerUsername` Resource Ownership) và lan truyền Token (Token Propagation) | **ĐẠT 100%**: Tất cả 8 services đều tích hợp `JwtTokenProvider`, `JwtAuthenticationFilter` và `SecurityConfig`. |
-| **TH6** | Đóng gói Containerization (`Dockerfile` cho từng service) và điều phối toàn hệ thống bằng `docker-compose.yml` (PostgreSQL, RabbitMQ, Eureka, Gateway, các Microservices) | **ĐẠT 100%**. |
-| **TH7** | **Service Registry (Netflix Eureka Server `:8761`)**, đăng ký & khám phá dịch vụ động, gọi liên dịch vụ qua tên logic (`@LoadBalanced RestClient`), chạy đa phiên bản (**Multi-Instance `8081` & `8091`**), **Client-Side Load Balancing (Round-Robin)**, **Failover** và tự động phục hồi | **ĐẠT 100%** (Đã kiểm thử tự động `TC01 -> TC06` với mã thoát `0`). |
+| **TH1** | Xây dựng Web Service cơ bản, CRUD RESTful API (`GET`, `GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`), API `/hello`, `/info`, kiểm thử Postman/Swagger | **ĐẠT** (09/11/2026) trên cả 8 business services (`tournament`, `team`, `athlete`, `match`, `result`, `ranking`, `notification`, `auth`; kiểm thử hiện tại xem `KET_QUA_SUA_LOI.md`). |
+| **TH2** | Phân tích thiết kế SOA, tách dịch vụ theo miền nghiệp vụ, kết nối CSDL quan hệ (JPA/Hibernate) theo mô hình **Database-per-Service** | **ĐẠT** (09/11/2026): 8 CSDL độc lập (`tournament_db`, `team_db`, `athlete_db`, `match_db`, `result_db`, `ranking_db`, `notification_db`, `auth_db`), không dùng khóa ngoại cứng liên CSDL. |
+| **TH3** | RESTful nâng cao: Tìm kiếm, Lọc nhiều tiêu chí, Sắp xếp, Phân trang (`/paged`), Thống kê (`/statistics`), Cập nhật một phần (`PATCH /{id}`), Bean Validation (`@Valid`), Xử lý lỗi tập trung (`@RestControllerAdvice`), API Versioning (`/api/v1/...`), OpenAPI/Swagger | **ĐẠT** (09/11/2026; đã bổ sung `GlobalExceptionHandler` & allowlist `sortBy` trên các service còn thiếu ở các vòng sửa lỗi — xem `KET_QUA_SUA_LOI.md`). |
+| **TH4** | Giao tiếp đồng bộ (REST Client) và bất đồng bộ (RabbitMQ Message Broker - Event-Driven Architecture) giữa các dịch vụ | **ĐẠT** (09/11/2026; đã chuẩn hóa exchange `sports.exchange`, routing key `match.finished` và `AFTER_COMMIT` + chống trùng ở Vòng 1–2 — xem `KET_QUA_SUA_LOI.md`). |
+| **TH5** | Bảo mật Web Service & Microservices: Đăng ký/Đăng nhập BCrypt, cấp phát JWT (`HMAC-SHA256`), phân quyền RBAC **5 vai trò** (`ROLE_ADMIN`, `ROLE_ORGANIZER`, `ROLE_REFEREE`, `ROLE_TEAM_MANAGER`, `ROLE_VIEWER`), kiểm soát quyền sở hữu tài nguyên (`ownerUsername` Resource Ownership) và lan truyền Token | **ĐẠT** (09/11/2026; đã bổ sung `JWT_SECRET` bắt buộc, `jwt.expiration=3600s` và kiểm soát sở hữu chặt chẽ ở các vòng sửa lỗi sau đó — xem `KET_QUA_SUA_LOI.md`). |
+| **TH6** | Đóng gói Containerization (`Dockerfile` cho từng service) và điều phối toàn hệ thống bằng `docker-compose.yml` (PostgreSQL, RabbitMQ, Eureka, Gateway, các Microservices) | **ĐẠT** (09/11/2026; đã cập nhật truyền `JWT_SECRET` và `CORS_ALLOWED_ORIGINS` qua biến môi trường). |
+| **TH7** | **Service Registry (Netflix Eureka Server `:8761`)**, đăng ký & khám phá dịch vụ động, gọi liên dịch vụ qua tên logic (`@LoadBalanced RestClient`), chạy đa phiên bản (**Multi-Instance `8081` & `8091`**), **Client-Side Load Balancing (Round-Robin)**, **Failover** và tự động phục hồi | **ĐẠT** (09/11/2026 theo kịch bản `TC01 -> TC06` của `test_th7_service_discovery.ps1`, mã thoát `0`; script đã được cập nhật phù hợp phân quyền mới — xem `KET_QUA_SUA_LOI.md`). |
 
 ---
 
 ## 3. Chi tiết Giao tiếp Liên Dịch vụ qua Eureka Service Discovery (`@LoadBalanced RestClient`)
 
-Không còn bất kỳ lời gọi trực tiếp qua URL cứng (`localhost:808x`) nào giữa các service; toàn bộ đều sử dụng tên dịch vụ đăng ký trên Eureka:
+Các lời gọi liên dịch vụ sử dụng tên logic đăng ký trên Eureka thông qua `@LoadBalanced RestClient` (địa chỉ mặc định `http://<service-id>`, cho phép cấu hình qua biến `services.*.url` khi chạy độc lập/kiểm thử):
 
 1. **`TEAM-SERVICE` $\rightarrow$ `ATHLETE-SERVICE`**:
    - Class: `team-service/.../client/AthleteClient.java`
@@ -76,15 +79,15 @@ Tất cả dịch vụ hiển thị trạng thái `UP` trên Eureka Server (`htt
 - `RANKING-SERVICE`: `ranking-service:8088 [UP]`
 - `NOTIFICATION-SERVICE`: `notification-service:8084 [UP]`
 
-### 4.2. Kết quả Luồng Nghiệp vụ Liên thông 8 Services (`TC02`)
-- **[1. AUTH-SERVICE]**: Đăng ký & đăng nhập JWT thành công (`Role = ROLE_ORGANIZER`).
-- **[2. TOURNAMENT-SERVICE]**: Tạo `Sport`, `Tournament`, `Competition` thành công qua API Gateway.
-- **[3. ATHLETE-SERVICE]**: Tạo hồ sơ vận động viên `Nguyen Quang Hai` thành công.
-- **[4. TEAM-SERVICE $\rightarrow$ ATHLETE-SERVICE]**: Tạo 2 đội (`CLB Ha Noi`, `CLB Viettel`) và xác thực VĐV `Nguyen Quang Hai` qua Eureka thành công.
-- **[5. MATCH-SERVICE $\rightarrow$ TOURNAMENT & TEAM-SERVICE]**: Duyệt đăng ký 2 đội, tạo `Participant` và tạo `Match` thành công (Instance xử lý: `tournament-service:8091`).
-- **[6. RESULT-SERVICE $\rightarrow$ MATCH & RANKING-SERVICE]**: Ghi nhận & xác nhận tỉ số `3-1` (`Status: CONFIRMED`).
+### 4.2. Kết quả Luồng Nghiệp vụ Liên thông 8 Services (`TC02` — theo lần chạy đối chiếu & đã đồng bộ với luồng phân quyền 5 vai trò mới)
+- **[1. AUTH-SERVICE]**: Đăng nhập tài khoản Organizer hợp lệ (tài khoản `organizer1` được Admin cấp quyền; đăng ký công khai chỉ nhận `ROLE_VIEWER` hoặc `ROLE_TEAM_MANAGER`) và đăng nhập `ROLE_TEAM_MANAGER` (`manager1`) / `ROLE_REFEREE` (`referee1`).
+- **[2. TOURNAMENT-SERVICE]**: Organizer tạo `Sport`, `Tournament`, `Competition` và cấu hình `ROUND_ROBIN` qua API Gateway.
+- **[3. ATHLETE-SERVICE]**: Team Manager tạo hồ sơ vận động viên `Nguyen Quang Hai` thành công.
+- **[4. TEAM-SERVICE $\rightarrow$ ATHLETE-SERVICE]**: Team Manager tạo 2 đội (`CLB Ha Noi`, `CLB Viettel`) và thêm VĐV thuộc quyền sở hữu qua Eureka thành công.
+- **[5. MATCH-SERVICE $\rightarrow$ TOURNAMENT & TEAM-SERVICE]**: Team Manager đăng ký tham gia, Organizer duyệt đăng ký 2 đội (tạo `Participant`), tạo/xếp lịch `Match` và gán trọng tài `referee1` (Instance xử lý: `tournament-service:8091`).
+- **[6. RESULT-SERVICE $\rightarrow$ MATCH & RANKING-SERVICE]**: Trọng tài chuyển trận sang `ONGOING` & ghi nhận tỉ số `3-1`, Organizer xác nhận (`Status: CONFIRMED`), `result-service` dùng quyền nội bộ `ROLE_INTERNAL_RESULT_SYNC` chuyển trận sang `FINISHED`.
 - **[7. RANKING-SERVICE]**: Tự động tính lại BXH: Hạng #1 = `CLB Ha Noi` (`Điểm: 3`, `Hiệu số: +2`).
-- **[8. NOTIFICATION-SERVICE]**: Tạo thông báo kết quả trận chung kết thành công.
+- **[8. NOTIFICATION-SERVICE]**: Nhận sự kiện `MatchFinishedEvent` từ `sports.exchange` / `sports.notification.queue` và tạo thông báo kết quả trận đấu (kèm tỉ số, theo dõi trạng thái đọc theo từng user).
 
 ### 4.3. Bảng Thống kê 20 Requests Cân bằng tải Round-Robin (`TC03`)
 
