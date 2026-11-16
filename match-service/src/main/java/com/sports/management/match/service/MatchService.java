@@ -6,6 +6,8 @@ import com.sports.management.match.model.Match;
 import com.sports.management.match.repository.MatchRepository;
 import com.sports.management.messaging.event.MatchFinishedEvent;
 import com.sports.management.messaging.producer.MatchEventProducer;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -23,15 +25,26 @@ public class MatchService {
     private final MatchRepository matchRepository;
     private final TournamentClient tournamentClient;
     private final MatchEventProducer matchEventProducer;
+    private final ApplicationEventPublisher eventPublisher;
 
     public MatchService(
             MatchRepository matchRepository,
             TournamentClient tournamentClient,
             MatchEventProducer matchEventProducer) {
+        this(matchRepository, tournamentClient, matchEventProducer, null);
+    }
+
+    @Autowired
+    public MatchService(
+            MatchRepository matchRepository,
+            TournamentClient tournamentClient,
+            MatchEventProducer matchEventProducer,
+            ApplicationEventPublisher eventPublisher) {
 
         this.matchRepository = matchRepository;
         this.tournamentClient = tournamentClient;
         this.matchEventProducer = matchEventProducer;
+        this.eventPublisher = eventPublisher;
     }
 
     // GET ALL
@@ -499,8 +512,12 @@ public class MatchService {
             event.setParticipant1(savedMatch.getParticipant1());
             event.setParticipant2(savedMatch.getParticipant2());
 
-            matchEventProducer.publishMatchFinished(event);
-            System.out.println("[MATCH FINISHED] Event published for Match ID = " + savedMatch.getId());
+            if (eventPublisher != null) {
+                eventPublisher.publishEvent(event);
+            } else {
+                matchEventProducer.publishMatchFinished(event);
+            }
+            System.out.println("[MATCH FINISHED] Event queued for AFTER_COMMIT publish, Match ID = " + savedMatch.getId());
         }
     }
 

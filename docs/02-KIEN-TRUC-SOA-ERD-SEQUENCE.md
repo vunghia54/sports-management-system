@@ -32,7 +32,7 @@ flowchart TB
     end
 
     subgraph InfraLayer["Tầng Hạ Tầng Dữ Liệu & Message Broker"]
-        MQ[("RabbitMQ (:5672)\nmatch.exchange")]
+        MQ[("RabbitMQ (:5672)\nsports.exchange")]
         DB[("8 Independent Databases\n(PostgreSQL 15 / H2 Auto-Server)")]
     end
 

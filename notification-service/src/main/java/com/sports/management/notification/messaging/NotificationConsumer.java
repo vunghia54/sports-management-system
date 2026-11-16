@@ -4,6 +4,7 @@ import com.sports.management.notification.model.Notification;
 import com.sports.management.notification.repository.NotificationRepository;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
@@ -17,7 +18,15 @@ public class NotificationConsumer {
     }
 
     @RabbitListener(queues = RabbitMQConfig.QUEUE_NOTIFICATION)
+    @Transactional
     public void handleMatchFinished(MatchFinishedEvent event) {
+        if (event == null || event.getMatchId() == null) {
+            return;
+        }
+        if (notificationRepository.existsByTypeAndReferenceId("MATCH_FINISHED", event.getMatchId())) {
+            System.out.println(">>> [NOTIFICATION SERVICE] Skipped duplicate MATCH_FINISHED event for Match ID: " + event.getMatchId());
+            return;
+        }
         System.out.println(">>> [NOTIFICATION SERVICE] Received MatchFinishedEvent for Match ID: " + event.getMatchId());
 
         Notification notification = new Notification();

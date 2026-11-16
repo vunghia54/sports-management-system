@@ -93,7 +93,7 @@
 - **Consumer:** `Notification Service`
 - **Exchange:** `sports.exchange` (Topic Exchange)
 - **Queue:** `sports.notification.queue`
-- **Routing Key:** `sports.match.finished`
+- **Routing Key:** `match.finished`
 - **Message Payload (JSON):**
   ```json
   {

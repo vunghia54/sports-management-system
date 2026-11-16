@@ -66,8 +66,8 @@ sequenceDiagram
     activate Match
     Match->>Match: Cập nhật trạng thái trận đấu = FINISHED
     
-    Note over Match,Rabbit: Xuất bản sự kiện bất đồng bộ (Non-blocking)
-    Match->>Rabbit: Publish MatchFinishedEvent (RoutingKey: sports.match.finished)
+    Note over Match,Rabbit: Xuất bản sự kiện bất đồng bộ sau commit (AFTER_COMMIT, Non-blocking)
+    Match->>Rabbit: Publish MatchFinishedEvent (RoutingKey: match.finished)
     Match-->>Referee: 200 OK (Match Finished)
     deactivate Match
 
