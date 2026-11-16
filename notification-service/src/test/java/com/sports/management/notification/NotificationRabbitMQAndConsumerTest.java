@@ -76,19 +76,22 @@ class NotificationRabbitMQAndConsumerTest {
         props.setInferredArgumentType(MatchFinishedEvent.class);
 
         byte[] body = ("{\"event\":\"MATCH_FINISHED\",\"matchId\":88,\"tournamentId\":1,"
-                + "\"participant1\":\"Đội A\",\"participant2\":\"Đội B\"}").getBytes(StandardCharsets.UTF_8);
+                + "\"participant1\":\"Đội A\",\"participant2\":\"Đội B\",\"scoreParticipant1\":2,\"scoreParticipant2\":1}")
+                .getBytes(StandardCharsets.UTF_8);
         Object converted = jsonMessageConverter.fromMessage(new Message(body, props));
 
         assertInstanceOf(MatchFinishedEvent.class, converted);
         MatchFinishedEvent event = (MatchFinishedEvent) converted;
         assertEquals(88L, event.getMatchId());
         assertEquals("Đội A", event.getParticipant1());
+        assertEquals(2, event.getScoreParticipant1());
+        assertEquals(1, event.getScoreParticipant2());
     }
 
     @Test
     void consumer_ignoresDuplicateMatchFinishedEventsForSameMatchId() {
-        MatchFinishedEvent event1 = new MatchFinishedEvent("MATCH_FINISHED", 500L, 1L, "Hà Nội", "Viettel");
-        MatchFinishedEvent event2 = new MatchFinishedEvent("MATCH_FINISHED", 501L, 1L, "Nam Định", "CAHN");
+        MatchFinishedEvent event1 = new MatchFinishedEvent("MATCH_FINISHED", 500L, 1L, "Hà Nội", "Viettel", 2, 1, null, null);
+        MatchFinishedEvent event2 = new MatchFinishedEvent("MATCH_FINISHED", 501L, 1L, "Nam Định", "CAHN", 1, 1, 5, 4);
 
         notificationConsumer.handleMatchFinished(event1);
         notificationConsumer.handleMatchFinished(event1); // redelivery must be ignored
@@ -96,7 +99,9 @@ class NotificationRabbitMQAndConsumerTest {
 
         List<Notification> saved = notificationRepository.findAll();
         assertEquals(2, saved.size());
-        assertEquals(1, saved.stream().filter(n -> Long.valueOf(500L).equals(n.getReferenceId())).count());
-        assertEquals(1, saved.stream().filter(n -> Long.valueOf(501L).equals(n.getReferenceId())).count());
+        Notification n1 = saved.stream().filter(n -> Long.valueOf(500L).equals(n.getReferenceId())).findFirst().orElseThrow();
+        Notification n2 = saved.stream().filter(n -> Long.valueOf(501L).equals(n.getReferenceId())).findFirst().orElseThrow();
+        assertTrue(n1.getMessage().contains("2 - 1"), "Notification message must include match score");
+        assertTrue(n2.getMessage().contains("luân lưu 5 - 4"), "Notification message must include penalty shootout score");
     }
 }

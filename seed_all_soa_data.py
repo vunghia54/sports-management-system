@@ -337,7 +337,7 @@ for m in SEED.get('matches', []):
             'participant2Id': pmap.get(m.get('participant2')),
             'participant1': m.get('participant1'),
             'participant2': m.get('participant2'),
-            'status': m.get('status', 'SCHEDULED')
+            'status': 'ONGOING' if m.get('status') == 'FINISHED' else m.get('status', 'SCHEDULED')
         })
         if res and res.get('id'):
             match_key_to_id[key] = res['id']

@@ -3434,8 +3434,7 @@ function renderMatchDetailPage() {
       </div>
       <div class="page-actions">
         ${canSchedule ? `<button class="btn btn-secondary" onclick="openEditMatchModal(${match.id})">Sửa lịch trận</button>` : ''}
-        ${isAssignedRef && match.status === 'SCHEDULED' ? `<button class="btn btn-secondary" onclick="patchMatchStatusOnly(${match.id}, 'ONGOING', this)">▶ Bắt đầu trận</button>` : ''}
-        ${isAssignedRef && match.status === 'ONGOING' ? `<button class="btn btn-secondary" onclick="patchMatchStatusOnly(${match.id}, 'FINISHED', this)">✓ Kết thúc trận</button>` : ''}
+        ${isAssignedRef && (match.status === 'SCHEDULED' || match.status === 'POSTPONED') ? `<button class="btn btn-secondary" onclick="patchMatchStatusOnly(${match.id}, 'ONGOING', this)">▶ Bắt đầu trận</button>` : ''}
         ${canSubmit ? `<button class="btn btn-primary" onclick="openRecordResultModal(${match.id})">Nhập / Cập nhật tỷ số</button>` : ''}
         ${canApprove && needsSyncRetry ? `<button class="btn btn-warning" onclick="retrySyncResultNow(${res.id}, ${match.id}, this)">↻ Đồng bộ lại Trận & BXH</button>` : ''}
       </div>
@@ -5696,7 +5695,6 @@ function renderMatchFormHtml(editId, m) {
             <select id="mMatchStatus" data-field="status" class="select">
               <option value="SCHEDULED" ${m.status === 'SCHEDULED' ? 'selected' : ''}>Chờ thi đấu</option>
               <option value="ONGOING" ${m.status === 'ONGOING' ? 'selected' : ''}>Đang diễn ra</option>
-              <option value="FINISHED" ${m.status === 'FINISHED' ? 'selected' : ''}>Đã kết thúc</option>
               <option value="POSTPONED" ${m.status === 'POSTPONED' ? 'selected' : ''}>Hoãn thi đấu</option>
               <option value="CANCELLED" ${m.status === 'CANCELLED' ? 'selected' : ''}>Đã hủy</option>
             </select>

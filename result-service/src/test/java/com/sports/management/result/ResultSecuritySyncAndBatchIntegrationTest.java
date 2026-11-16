@@ -301,6 +301,7 @@ class ResultSecuritySyncAndBatchIntegrationTest {
         tournamentGetStatus = 200;
 
         // 7. Owning organizer (organizer1) confirms and spoofed confirmedBy payload is ignored
+        capturedMatchPatchAuthHeaders.clear();
         mockMvc.perform(put("/api/v1/results/" + resultId + "/confirm")
                         .header("Authorization", org1Token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -309,6 +310,10 @@ class ResultSecuritySyncAndBatchIntegrationTest {
                 .andExpect(jsonPath("$.result.status").value("CONFIRMED"))
                 .andExpect(jsonPath("$.result.confirmedBy").value("organizer1"))
                 .andExpect(jsonPath("$.result.syncStatus").value("SYNCED"));
+        assertFalse(capturedMatchPatchAuthHeaders.isEmpty());
+        SignedJWT syncJwt = SignedJWT.parse(capturedMatchPatchAuthHeaders.get(0).replace("Bearer ", ""));
+        assertEquals("ROLE_INTERNAL_RESULT_SYNC", syncJwt.getJWTClaimsSet().getClaim("role"),
+                "Synchronous markMatchFinished during confirm MUST use internal ROLE_INTERNAL_RESULT_SYNC token, not caller JWT");
 
         // 8. Admin can record & confirm on tournament 200 cleanly
         String m2Json = mockMvc.perform(post("/api/v1/results")

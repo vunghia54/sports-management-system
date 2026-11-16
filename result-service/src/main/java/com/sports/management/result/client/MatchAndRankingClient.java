@@ -3,6 +3,7 @@ package com.sports.management.result.client;
 import com.sports.management.exception.PermanentSyncException;
 import com.sports.management.exception.ResourceNotFoundException;
 import com.sports.management.exception.TransientSyncException;
+import com.sports.management.result.security.JwtTokenProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -28,6 +29,7 @@ public class MatchAndRankingClient {
     private final RestClient matchRestClient;
     private final RestClient rankingRestClient;
     private final RestClient tournamentRestClient;
+    private final JwtTokenProvider jwtTokenProvider;
     private final String matchServiceUrl;
     private volatile String lastHandledMatchInstance = "N/A";
 
@@ -35,11 +37,13 @@ public class MatchAndRankingClient {
     public MatchAndRankingClient(
             @LoadBalanced RestClient.Builder loadBalancedRestClientBuilder,
             @Qualifier("defaultRestClientBuilder") RestClient.Builder defaultRestClientBuilder,
+            JwtTokenProvider jwtTokenProvider,
             @Value("${services.match.url:http://match-service}") String matchServiceUrl,
             @Value("${services.ranking.url:http://ranking-service}") String rankingServiceUrl,
             @Value("${services.tournament.url:http://tournament-service}") String tournamentServiceUrl) {
 
         this.matchServiceUrl = matchServiceUrl;
+        this.jwtTokenProvider = jwtTokenProvider;
         this.matchRestClient = buildClient(loadBalancedRestClientBuilder, defaultRestClientBuilder, matchServiceUrl);
         this.rankingRestClient = buildClient(loadBalancedRestClientBuilder, defaultRestClientBuilder, rankingServiceUrl);
         this.tournamentRestClient = buildClient(loadBalancedRestClientBuilder, defaultRestClientBuilder, tournamentServiceUrl);
@@ -49,7 +53,7 @@ public class MatchAndRankingClient {
             RestClient.Builder loadBalancedRestClientBuilder,
             String matchServiceUrl,
             String rankingServiceUrl) {
-        this(loadBalancedRestClientBuilder, loadBalancedRestClientBuilder, matchServiceUrl, rankingServiceUrl, "http://tournament-service");
+        this(loadBalancedRestClientBuilder, loadBalancedRestClientBuilder, null, matchServiceUrl, rankingServiceUrl, "http://tournament-service");
     }
 
     private static RestClient buildClient(
@@ -153,19 +157,43 @@ public class MatchAndRankingClient {
     }
 
     public void markMatchFinished(Long matchId) {
-        markMatchFinished(matchId, null);
+        markMatchFinished(matchId, null, null, null, null);
     }
 
-    public void markMatchFinished(Long matchId, String bearerToken) {
-        String auth = (bearerToken != null && !bearerToken.isBlank()) ? bearerToken : getCurrentAuthHeader();
+    public void markMatchFinished(Long matchId, String ignoredBearerToken) {
+        markMatchFinished(matchId, null, null, null, null);
+    }
+
+    public void markMatchFinished(
+            Long matchId,
+            Integer scoreParticipant1,
+            Integer scoreParticipant2,
+            Integer penaltyScore1,
+            Integer penaltyScore2) {
+        String internalAuth = jwtTokenProvider != null ? jwtTokenProvider.generateInternalSyncToken() : null;
+        if (internalAuth == null || internalAuth.isBlank()) {
+            throw new IllegalStateException("JwtTokenProvider is required to mint ROLE_INTERNAL_RESULT_SYNC token");
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", "FINISHED");
+        if (scoreParticipant1 != null) {
+            body.put("scoreParticipant1", scoreParticipant1);
+        }
+        if (scoreParticipant2 != null) {
+            body.put("scoreParticipant2", scoreParticipant2);
+        }
+        if (penaltyScore1 != null) {
+            body.put("penaltyScore1", penaltyScore1);
+        }
+        if (penaltyScore2 != null) {
+            body.put("penaltyScore2", penaltyScore2);
+        }
         try {
             var requestSpec = matchRestClient.patch()
                     .uri("/api/v1/matches/{id}", matchId)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("status", "FINISHED"));
-            if (auth != null && !auth.isBlank()) {
-                requestSpec.header("Authorization", auth);
-            }
+                    .header("Authorization", internalAuth)
+                    .body(body);
             requestSpec.retrieve().toBodilessEntity();
         } catch (HttpClientErrorException ex) {
             int code = ex.getStatusCode().value();

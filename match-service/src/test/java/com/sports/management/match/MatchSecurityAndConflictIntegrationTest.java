@@ -255,7 +255,7 @@ class MatchSecurityAndConflictIntegrationTest {
                         .content("{\"tournamentId\":1,\"competitionId\":10,\"round\":\"Vòng 1\",\"matchTime\":\"2026-12-10T18:00:00\",\"location\":\"Đổi sân\",\"referee\":\"Trọng Tài Chính\",\"refereeUsername\":\"referee1\",\"participant1Id\":" + c10p1.getId() + ",\"participant2Id\":" + c10p2.getId() + ",\"status\":\"ONGOING\"}"))
                 .andExpect(status().isForbidden());
 
-        // Assigned referee CAN patch status SCHEDULED -> ONGOING -> FINISHED (and keep internal result confirm flow intact)
+        // Assigned referee CAN patch status SCHEDULED/POSTPONED -> ONGOING
         mockMvc.perform(patch("/api/v1/matches/" + org1Match.getId())
                         .header("Authorization", assignedRefToken)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -263,12 +263,31 @@ class MatchSecurityAndConflictIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ONGOING"));
 
+        // Referee CANNOT set status to FINISHED directly -> 403 Forbidden
         mockMvc.perform(patch("/api/v1/matches/" + org1Match.getId())
                         .header("Authorization", assignedRefToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"FINISHED\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("FINISHED"));
+                .andExpect(status().isForbidden());
+
+        // Organizer & Admin CANNOT set FINISHED directly via PATCH or PUT -> 403 Forbidden
+        String org1Token = issueToken("organizer1", "ROLE_ORGANIZER");
+        String adminToken = issueToken("admin", "ROLE_ADMIN");
+        mockMvc.perform(patch("/api/v1/matches/" + org1Match.getId())
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"FINISHED\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/v1/matches/" + org1Match.getId())
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"FINISHED\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/matches/" + org1Match.getId())
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":10,\"round\":\"Vòng 1\",\"matchTime\":\"2026-12-10T18:00:00\",\"location\":\"SVĐ Mỹ Đình\",\"referee\":\"Trọng Tài Chính\",\"refereeUsername\":\"referee1\",\"participant1Id\":" + c10p1.getId() + ",\"participant2Id\":" + c10p2.getId() + ",\"status\":\"FINISHED\"}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -371,11 +390,11 @@ class MatchSecurityAndConflictIntegrationTest {
                         .content("{\"status\":\"CANCELLED\"}"))
                 .andExpect(status().isForbidden());
 
-        // Allowed PATCH status=FINISHED ONLY
+        // Allowed PATCH status=FINISHED with scores ONLY via ROLE_INTERNAL_RESULT_SYNC
         mockMvc.perform(patch("/api/v1/matches/" + org1Match.getId())
                         .header("Authorization", internalSyncToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"FINISHED\"}"))
+                        .content("{\"status\":\"FINISHED\",\"scoreParticipant1\":3,\"scoreParticipant2\":1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("FINISHED"));
     }

@@ -31,9 +31,21 @@ public class NotificationConsumer {
 
         Notification notification = new Notification();
         notification.setRecipient("ALL_USERS");
-        notification.setTitle("Trận đấu đã kết thúc: " + event.getParticipant1() + " vs " + event.getParticipant2());
-        notification.setMessage("Trận đấu thuộc giải đấu #" + event.getTournamentId() + " giữa " 
-                + event.getParticipant1() + " và " + event.getParticipant2() + " đã có kết quả chính thức!");
+        boolean hasScore = event.getScoreParticipant1() != null && event.getScoreParticipant2() != null;
+        boolean hasPenalties = event.getPenaltyScore1() != null && event.getPenaltyScore2() != null;
+        String scoreBadge = hasScore
+                ? " (" + event.getScoreParticipant1() + "-" + event.getScoreParticipant2()
+                        + (hasPenalties ? ", pen " + event.getPenaltyScore1() + "-" + event.getPenaltyScore2() : "")
+                        + ")"
+                : "";
+        String scoreSentence = hasScore
+                ? " Tỉ số: " + event.getScoreParticipant1() + " - " + event.getScoreParticipant2()
+                        + (hasPenalties ? " (luân lưu " + event.getPenaltyScore1() + " - " + event.getPenaltyScore2() + ")" : "")
+                        + "."
+                : "";
+        notification.setTitle("Trận đấu đã kết thúc: " + event.getParticipant1() + " vs " + event.getParticipant2() + scoreBadge);
+        notification.setMessage("Trận đấu thuộc giải đấu #" + event.getTournamentId() + " giữa "
+                + event.getParticipant1() + " và " + event.getParticipant2() + " đã có kết quả chính thức!" + scoreSentence);
         notification.setType("MATCH_FINISHED");
         notification.setReferenceId(event.getMatchId());
         notification.setCreatedAt(LocalDateTime.now());

@@ -357,17 +357,36 @@ public class MatchController {
             Match putCandidate,
             Map<String, Object> patchUpdates) {
 
+        String requestedStatus = resolveRequestedStatus(isPatch, putCandidate, patchUpdates);
+
         if (hasAuthority(auth, "ROLE_ADMIN")) {
+            if ("FINISHED".equalsIgnoreCase(requestedStatus)) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Access Denied: Không được đặt trạng thái trận đấu sang FINISHED trực tiếp; trận chỉ kết thúc khi kết quả được xác nhận chính thức."
+                );
+            }
             assertTournamentExists(targetTournamentId);
             return;
         }
 
         if (hasAuthority(auth, "ROLE_INTERNAL_RESULT_SYNC")) {
-            if (!isPatch || patchUpdates == null || patchUpdates.size() != 1 || !patchUpdates.containsKey("status")) {
+            Set<String> allowedInternalKeys = Set.of(
+                    "status", "scoreParticipant1", "scoreParticipant2", "penaltyScore1", "penaltyScore2"
+            );
+            if (!isPatch || patchUpdates == null || !patchUpdates.containsKey("status")) {
                 throw new ResponseStatusException(
                         HttpStatus.FORBIDDEN,
-                        "Access Denied: Internal result-sync scope may only PATCH match status."
+                        "Access Denied: Internal result-sync scope may only PATCH match status and final score."
                 );
+            }
+            for (String key : patchUpdates.keySet()) {
+                if (!allowedInternalKeys.contains(key)) {
+                    throw new ResponseStatusException(
+                            HttpStatus.FORBIDDEN,
+                            "Access Denied: Internal result-sync scope may not modify field: " + key
+                    );
+                }
             }
             Object rawStatus = patchUpdates.get("status");
             if (rawStatus == null || !"FINISHED".equalsIgnoreCase(String.valueOf(rawStatus).trim())) {
@@ -384,6 +403,12 @@ public class MatchController {
             if (!Objects.equals(existing.getTournamentId(), targetTournamentId)) {
                 assertTournamentOwnership(targetTournamentId, auth.getName());
             }
+            if ("FINISHED".equalsIgnoreCase(requestedStatus)) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Access Denied: Ban tổ chức không được đặt trạng thái trận đấu sang FINISHED trực tiếp; trận chỉ kết thúc khi kết quả được xác nhận chính thức."
+                );
+            }
             return;
         }
 
@@ -397,7 +422,9 @@ public class MatchController {
                 );
             }
 
-            Set<String> allowedRefereeStatuses = Set.of("SCHEDULED", "ONGOING", "FINISHED");
+            String currentStatus = existing.getStatus() != null ? existing.getStatus().trim().toUpperCase(java.util.Locale.ROOT) : "SCHEDULED";
+            boolean canStartFromCurrent = "SCHEDULED".equals(currentStatus) || "POSTPONED".equals(currentStatus);
+
             if (isPatch) {
                 if (patchUpdates != null) {
                     for (String key : patchUpdates.keySet()) {
@@ -409,10 +436,11 @@ public class MatchController {
                         }
                     }
                     Object rawStatus = patchUpdates.get("status");
-                    if (rawStatus != null && !allowedRefereeStatuses.contains(String.valueOf(rawStatus).trim().toUpperCase())) {
+                    String nextStatus = rawStatus != null ? String.valueOf(rawStatus).trim().toUpperCase(java.util.Locale.ROOT) : "";
+                    if (!canStartFromCurrent || !"ONGOING".equals(nextStatus)) {
                         throw new ResponseStatusException(
                                 HttpStatus.FORBIDDEN,
-                                "Access Denied: Trọng tài không được phép đặt trạng thái: " + rawStatus
+                                "Access Denied: Trọng tài chỉ được chuyển trận đấu từ SCHEDULED/POSTPONED sang ONGOING (không được đặt FINISHED trực tiếp)."
                         );
                     }
                 }
@@ -435,11 +463,11 @@ public class MatchController {
                             "Access Denied: Trọng tài chỉ được phép cập nhật trạng thái trận đấu được phân công, không được thay đổi giải đấu, thời gian, sân, đội hoặc phân công trọng tài."
                     );
                 }
-                if (putCandidate.getStatus() == null
-                        || !allowedRefereeStatuses.contains(putCandidate.getStatus().trim().toUpperCase())) {
+                String nextStatus = putCandidate.getStatus() != null ? putCandidate.getStatus().trim().toUpperCase(java.util.Locale.ROOT) : "";
+                if (!canStartFromCurrent || !"ONGOING".equals(nextStatus)) {
                     throw new ResponseStatusException(
                             HttpStatus.FORBIDDEN,
-                            "Access Denied: Trạng thái trận đấu không hợp lệ đối với quyền trọng tài."
+                            "Access Denied: Trọng tài chỉ được chuyển trận đấu từ SCHEDULED/POSTPONED sang ONGOING."
                     );
                 }
             }
@@ -447,6 +475,16 @@ public class MatchController {
         }
 
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access Denied: You do not have permission to modify matches");
+    }
+
+    private String resolveRequestedStatus(boolean isPatch, Match putCandidate, Map<String, Object> patchUpdates) {
+        if (isPatch) {
+            if (patchUpdates != null && patchUpdates.get("status") != null) {
+                return String.valueOf(patchUpdates.get("status")).trim();
+            }
+            return null;
+        }
+        return putCandidate != null && putCandidate.getStatus() != null ? putCandidate.getStatus().trim() : null;
     }
 
     private void assertAuthenticated(Authentication auth) {

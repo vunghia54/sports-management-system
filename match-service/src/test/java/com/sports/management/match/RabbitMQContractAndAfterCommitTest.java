@@ -101,9 +101,13 @@ class RabbitMQContractAndAfterCommitTest {
         verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString(), any(Object.class));
         assertEquals("SCHEDULED", matchRepository.findById(match.getId()).orElseThrow().getStatus());
 
-        // 2. Committed transaction must not publish mid-tx, and publishes to sports.exchange after commit
+        // 2. Committed transaction must not publish mid-tx, and publishes scores to sports.exchange after commit
         txTemplate.executeWithoutResult(status -> {
-            matchService.patchMatch(match.getId(), Map.of("status", "FINISHED"));
+            matchService.patchMatch(match.getId(), Map.of(
+                    "status", "FINISHED",
+                    "scoreParticipant1", 2,
+                    "scoreParticipant2", 1
+            ));
             verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString(), any(Object.class));
         });
 
@@ -111,7 +115,10 @@ class RabbitMQContractAndAfterCommitTest {
                 eq("sports.exchange"),
                 eq("match.finished"),
                 org.mockito.ArgumentMatchers.<MatchFinishedEvent>argThat(
-                        evt -> evt != null && match.getId().equals(evt.getMatchId())
+                        evt -> evt != null
+                                && match.getId().equals(evt.getMatchId())
+                                && Integer.valueOf(2).equals(evt.getScoreParticipant1())
+                                && Integer.valueOf(1).equals(evt.getScoreParticipant2())
                 )
         );
     }

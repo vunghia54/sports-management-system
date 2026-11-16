@@ -9,6 +9,10 @@ public class MatchFinishedEvent implements Serializable {
     private Long tournamentId;
     private String participant1;
     private String participant2;
+    private Integer scoreParticipant1;
+    private Integer scoreParticipant2;
+    private Integer penaltyScore1;
+    private Integer penaltyScore2;
 
     public MatchFinishedEvent() {
     }
@@ -19,6 +23,23 @@ public class MatchFinishedEvent implements Serializable {
         this.tournamentId = tournamentId;
         this.participant1 = participant1;
         this.participant2 = participant2;
+    }
+
+    public MatchFinishedEvent(
+            String event,
+            Long matchId,
+            Long tournamentId,
+            String participant1,
+            String participant2,
+            Integer scoreParticipant1,
+            Integer scoreParticipant2,
+            Integer penaltyScore1,
+            Integer penaltyScore2) {
+        this(event, matchId, tournamentId, participant1, participant2);
+        this.scoreParticipant1 = scoreParticipant1;
+        this.scoreParticipant2 = scoreParticipant2;
+        this.penaltyScore1 = penaltyScore1;
+        this.penaltyScore2 = penaltyScore2;
     }
 
     public String getEvent() {
@@ -59,5 +80,37 @@ public class MatchFinishedEvent implements Serializable {
 
     public void setParticipant2(String participant2) {
         this.participant2 = participant2;
+    }
+
+    public Integer getScoreParticipant1() {
+        return scoreParticipant1;
+    }
+
+    public void setScoreParticipant1(Integer scoreParticipant1) {
+        this.scoreParticipant1 = scoreParticipant1;
+    }
+
+    public Integer getScoreParticipant2() {
+        return scoreParticipant2;
+    }
+
+    public void setScoreParticipant2(Integer scoreParticipant2) {
+        this.scoreParticipant2 = scoreParticipant2;
+    }
+
+    public Integer getPenaltyScore1() {
+        return penaltyScore1;
+    }
+
+    public void setPenaltyScore1(Integer penaltyScore1) {
+        this.penaltyScore1 = penaltyScore1;
+    }
+
+    public Integer getPenaltyScore2() {
+        return penaltyScore2;
+    }
+
+    public void setPenaltyScore2(Integer penaltyScore2) {
+        this.penaltyScore2 = penaltyScore2;
     }
 }

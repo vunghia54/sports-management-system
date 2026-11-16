@@ -111,6 +111,8 @@
     "participant2": "CLB Thể Công Viettel",
     "scoreParticipant1": 2,
     "scoreParticipant2": 1,
+    "penaltyScore1": null,
+    "penaltyScore2": null,
     "timestamp": "2026-11-02T16:50:00"
   }
   ```

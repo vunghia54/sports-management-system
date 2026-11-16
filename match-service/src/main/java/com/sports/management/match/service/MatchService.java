@@ -317,6 +317,18 @@ public class MatchService {
             assertValidStatusTransition(existingMatch.getStatus(), nextStatus);
             candidate.setStatus(nextStatus);
         }
+        if (updates.containsKey("scoreParticipant1") && updates.get("scoreParticipant1") != null) {
+            candidate.setScoreParticipant1(parseOptionalInt(updates.get("scoreParticipant1"), "Invalid scoreParticipant1"));
+        }
+        if (updates.containsKey("scoreParticipant2") && updates.get("scoreParticipant2") != null) {
+            candidate.setScoreParticipant2(parseOptionalInt(updates.get("scoreParticipant2"), "Invalid scoreParticipant2"));
+        }
+        if (updates.containsKey("penaltyScore1") && updates.get("penaltyScore1") != null) {
+            candidate.setPenaltyScore1(parseOptionalInt(updates.get("penaltyScore1"), "Invalid penaltyScore1"));
+        }
+        if (updates.containsKey("penaltyScore2") && updates.get("penaltyScore2") != null) {
+            candidate.setPenaltyScore2(parseOptionalInt(updates.get("penaltyScore2"), "Invalid penaltyScore2"));
+        }
 
         if (validateTourAndComp || validateTimeBounds) {
             Map<String, Object> tournament = requireTournamentMap(candidate.getTournamentId());
@@ -490,6 +502,10 @@ public class MatchService {
         copy.setParticipant2(src.getParticipant2());
         copy.setStatus(src.getStatus());
         copy.setOwnerUsername(src.getOwnerUsername());
+        copy.setScoreParticipant1(src.getScoreParticipant1());
+        copy.setScoreParticipant2(src.getScoreParticipant2());
+        copy.setPenaltyScore1(src.getPenaltyScore1());
+        copy.setPenaltyScore2(src.getPenaltyScore2());
         return copy;
     }
 
@@ -507,6 +523,18 @@ public class MatchService {
         target.setParticipant1(source.getParticipant1());
         target.setParticipant2(source.getParticipant2());
         target.setStatus(source.getStatus());
+        target.setScoreParticipant1(source.getScoreParticipant1());
+        target.setScoreParticipant2(source.getScoreParticipant2());
+        target.setPenaltyScore1(source.getPenaltyScore1());
+        target.setPenaltyScore2(source.getPenaltyScore2());
+    }
+
+    private Integer parseOptionalInt(Object raw, String errMessage) {
+        try {
+            return Integer.valueOf(String.valueOf(raw).trim());
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, errMessage);
+        }
     }
 
     private Long parseRequiredLong(Object raw, String errMessage) {
@@ -971,6 +999,10 @@ public class MatchService {
             event.setTournamentId(savedMatch.getTournamentId());
             event.setParticipant1(savedMatch.getParticipant1());
             event.setParticipant2(savedMatch.getParticipant2());
+            event.setScoreParticipant1(savedMatch.getScoreParticipant1());
+            event.setScoreParticipant2(savedMatch.getScoreParticipant2());
+            event.setPenaltyScore1(savedMatch.getPenaltyScore1());
+            event.setPenaltyScore2(savedMatch.getPenaltyScore2());
 
             if (eventPublisher != null) {
                 eventPublisher.publishEvent(event);

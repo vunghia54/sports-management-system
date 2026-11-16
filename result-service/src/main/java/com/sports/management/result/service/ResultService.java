@@ -302,9 +302,15 @@ public class ResultService {
                     }
                 }
 
-                // Step 1: Mark match FINISHED in Match Service
+                // Step 1: Mark match FINISHED in Match Service (always using ROLE_INTERNAL_RESULT_SYNC + scores)
                 if (!initial.isMatchSynced()) {
-                    matchAndRankingClient.markMatchFinished(matchId, bearerToken);
+                    matchAndRankingClient.markMatchFinished(
+                            matchId,
+                            initial.getScoreParticipant1(),
+                            initial.getScoreParticipant2(),
+                            initial.getPenaltyScore1(),
+                            initial.getPenaltyScore2()
+                    );
                     if (!persistenceService.markMatchSyncedIfVersion(resultId, jobVersion, claimId, competitionId)) {
                         return toResultResponse(getResultById(resultId));
                     }

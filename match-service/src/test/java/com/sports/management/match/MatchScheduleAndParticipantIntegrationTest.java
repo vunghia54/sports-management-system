@@ -198,12 +198,20 @@ class MatchScheduleAndParticipantIntegrationTest {
                         .content("{\"status\":\"SCHEDULED\"}"))
                 .andExpect(status().isBadRequest());
 
-        // ONGOING -> FINISHED ok
+        // ONGOING -> FINISHED rejected for ADMIN/ORGANIZER directly (403); allowed ONLY via ROLE_INTERNAL_RESULT_SYNC!
         mockMvc.perform(patch("/api/v1/matches/" + matchId)
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"FINISHED\"}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
+
+        String internalSyncToken = issueToken("result-sync-worker", "ROLE_INTERNAL_RESULT_SYNC");
+        mockMvc.perform(patch("/api/v1/matches/" + matchId)
+                        .header("Authorization", internalSyncToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"FINISHED\",\"scoreParticipant1\":2,\"scoreParticipant2\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FINISHED"));
 
         // FINISHED -> SCHEDULED rejected
         mockMvc.perform(patch("/api/v1/matches/" + matchId)

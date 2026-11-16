@@ -7,6 +7,10 @@ public class MatchFinishedEvent {
     private Long tournamentId;
     private String participant1;
     private String participant2;
+    private Integer scoreParticipant1;
+    private Integer scoreParticipant2;
+    private Integer penaltyScore1;
+    private Integer penaltyScore2;
 
     public MatchFinishedEvent() {
     }
@@ -63,5 +67,37 @@ public class MatchFinishedEvent {
 
     public void setParticipant2(String participant2) {
         this.participant2 = participant2;
+    }
+
+    public Integer getScoreParticipant1() {
+        return scoreParticipant1;
+    }
+
+    public void setScoreParticipant1(Integer scoreParticipant1) {
+        this.scoreParticipant1 = scoreParticipant1;
+    }
+
+    public Integer getScoreParticipant2() {
+        return scoreParticipant2;
+    }
+
+    public void setScoreParticipant2(Integer scoreParticipant2) {
+        this.scoreParticipant2 = scoreParticipant2;
+    }
+
+    public Integer getPenaltyScore1() {
+        return penaltyScore1;
+    }
+
+    public void setPenaltyScore1(Integer penaltyScore1) {
+        this.penaltyScore1 = penaltyScore1;
+    }
+
+    public Integer getPenaltyScore2() {
+        return penaltyScore2;
+    }
+
+    public void setPenaltyScore2(Integer penaltyScore2) {
+        this.penaltyScore2 = penaltyScore2;
     }
 }
