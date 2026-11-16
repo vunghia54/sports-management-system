@@ -227,6 +227,15 @@ class MatchScheduleAndParticipantIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"location\":\"SVĐ Khác\"}"))
                 .andExpect(status().isBadRequest());
+
+        // FINISHED match: gui kem status FINISHED (khong doi trang thai) va chi doi ten trong tai thi duoc phep, khong bi 403
+        mockMvc.perform(patch("/api/v1/matches/" + matchId)
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"FINISHED\",\"referee\":\"Trọng tài thay thế\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FINISHED"))
+                .andExpect(jsonPath("$.referee").value("Trọng tài thay thế"));
     }
 
     @Test

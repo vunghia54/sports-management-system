@@ -63,6 +63,7 @@ class ResultValidationKnockoutAndReopenSyncTest {
 
     private static volatile int rankingPostStatus = 200;
     private static final AtomicInteger rankingPostCalls = new AtomicInteger();
+    private static volatile List<Map<String, Object>> knockoutCompetitionMatches = List.of();
 
     @Autowired
     private MockMvc mockMvc;
@@ -126,6 +127,9 @@ class ResultValidationKnockoutAndReopenSyncTest {
                 writeJson(exchange, 200, Map.of("id", id, "status", "FINISHED"));
             }
         });
+        // Danh sach tran theo noi dung thi dau (dung de kiem tra vong sau cua KNOCKOUT)
+        matchServer.createContext("/api/v1/matches/competition/", exchange ->
+                writeJson(exchange, 200, knockoutCompetitionMatches));
         matchServer.start();
 
         rankingServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -174,6 +178,7 @@ class ResultValidationKnockoutAndReopenSyncTest {
         resultRepository.deleteAll();
         rankingPostStatus = 200;
         rankingPostCalls.set(0);
+        knockoutCompetitionMatches = List.of();
     }
 
     private static void writeJson(HttpExchange exchange, int code, Object payload) throws IOException {
@@ -357,5 +362,73 @@ class ResultValidationKnockoutAndReopenSyncTest {
                 .andExpect(jsonPath("$.result.matchSynced").value(true))
                 .andExpect(jsonPath("$.result.rankingSynced").value(true));
         assertEquals(1, rankingPostCalls.get(), "ROUND_ROBIN draw confirm must recalculate ranking points");
+    }
+
+    @Test
+    void knockoutConfirmedResult_cannotBeReopenedOverwrittenOrDeletedOnceNextRoundExists() throws Exception {
+        String orgToken = issueToken("organizer1", "ROLE_ORGANIZER");
+        String adminToken = issueToken("admin", "ROLE_ADMIN");
+
+        String resJson = mockMvc.perform(post("/api/v1/results")
+                        .header("Authorization", orgToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"matchId\":5,\"scoreParticipant1\":2,\"scoreParticipant2\":0}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long resId = JSON.readTree(resJson).get("result").get("id").asLong();
+
+        mockMvc.perform(put("/api/v1/results/" + resId + "/confirm")
+                        .header("Authorization", orgToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.status").value("CONFIRMED"));
+
+        // Vong sau da duoc sinh: doi thang (participant 501) da co mat trong tran #9
+        knockoutCompetitionMatches = List.of(
+                Map.of("id", 5, "competitionId", 20, "participant1Id", 501, "participant2Id", 502, "status", "FINISHED"),
+                Map.of("id", 9, "competitionId", 20, "participant1Id", 501, "participant2Id", 777, "status", "SCHEDULED")
+        );
+
+        // Ghi de ket qua -> 409
+        mockMvc.perform(post("/api/v1/results")
+                        .header("Authorization", orgToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"matchId\":5,\"scoreParticipant1\":0,\"scoreParticipant2\":3}"))
+                .andExpect(status().isConflict());
+
+        // Mo lai (PENDING_CONFIRMATION) -> 409
+        mockMvc.perform(patch("/api/v1/results/" + resId)
+                        .header("Authorization", orgToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"PENDING_CONFIRMATION\"}"))
+                .andExpect(status().isConflict());
+
+        // Xoa -> 409
+        mockMvc.perform(delete("/api/v1/results/" + resId)
+                        .header("Authorization", adminToken))
+                .andExpect(status().isConflict());
+
+        // Chi sua ghi chu thi van duoc phep
+        mockMvc.perform(patch("/api/v1/results/" + resId)
+                        .header("Authorization", orgToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"notes\":\"Cap nhat ghi chu\"}"))
+                .andExpect(status().isOk());
+
+        Result locked = resultRepository.findById(resId).orElseThrow();
+        assertEquals("CONFIRMED", locked.getStatus());
+        assertEquals(2, locked.getScoreParticipant1().intValue());
+        assertEquals(0, locked.getScoreParticipant2().intValue());
+
+        // Khi tran vong sau da bi huy thi duoc mo lai ket qua
+        knockoutCompetitionMatches = List.of(
+                Map.of("id", 5, "competitionId", 20, "participant1Id", 501, "participant2Id", 502, "status", "FINISHED"),
+                Map.of("id", 9, "competitionId", 20, "participant1Id", 501, "participant2Id", 777, "status", "CANCELLED")
+        );
+        mockMvc.perform(patch("/api/v1/results/" + resId)
+                        .header("Authorization", orgToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"PENDING_CONFIRMATION\"}"))
+                .andExpect(status().isOk());
+        assertEquals("PENDING_CONFIRMATION", resultRepository.findById(resId).orElseThrow().getStatus());
     }
 }

@@ -20,11 +20,13 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -137,6 +139,8 @@ public class ResultService {
                 : matchAndRankingClient.getMatchById(request.getMatchId());
 
         assertMatchEligibleForResult(match, request.getMatchId());
+        resultRepository.findByMatchId(request.getMatchId())
+                .ifPresent(this::assertKnockoutProgressionNotStarted);
 
         String participant1 = match != null && match.get("participant1") != null
                 ? String.valueOf(match.get("participant1")) : "PARTICIPANT_1";
@@ -369,6 +373,10 @@ public class ResultService {
     }
 
     public Result patchNotesOnly(Long id, Map<String, Object> updates, String callerBearerToken) {
+        if (updates != null && updates.get("status") != null
+                && "PENDING_CONFIRMATION".equalsIgnoreCase(String.valueOf(updates.get("status")).trim())) {
+            assertKnockoutProgressionNotStarted(getResultById(id));
+        }
         ResultPersistenceService.PatchOutcome outcome = persistenceService.patchNotesOnlyWithRecalc(id, updates);
         if (outcome.rankingSyncTaskId() != null) {
             executeRankingSyncTask(outcome.rankingSyncTaskId(), callerBearerToken);
@@ -381,6 +389,7 @@ public class ResultService {
     }
 
     public void deleteResult(Long id, String callerBearerToken) {
+        assertKnockoutProgressionNotStarted(getResultById(id));
         Long taskId = persistenceService.deleteResultByIdWithRecalc(id);
         if (taskId != null) {
             executeRankingSyncTask(taskId, callerBearerToken);
@@ -475,6 +484,69 @@ public class ResultService {
         try {
             return LocalDateTime.parse(text);
         } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /**
+     * Ket qua da CONFIRMED cua mot tran loai truc tiep khong duoc mo lai / ghi de / xoa
+     * khi doi cua tran do da duoc xep vao tran vong sau (vong sau duoc sinh tu chinh ket qua nay).
+     */
+    private void assertKnockoutProgressionNotStarted(Result existing) {
+        if (existing == null || !"CONFIRMED".equalsIgnoreCase(existing.getStatus())) {
+            return;
+        }
+        Long competitionId = existing.getCompetitionId();
+        Long matchId = existing.getMatchId();
+        if (competitionId == null || matchId == null || !isKnockoutCompetition(competitionId)) {
+            return;
+        }
+        List<Map<String, Object>> matches = matchAndRankingClient.getMatchesByCompetitionId(competitionId);
+        Set<Long> teamIds = new HashSet<>();
+        for (Map<String, Object> m : matches) {
+            if (m != null && matchId.equals(toLongOrNull(m.get("id")))) {
+                Long p1 = toLongOrNull(m.get("participant1Id"));
+                Long p2 = toLongOrNull(m.get("participant2Id"));
+                if (p1 != null) {
+                    teamIds.add(p1);
+                }
+                if (p2 != null) {
+                    teamIds.add(p2);
+                }
+            }
+        }
+        if (teamIds.isEmpty()) {
+            return;
+        }
+        for (Map<String, Object> m : matches) {
+            if (m == null) {
+                continue;
+            }
+            Long otherId = toLongOrNull(m.get("id"));
+            if (otherId == null || otherId <= matchId) {
+                continue;
+            }
+            if ("CANCELLED".equalsIgnoreCase(String.valueOf(m.get("status")))) {
+                continue;
+            }
+            Long p1 = toLongOrNull(m.get("participant1Id"));
+            Long p2 = toLongOrNull(m.get("participant2Id"));
+            if ((p1 != null && teamIds.contains(p1)) || (p2 != null && teamIds.contains(p2))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Không thể mở lại/sửa/xóa kết quả đã xác nhận của trận #" + matchId
+                                + " vì vòng đấu sau đã được tạo từ kết quả này (trận #" + otherId
+                                + "). Hãy hủy hoặc xóa các trận vòng sau trước.");
+            }
+        }
+    }
+
+    private Long toLongOrNull(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(String.valueOf(raw));
+        } catch (NumberFormatException ex) {
             return null;
         }
     }

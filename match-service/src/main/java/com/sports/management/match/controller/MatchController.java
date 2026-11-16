@@ -418,7 +418,7 @@ public class MatchController {
         String requestedStatus = resolveRequestedStatus(isPatch, putCandidate, patchUpdates);
 
         if (hasAuthority(auth, "ROLE_ADMIN")) {
-            if ("FINISHED".equalsIgnoreCase(requestedStatus)) {
+            if ("FINISHED".equalsIgnoreCase(requestedStatus) && !"FINISHED".equalsIgnoreCase(existing.getStatus())) {
                 throw new ResponseStatusException(
                         HttpStatus.FORBIDDEN,
                         "Access Denied: Không được đặt trạng thái trận đấu sang FINISHED trực tiếp; trận chỉ kết thúc khi kết quả được xác nhận chính thức."
@@ -461,7 +461,7 @@ public class MatchController {
             if (!Objects.equals(existing.getTournamentId(), targetTournamentId)) {
                 assertTournamentOwnership(targetTournamentId, auth.getName());
             }
-            if ("FINISHED".equalsIgnoreCase(requestedStatus)) {
+            if ("FINISHED".equalsIgnoreCase(requestedStatus) && !"FINISHED".equalsIgnoreCase(existing.getStatus())) {
                 throw new ResponseStatusException(
                         HttpStatus.FORBIDDEN,
                         "Access Denied: Ban tổ chức không được đặt trạng thái trận đấu sang FINISHED trực tiếp; trận chỉ kết thúc khi kết quả được xác nhận chính thức."

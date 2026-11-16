@@ -20,7 +20,9 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -95,6 +97,29 @@ public class MatchAndRankingClient {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "Match Service (MATCH-SERVICE) is unavailable via Service Discovery",
+                    ex
+            );
+        }
+    }
+
+    public List<Map<String, Object>> getMatchesByCompetitionId(Long competitionId) {
+        if (competitionId == null) {
+            return Collections.emptyList();
+        }
+        try {
+            var requestSpec = matchRestClient.get()
+                    .uri("/api/v1/matches/competition/{competitionId}", competitionId);
+            String authHeader = getCurrentAuthHeader();
+            if (authHeader != null && !authHeader.isBlank()) {
+                requestSpec.header("Authorization", authHeader);
+            }
+            List<Map<String, Object>> matches = requestSpec.retrieve()
+                    .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+            return matches != null ? matches : Collections.emptyList();
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Match Service (MATCH-SERVICE) is unavailable when checking knockout progression for competition #" + competitionId,
                     ex
             );
         }
