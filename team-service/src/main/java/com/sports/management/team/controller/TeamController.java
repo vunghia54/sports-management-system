@@ -229,6 +229,14 @@ public class TeamController {
         return ResponseEntity.ok(teamService.getMembersByTeam(id));
     }
 
+    @GetMapping("/athletes/{athleteId}/usage")
+    public ResponseEntity<Map<String, Object>> getAthleteTeamUsage(@PathVariable Long athleteId) {
+        return ResponseEntity.ok(Map.of(
+                "athleteId", athleteId,
+                "inTeam", teamService.isAthleteInAnyTeam(athleteId)
+        ));
+    }
+
     @DeleteMapping("/{id}/members/{memberId}")
     public ResponseEntity<Void> removeMember(
             @PathVariable Long id,

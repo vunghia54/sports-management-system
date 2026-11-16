@@ -3184,9 +3184,9 @@ function renderAthletesPage() {
           </select>
           <select class="select" onchange="applyPagedFilter('athletes', { healthStatus: this.value })" aria-label="Lọc theo thể lực">
             <option value="" ${!slice.filters.healthStatus ? 'selected' : ''}>Tất cả thể lực</option>
-            <option value="FIT" ${slice.filters.healthStatus === 'FIT' ? 'selected' : ''}>Đủ thể lực (FIT)</option>
             <option value="QUALIFIED" ${slice.filters.healthStatus === 'QUALIFIED' ? 'selected' : ''}>Đủ điều kiện (QUALIFIED)</option>
             <option value="INJURED" ${slice.filters.healthStatus === 'INJURED' ? 'selected' : ''}>Chấn thương (INJURED)</option>
+            <option value="SUSPENDED" ${slice.filters.healthStatus === 'SUSPENDED' ? 'selected' : ''}>Treo giò (SUSPENDED)</option>
           </select>
         </div>
         <span class="badge badge-primary" id="athletesTotalBadge">Tổng số: ${slice.totalElements} VĐV</span>
@@ -3218,13 +3218,17 @@ function renderAthletesTableInner() {
         </thead>
         <tbody>
           ${slice.items.map((a, idx) => {
+            const isOwnAthlete = a.ownerUsername && AppState.user?.username && String(a.ownerUsername).toLowerCase() === String(AppState.user.username).toLowerCase();
+            const isPrivileged = ['ROLE_ADMIN', 'ROLE_ORGANIZER'].includes(String(AppState.user?.role || '').toUpperCase());
+            const canSeeSensitive = Boolean(isPrivileged || isOwnAthlete);
             const cccdDisplay = canSeeSensitive ? (a.identityCardNumber || 'Chưa cập nhật') : '******';
             const phone = a.phoneNumber || a.phone || '';
             const contactDisplay = canSeeSensitive
               ? `${escapeHtml(phone || '—')}<div style="font-size:0.75rem;color:var(--text-secondary)">${escapeHtml(a.email || '')}</div>`
               : '<span style="color:var(--text-secondary)">Ẩn thông tin</span>';
-            const hStatus = a.healthStatus || 'FIT';
-            const nextHealth = hStatus === 'INJURED' ? 'FIT' : 'INJURED';
+            const hStatus = a.healthStatus || 'QUALIFIED';
+            const nextHealth = hStatus === 'INJURED' ? 'QUALIFIED' : 'INJURED';
+            const canEditRow = canEdit && (isPrivileged || isOwnAthlete);
             return `
               <tr>
                 <td class="tabular-nums"><strong>#${String(startIdx + idx + 1).padStart(3, '0')}</strong></td>
@@ -3237,8 +3241,8 @@ function renderAthletesTableInner() {
                 ${canEdit ? `
                   <td>
                     <div class="page-actions">
-                      <button class="btn btn-secondary btn-sm" onclick="openEditAthleteModal(${a.id})">Sửa</button>
-                      <button class="btn btn-secondary btn-sm" onclick="patchAthleteHealth(${a.id}, '${nextHealth}', this)">Đổi thể lực</button>
+                      ${canEditRow ? `<button class="btn btn-secondary btn-sm" onclick="openEditAthleteModal(${a.id})">Sửa</button>` : ''}
+                      ${canEditRow ? `<button class="btn btn-secondary btn-sm" onclick="patchAthleteHealth(${a.id}, '${nextHealth}', this)">Đổi thể lực</button>` : ''}
                       ${canDelete ? `<button class="btn btn-danger btn-sm" data-name="${escapeHtml(a.fullName)}" onclick="confirmDeleteAthlete(${a.id}, this.dataset.name)">Xóa</button>` : ''}
                     </div>
                   </td>
@@ -4985,7 +4989,7 @@ function openCreateAthleteModal() {
     showToast('Bạn không có quyền tạo hồ sơ VĐV', 'error');
     return;
   }
-  openModal('Thêm Hồ sơ Vận động viên mới', renderAthleteFormHtml(null, { healthStatus: 'FIT', gender: 'MALE', nationality: 'Vietnam' }));
+  openModal('Thêm Hồ sơ Vận động viên mới', renderAthleteFormHtml(null, { healthStatus: 'QUALIFIED', gender: 'MALE', nationality: 'Vietnam' }));
 }
 
 async function openEditAthleteModal(id) {
@@ -5034,9 +5038,9 @@ function renderAthleteFormHtml(editId, a) {
         <div class="form-group">
           <label for="mAthHealth">Tình trạng thể lực</label>
           <select id="mAthHealth" data-field="healthStatus" class="select">
-            <option value="FIT" ${a.healthStatus === 'FIT' ? 'selected' : ''}>Đủ thể lực (FIT)</option>
-            <option value="QUALIFIED" ${a.healthStatus === 'QUALIFIED' ? 'selected' : ''}>Đủ điều kiện (QUALIFIED)</option>
+            <option value="QUALIFIED" ${!a.healthStatus || a.healthStatus === 'QUALIFIED' ? 'selected' : ''}>Đủ điều kiện (QUALIFIED)</option>
             <option value="INJURED" ${a.healthStatus === 'INJURED' ? 'selected' : ''}>Chấn thương (INJURED)</option>
+            <option value="SUSPENDED" ${a.healthStatus === 'SUSPENDED' ? 'selected' : ''}>Treo giò (SUSPENDED)</option>
           </select>
         </div>
       </div>

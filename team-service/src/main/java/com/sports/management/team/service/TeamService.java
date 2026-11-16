@@ -213,6 +213,10 @@ public class TeamService {
         return memberRepository.findByTeamId(teamId);
     }
 
+    public boolean isAthleteInAnyTeam(Long athleteId) {
+        return athleteId != null && memberRepository.existsByAthleteId(athleteId);
+    }
+
     @Transactional
     public boolean removeMember(Long memberId) {
         if (!memberRepository.existsById(memberId)) return false;

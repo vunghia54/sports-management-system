@@ -491,7 +491,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Nguyễn Quang Hải\",\n  \"dateOfBirth\": \"1997-04-12\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"001097888999\",\n  \"phoneNumber\": \"0901234567\",\n  \"email\": \"quanghai19@sports.vn\",\n  \"healthStatus\": \"FIT\"\n}"
+              "raw": "{\n  \"fullName\": \"Nguyễn Quang Hải\",\n  \"dateOfBirth\": \"1997-04-12\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"001097888999\",\n  \"phoneNumber\": \"0901234567\",\n  \"email\": \"quanghai19@sports.vn\",\n  \"healthStatus\": \"QUALIFIED\"\n}"
             },
             "url": {
               "raw": "{{athleteUrl}}/api/v1/athletes",
@@ -523,7 +523,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Nguyễn Hoàng Đức\",\n  \"dateOfBirth\": \"1998-01-11\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"001098777666\",\n  \"phoneNumber\": \"0902345678\",\n  \"email\": \"hoangduc14@sports.vn\",\n  \"healthStatus\": \"FIT\"\n}"
+              "raw": "{\n  \"fullName\": \"Nguyễn Hoàng Đức\",\n  \"dateOfBirth\": \"1998-01-11\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"001098777666\",\n  \"phoneNumber\": \"0902345678\",\n  \"email\": \"hoangduc14@sports.vn\",\n  \"healthStatus\": \"QUALIFIED\"\n}"
             },
             "url": {
               "raw": "{{athleteUrl}}/api/v1/athletes",
@@ -555,7 +555,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"healthStatus\": \"FIT\",\n  \"phoneNumber\": \"0988999888\"\n}"
+              "raw": "{\n  \"healthStatus\": \"QUALIFIED\",\n  \"phoneNumber\": \"0988999888\"\n}"
             },
             "url": {
               "raw": "{{athleteUrl}}/api/v1/athletes/{{athlete1Id}}",
@@ -591,6 +591,31 @@
               "script": {
                 "exec": [
                   "pm.test('Thống kê VĐV thành công 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.5 Tra cứu VĐV theo số CCCD (Admin / Organizer / Owner) [B3]",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "url": {
+              "raw": "{{athleteUrl}}/api/v1/athletes/cccd/001097888999",
+              "host": ["{{athleteUrl}}"],
+              "path": ["api", "v1", "athletes", "cccd", "001097888999"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tra cứu CCCD hợp lệ thành công 200', function () { pm.response.to.have.status(200); });"
                 ],
                 "type": "text/javascript"
               }

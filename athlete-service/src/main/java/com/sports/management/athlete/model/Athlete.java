@@ -18,6 +18,8 @@ public class Athlete {
 
     private LocalDate dateOfBirth;
     private String gender; // MALE, FEMALE, OTHER
+
+    @Column(unique = true)
     private String identityCardNumber;
     private String phone;
     private String email;

@@ -30,6 +30,8 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.GET, "/api/v1/athletes/cccd/**", "/api/v1/athletes/search/cccd/**")
+                        .hasAnyAuthority("ROLE_ADMIN", "ROLE_ORGANIZER", "ROLE_TEAM_MANAGER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/athletes/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/instance-info").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
