@@ -4963,6 +4963,60 @@ async function removeTeamMember(teamId, memberId, teamName, memberName, btn) {
   }
 }
 
+const _addMemberModalState = { teams: [], athletes: [] };
+
+function normalizeVietnameseSearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .trim();
+}
+
+function buildFilteredSelectOptions(items, query, getLabel, selectedId, emptyLabel) {
+  const q = normalizeVietnameseSearchText(query);
+  const filtered = q
+    ? items.filter(item => normalizeVietnameseSearchText(getLabel(item)).includes(q))
+    : items;
+  if (filtered.length === 0) {
+    return {
+      count: 0,
+      html: `<option value="">${escapeHtml(emptyLabel)}</option>`
+    };
+  }
+  const hasSelected = selectedId != null && selectedId !== '' && filtered.some(item => Number(item.id) === Number(selectedId));
+  const targetId = hasSelected ? Number(selectedId) : Number(filtered[0].id);
+  return {
+    count: filtered.length,
+    html: filtered
+      .map(item => `<option value="${item.id}" ${Number(item.id) === targetId ? 'selected' : ''}>${escapeHtml(getLabel(item))}</option>`)
+      .join('')
+  };
+}
+
+function filterAddMemberOptions(kind, query) {
+  const isTeam = kind === 'team';
+  const selectEl = document.getElementById(isTeam ? 'mMemTeamId' : 'mMemAthId');
+  const countEl = document.getElementById(isTeam ? 'mMemTeamCount' : 'mMemAthCount');
+  if (!selectEl) return;
+
+  const items = isTeam ? _addMemberModalState.teams : _addMemberModalState.athletes;
+  const getLabel = isTeam
+    ? (t => t.shortName ? `${t.name} (${t.shortName})` : t.name)
+    : (a => a.fullName);
+  const emptyLabel = isTeam ? '-- Không tìm thấy đội tuyển phù hợp --' : '-- Không tìm thấy VĐV phù hợp --';
+  const unit = isTeam ? 'đội' : 'VĐV';
+  const result = buildFilteredSelectOptions(items, query, getLabel, selectEl.value, emptyLabel);
+
+  selectEl.innerHTML = result.html;
+  if (countEl) {
+    countEl.textContent = query && String(query).trim()
+      ? `(${result.count} / ${items.length} ${unit})`
+      : `(${items.length} ${unit})`;
+  }
+}
+
 function openAddAthleteToTeamModalForTeam(teamId) {
   openAddAthleteToTeamModal(teamId);
 }
@@ -4975,8 +5029,8 @@ async function openAddAthleteToTeamModal(preselectedTeamId = null) {
   if (AppState.data.teams.length === 0) await safeFetchSlice('teams', '/api/v1/teams');
   if (AppState.data.athletes.length === 0) await safeFetchSlice('athletes', '/api/v1/athletes');
 
-  const isManager = AppState.auth.role === 'ROLE_TEAM_MANAGER';
-  const myUsername = String(AppState.auth.username || '').toLowerCase();
+  const isManager = AppState.user?.role === 'ROLE_TEAM_MANAGER';
+  const myUsername = String(AppState.user?.username || '').toLowerCase();
   const teams = isManager
     ? AppState.data.teams.filter(t => t.ownerUsername && t.ownerUsername.toLowerCase() === myUsername)
     : AppState.data.teams;
@@ -4993,19 +5047,30 @@ async function openAddAthleteToTeamModal(preselectedTeamId = null) {
     return;
   }
 
+  _addMemberModalState.teams = teams;
+  _addMemberModalState.athletes = athletes;
+  const initialTeams = buildFilteredSelectOptions(
+    teams, '', t => t.shortName ? `${t.name} (${t.shortName})` : t.name, preselectedTeamId, '-- Không có đội tuyển --'
+  );
+  const initialAthletes = buildFilteredSelectOptions(
+    athletes, '', a => a.fullName, null, '-- Không có VĐV --'
+  );
+
   openModal('Thêm Vận động viên vào Đội tuyển', `
     <form id="addMemberForm" onsubmit="submitAddAthleteToTeam(event)">
       <div class="form-error-banner" hidden></div>
       <div class="form-group">
-        <label for="mMemTeamId">Đội tuyển</label>
-        <select id="mMemTeamId" data-field="teamId" class="select">
-          ${teams.map(t => `<option value="${t.id}" ${Number(t.id) === Number(preselectedTeamId) ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+        <label for="mMemTeamSearch">Đội tuyển <span id="mMemTeamCount" style="font-weight:400;color:var(--text-secondary);">(${teams.length} đội)</span></label>
+        <input id="mMemTeamSearch" type="search" class="input" placeholder="Tìm đội tuyển theo tên..." autocomplete="off" oninput="filterAddMemberOptions('team', this.value)" style="margin-bottom:8px;" />
+        <select id="mMemTeamId" data-field="teamId" class="select" aria-label="Chọn đội tuyển">
+          ${initialTeams.html}
         </select>
       </div>
       <div class="form-group">
-        <label for="mMemAthId">Vận động viên</label>
-        <select id="mMemAthId" data-field="athleteId" class="select">
-          ${athletes.map(a => `<option value="${a.id}">${escapeHtml(a.fullName)}</option>`).join('')}
+        <label for="mMemAthSearch">Vận động viên <span id="mMemAthCount" style="font-weight:400;color:var(--text-secondary);">(${athletes.length} VĐV)</span></label>
+        <input id="mMemAthSearch" type="search" class="input" placeholder="Tìm vận động viên theo tên..." autocomplete="off" oninput="filterAddMemberOptions('athlete', this.value)" style="margin-bottom:8px;" />
+        <select id="mMemAthId" data-field="athleteId" class="select" aria-label="Chọn vận động viên">
+          ${initialAthletes.html}
         </select>
       </div>
       <div class="form-grid">
@@ -5025,9 +5090,18 @@ async function submitAddAthleteToTeam(e) {
   const form = e.target;
   clearFormErrors(form);
   const teamId = document.getElementById('mMemTeamId').value;
+  const athleteIdRaw = document.getElementById('mMemAthId').value;
   const jerseyNumber = Number(document.getElementById('mMemJersey').value);
   const position = document.getElementById('mMemPos').value.trim();
 
+  if (!teamId) {
+    setFieldError(form, 'teamId', 'Vui lòng chọn đội tuyển hợp lệ');
+    return;
+  }
+  if (!athleteIdRaw) {
+    setFieldError(form, 'athleteId', 'Vui lòng chọn vận động viên hợp lệ');
+    return;
+  }
   if (!position) {
     setFieldError(form, 'position', 'Vui lòng nhập vị trí thi đấu');
     return;
@@ -5038,7 +5112,7 @@ async function submitAddAthleteToTeam(e) {
     await apiCall(`/api/v1/teams/${teamId}/members`, {
       method: 'POST',
       body: JSON.stringify({
-        athleteId: Number(document.getElementById('mMemAthId').value),
+        athleteId: Number(athleteIdRaw),
         jerseyNumber,
         position
       })
