@@ -3982,6 +3982,7 @@ function renderUsersTableInner() {
                     <option value="ROLE_TEAM_MANAGER" ${u.role === 'ROLE_TEAM_MANAGER' ? 'selected' : ''}>Lãnh đội / HLV</option>
                     <option value="ROLE_VIEWER" ${u.role === 'ROLE_VIEWER' || u.role === 'ROLE_USER' ? 'selected' : ''}>Khán giả</option>
                   </select>
+                  <button class="btn btn-secondary btn-sm" onclick="openAdminResetPasswordModal(${u.id}, '${escapeHtml(u.username)}')">Đặt lại MK</button>
                   <button class="btn btn-secondary btn-sm" onclick="toggleUserActiveStatus(${u.id}, ${!u.active}, this)">${u.active ? 'Khóa' : 'Mở'}</button>
                 </div>
               </td>
@@ -4048,6 +4049,7 @@ function renderSettingsPage() {
           <div style="margin-top:6px;">
             ${(AppState.permissions || []).map(p => `<span class="badge badge-primary" style="margin:2px 4px 2px 0;">${escapeHtml(getPermissionDisplayName(p))}</span>`).join('')}
           </div>
+          ${u ? `<div style="margin-top:14px;"><button class="btn btn-secondary btn-sm" onclick="openChangePasswordModal()">Đổi mật khẩu cá nhân</button></div>` : ''}
         </div>
       </div>
     </div>
@@ -5774,11 +5776,19 @@ async function toggleUserActiveStatus(id, active, btn = null) {
 }
 
 function openChangePasswordModal() {
+  if (!AppState.user) {
+    showToast('Vui lòng đăng nhập trước khi đổi mật khẩu', 'error');
+    navigateTo('auth-page');
+    return;
+  }
   openModal('Đổi mật khẩu Tài khoản', `
     <form id="changePasswordForm" onsubmit="submitChangePassword(event)">
       <div class="form-error-banner" hidden></div>
-      <div class="form-group"><label for="mCpUser">Tài khoản *</label><input id="mCpUser" data-field="username" class="input" value="${escapeHtml(AppState.user?.username || '')}" required /></div>
-      <div class="form-group"><label for="mCpNew">Mật khẩu mới *</label><input id="mCpNew" data-field="newPassword" type="password" class="input" required minlength="6" placeholder="Tối thiểu 6 ký tự" /></div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <span style="font-size:0.86rem;color:var(--text-secondary);">Tài khoản đang đăng nhập: <strong>${escapeHtml(AppState.user.username || '')}</strong></span>
+      </div>
+      <div class="form-group"><label for="mCpCurrent">Mật khẩu hiện tại *</label><input id="mCpCurrent" data-field="currentPassword" type="password" class="input" required autocomplete="current-password" placeholder="Nhập mật khẩu hiện tại" /></div>
+      <div class="form-group"><label for="mCpNew">Mật khẩu mới *</label><input id="mCpNew" data-field="newPassword" type="password" class="input" required minlength="6" autocomplete="new-password" placeholder="Tối thiểu 6 ký tự" /></div>
       <div class="page-actions" style="justify-content:flex-end;">
         <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
         <button type="submit" class="btn btn-primary">Cập nhật mật khẩu</button>
@@ -5791,7 +5801,12 @@ async function submitChangePassword(e) {
   e.preventDefault();
   const form = e.target;
   clearFormErrors(form);
+  const currentPassword = document.getElementById('mCpCurrent').value;
   const newPassword = document.getElementById('mCpNew').value;
+  if (!currentPassword || !currentPassword.trim()) {
+    setFieldError(form, 'currentPassword', 'Vui lòng nhập mật khẩu hiện tại');
+    return;
+  }
   if (newPassword.length < 6) {
     setFieldError(form, 'newPassword', 'Mật khẩu mới phải có ít nhất 6 ký tự');
     return;
@@ -5801,12 +5816,53 @@ async function submitChangePassword(e) {
     await apiCall('/api/v1/auth/change-password', {
       method: 'PUT',
       body: JSON.stringify({
-        username: document.getElementById('mCpUser').value.trim(),
+        currentPassword,
         newPassword
       })
     });
     closeModal();
     showToast('Đổi mật khẩu thành công!');
+  } catch (err) {
+    showFormError(form, err);
+  } finally {
+    unlock();
+  }
+}
+
+function openAdminResetPasswordModal(userId, username) {
+  if (!hasPermission('users.manage')) {
+    showToast('Chỉ Quản trị viên mới có quyền đặt lại mật khẩu người dùng khác', 'error');
+    return;
+  }
+  openModal(`Đặt lại mật khẩu: ${username}`, `
+    <form id="adminResetPasswordForm" onsubmit="submitAdminResetPassword(event, ${userId})">
+      <div class="form-error-banner" hidden></div>
+      <div class="form-group"><label for="mResetPwNew">Mật khẩu mới *</label><input id="mResetPwNew" data-field="newPassword" type="password" class="input" required minlength="6" autocomplete="new-password" placeholder="Tối thiểu 6 ký tự" /></div>
+      <div class="page-actions" style="justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary">Đặt lại mật khẩu</button>
+      </div>
+    </form>
+  `);
+}
+
+async function submitAdminResetPassword(e, userId) {
+  e.preventDefault();
+  const form = e.target;
+  clearFormErrors(form);
+  const newPassword = document.getElementById('mResetPwNew').value;
+  if (newPassword.length < 6) {
+    setFieldError(form, 'newPassword', 'Mật khẩu mới phải có ít nhất 6 ký tự');
+    return;
+  }
+  const unlock = lockFormSubmit(form, 'Đang đặt lại...');
+  try {
+    await apiCall(`/api/v1/auth/users/${userId}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ newPassword })
+    });
+    closeModal();
+    showToast('Đã đặt lại mật khẩu cho người dùng!');
   } catch (err) {
     showFormError(form, err);
   } finally {

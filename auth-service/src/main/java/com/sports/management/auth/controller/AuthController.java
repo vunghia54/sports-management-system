@@ -185,20 +185,26 @@ public class AuthController {
         return m;
     }
 
-    @GetMapping("/me")
-    public ResponseEntity<Map<String, Object>> getCurrentUser(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-
+    private String requireAuthenticatedUsername(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing or invalid Authorization header");
         }
-
         String token = authHeader.substring(7);
         if (!jwtTokenProvider.validateToken(token)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid or expired token");
         }
-
         String username = jwtTokenProvider.getUsernameFromToken(token);
+        if (username == null || username.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid token subject");
+        }
+        return username;
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<Map<String, Object>> getCurrentUser(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        String username = requireAuthenticatedUsername(authHeader);
         User user = authService.getUserByUsername(username);
 
         Map<String, Object> response = new HashMap<>();
@@ -218,21 +224,36 @@ public class AuthController {
     @PutMapping("/change-password")
     public ResponseEntity<Map<String, Object>> changePassword(
             @RequestHeader(value = "Authorization", required = false) String authHeader,
-            @RequestBody Map<String, String> payload) {
-        String username = payload.get("username");
-        if ((username == null || username.isBlank()) && authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            if (jwtTokenProvider.validateToken(token)) {
-                username = jwtTokenProvider.getUsernameFromToken(token);
-            }
+            @RequestBody(required = false) Map<String, String> payload) {
+        String username = requireAuthenticatedUsername(authHeader);
+        if (payload != null && payload.get("username") != null && !payload.get("username").isBlank()
+                && !payload.get("username").trim().equalsIgnoreCase(username)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Không được phép đổi mật khẩu của tài khoản khác"
+            );
         }
-        if (username == null || username.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Yêu cầu đăng nhập hoặc cung cấp username");
-        }
-        authService.changePassword(username, payload.get("currentPassword"), payload.get("newPassword"));
+        String currentPassword = payload != null ? payload.get("currentPassword") : null;
+        String newPassword = payload != null ? payload.get("newPassword") : null;
+        authService.changePassword(username, currentPassword, newPassword);
         return ResponseEntity.ok(Map.of(
                 "username", username,
                 "message", "Đổi mật khẩu thành công"
+        ));
+    }
+
+    @PutMapping("/users/{id}/password")
+    public ResponseEntity<Map<String, Object>> adminResetUserPassword(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> payload) {
+        assertAdmin(authHeader);
+        String newPassword = payload != null ? payload.get("newPassword") : null;
+        User updated = authService.adminResetPassword(id, newPassword);
+        return ResponseEntity.ok(Map.of(
+                "id", updated.getId(),
+                "username", updated.getUsername(),
+                "message", "Đặt lại mật khẩu thành công"
         ));
     }
 

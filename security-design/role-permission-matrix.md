@@ -33,7 +33,9 @@ Hệ thống Quản lý Thể thao định nghĩa 4 vai trò rõ rệt:
 |:---:|:---:|---|---|:---:|---|:---:|:---:|
 | 1 | `POST` | `/api/v1/auth/register` | Auth | Công khai | Mọi người | Không | 201 Created / 400 Bad Request |
 | 2 | `POST` | `/api/v1/auth/login` | Auth | Công khai | Mọi người | Không | 200 OK / 401 Unauthorized |
-| 3 | `GET` | `/api/v1/auth/me` | Auth | Bảo vệ | `ADMIN`, `ORGANIZER`, `REFEREE`, `USER` | Bản thân | 200 OK / 401 Unauthorized |
+| 3 | `GET` | `/api/v1/auth/me` | Auth | Bảo vệ | `ADMIN`, `ORGANIZER`, `REFEREE`, `TEAM_MANAGER`, `VIEWER` | Bản thân | 200 OK / 401 Unauthorized |
+| 3b | `PUT` | `/api/v1/auth/change-password` | Auth | Bảo vệ | Mọi vai trò đã đăng nhập | Bản thân (lấy từ JWT) | 200 OK / 400 / 401 / 403 |
+| 3c | `PUT` | `/api/v1/auth/users/{id}/password` | Auth | Bảo vệ | `ROLE_ADMIN` | Admin đặt lại mật khẩu | 200 OK / 400 / 401 / 403 / 404 |
 | 4 | `GET` | `/api/v1/tournaments` | Tournament | Công khai | Mọi người (Kể cả chưa đăng nhập) | Không | 200 OK |
 | 5 | `GET` | `/api/v1/tournaments/{id}` | Tournament | Công khai | Mọi người (Kể cả chưa đăng nhập) | Không | 200 OK / 404 Not Found |
 | 6 | `POST` | `/api/v1/tournaments` | Tournament | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Tự động gán quyền sở hữu cho người tạo | 201 Created / 401 / 403 |

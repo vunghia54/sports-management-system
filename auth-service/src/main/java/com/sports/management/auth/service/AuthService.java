@@ -103,8 +103,10 @@ public class AuthService {
 
     public void changePassword(String username, String currentPassword, String newPassword) {
         User user = getUserByUsername(username);
-        if (currentPassword != null && !currentPassword.isBlank()
-                && !passwordEncoder.matches(currentPassword, user.getPassword())) {
+        if (currentPassword == null || currentPassword.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập mật khẩu hiện tại");
+        }
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu hiện tại không chính xác");
         }
         if (newPassword == null || newPassword.length() < 6) {
@@ -112,6 +114,16 @@ public class AuthService {
         }
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
+    }
+
+    public User adminResetPassword(Long id, String newPassword) {
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu mới phải có ít nhất 6 ký tự");
+        }
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng ID: " + id));
+        user.setPassword(passwordEncoder.encode(newPassword));
+        return userRepository.save(user);
     }
 
     public User updateUserRole(Long id, String role) {

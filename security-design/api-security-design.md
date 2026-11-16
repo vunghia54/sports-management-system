@@ -137,6 +137,23 @@ Token được tạo ra và kiểm tra tính hợp lệ tuân thủ chuẩn RFC 
 }
 ```
 
+### 3.4. Đổi mật khẩu cá nhân (Change Password)
+* **Endpoint:** `PUT /api/v1/auth/change-password`
+* **Headers:** `Authorization: Bearer <accessToken>` (Bắt buộc — lấy danh tính trực tiếp từ JWT, không nhận `username` từ body)
+* **Request Body:**
+```json
+{
+  "currentPassword": "organizer123",
+  "newPassword": "newPassword123"
+}
+```
+* **Validation:** `currentPassword` bắt buộc khớp mật khẩu hiện tại (`400 Bad Request` nếu sai/rỗng); `newPassword` tối thiểu 6 ký tự; thiếu/sai token trả `401 Unauthorized`.
+
+### 3.5. Quản trị viên đặt lại mật khẩu người dùng (Admin Reset Password)
+* **Endpoint:** `PUT /api/v1/auth/users/{id}/password`
+* **Headers:** `Authorization: Bearer <adminToken>` (Chỉ `ROLE_ADMIN`)
+* **Request Body:** `{"newPassword": "resetPassword123"}` (`>= 6` ký tự)
+
 ---
 
 ## 4. Thiết kế Bộ lọc xác thực và Phân quyền (SecurityFilterChain & JwtFilter)

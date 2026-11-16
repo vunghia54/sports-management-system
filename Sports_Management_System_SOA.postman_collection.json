@@ -175,6 +175,44 @@
               }
             }
           ]
+        },
+        {
+          "name": "1.5 Đổi mật khẩu cá nhân (PUT /change-password - Bearer JWT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"organizer123\",\n  \"newPassword\": \"organizer456\"\n}"
+            },
+            "url": {
+              "raw": "{{authUrl}}/api/v1/auth/change-password",
+              "host": ["{{authUrl}}"],
+              "path": ["api", "v1", "auth", "change-password"]
+            }
+          }
+        },
+        {
+          "name": "1.6 Admin đặt lại mật khẩu người dùng (PUT /users/{id}/password)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"reset123\"\n}"
+            },
+            "url": {
+              "raw": "{{authUrl}}/api/v1/auth/users/2/password",
+              "host": ["{{authUrl}}"],
+              "path": ["api", "v1", "auth", "users", "2", "password"]
+            }
+          }
         }
       ]
     },
