@@ -129,13 +129,21 @@ class RegistrationSecurityAndBusinessTest {
                 "id", 100, "name", "CLB Manager 1", "ownerUsername", "manager1"));
         when(tournamentClient.getTeamById(101L)).thenReturn(Map.of(
                 "id", 101, "name", "CLB Manager 2", "ownerUsername", "manager2"));
-        when(tournamentClient.getTeamMembers(100L)).thenReturn(List.of(Map.of("id", 1), Map.of("id", 2)));
-        when(tournamentClient.getTeamMembers(101L)).thenReturn(List.of(Map.of("id", 3), Map.of("id", 4)));
+        when(tournamentClient.getTeamMembers(100L)).thenReturn(List.of(
+                Map.of("id", 1, "athleteId", 200), Map.of("id", 2, "athleteId", 202)));
+        when(tournamentClient.getTeamMembers(101L)).thenReturn(List.of(
+                Map.of("id", 3, "athleteId", 203), Map.of("id", 4, "athleteId", 204)));
 
         when(tournamentClient.getAthleteById(200L)).thenReturn(Map.of(
                 "id", 200, "fullName", "Nguyễn Tiến Minh", "ownerUsername", "manager1", "healthStatus", "QUALIFIED"));
         when(tournamentClient.getAthleteById(201L)).thenReturn(Map.of(
                 "id", 201, "fullName", "VĐV Chấn Thương", "ownerUsername", "manager1", "healthStatus", "INJURED"));
+        when(tournamentClient.getAthleteById(202L)).thenReturn(Map.of(
+                "id", 202, "fullName", "Nguyễn Quang Hải", "ownerUsername", "manager1", "healthStatus", "QUALIFIED"));
+        when(tournamentClient.getAthleteById(203L)).thenReturn(Map.of(
+                "id", 203, "fullName", "Đỗ Hùng Dũng", "ownerUsername", "manager2", "healthStatus", "QUALIFIED"));
+        when(tournamentClient.getAthleteById(204L)).thenReturn(Map.of(
+                "id", 204, "fullName", "Nguyễn Hoàng Đức", "ownerUsername", "manager2", "healthStatus", "QUALIFIED"));
     }
 
     private String issueToken(String username, String role) throws Exception {
@@ -193,13 +201,14 @@ class RegistrationSecurityAndBusinessTest {
                 .andExpect(status().isBadRequest());
 
         // 6. Team below minTeamMembers -> 400
-        when(tournamentClient.getTeamMembers(100L)).thenReturn(List.of(Map.of("id", 1)));
+        when(tournamentClient.getTeamMembers(100L)).thenReturn(List.of(Map.of("id", 1, "athleteId", 200)));
         mockMvc.perform(post("/api/v1/registrations")
                         .header("Authorization", mgr1Token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"competitionId\":10,\"participantType\":\"TEAM\",\"participantReferenceId\":100}"))
                 .andExpect(status().isBadRequest());
-        when(tournamentClient.getTeamMembers(100L)).thenReturn(List.of(Map.of("id", 1), Map.of("id", 2)));
+        when(tournamentClient.getTeamMembers(100L)).thenReturn(List.of(
+                Map.of("id", 1, "athleteId", 200), Map.of("id", 2, "athleteId", 202)));
 
         // 7. Valid register reads team "name" (not teamName) & sets registeredBy from JWT
         mockMvc.perform(post("/api/v1/registrations")
@@ -330,5 +339,83 @@ class RegistrationSecurityAndBusinessTest {
 
         var constraintResp = handler.handleConstraintViolation(new ConstraintViolationException("invalid field", Set.of()));
         assertEquals(400, constraintResp.getStatusCode().value());
+    }
+
+    @Test
+    void registerAndApprove_lockAfterMatchesExist_enforceRuleDeadline_andValidateTeamMemberHealthAndOverlap() throws Exception {
+        // 1. Respect CompetitionRule.registrationDeadline when passed (even if tournament window is still open)
+        when(tournamentClient.getCompetitionRule(10L)).thenReturn(Map.of(
+                "competitionId", 10, "maxParticipants", 8, "minTeamMembers", 2, "maxTeamMembers", 5,
+                "registrationDeadline", LocalDateTime.now().minusHours(1).toString()
+        ));
+        mockMvc.perform(post("/api/v1/registrations")
+                        .header("Authorization", mgr1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":10,\"participantType\":\"TEAM\",\"participantReferenceId\":100}"))
+                .andExpect(status().isBadRequest());
+
+        // Restore valid deadline for comp 10
+        when(tournamentClient.getCompetitionRule(10L)).thenReturn(Map.of(
+                "competitionId", 10, "maxParticipants", 8, "minTeamMembers", 2, "maxTeamMembers", 5,
+                "registrationDeadline", LocalDateTime.now().plusDays(2).toString()
+        ));
+
+        // 2. Team containing non-QUALIFIED member (athlete 201 INJURED) -> 400 Bad Request
+        when(tournamentClient.getTeamMembers(100L)).thenReturn(List.of(
+                Map.of("id", 1, "athleteId", 200), Map.of("id", 2, "athleteId", 201)));
+        mockMvc.perform(post("/api/v1/registrations")
+                        .header("Authorization", mgr1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":10,\"participantType\":\"TEAM\",\"participantReferenceId\":100}"))
+                .andExpect(status().isBadRequest());
+        when(tournamentClient.getTeamMembers(100L)).thenReturn(List.of(
+                Map.of("id", 1, "athleteId", 200), Map.of("id", 2, "athleteId", 202)));
+
+        // 3. Register team 100 successfully (athlete 200, 202), then team 101 shares athlete 202 -> 409 Conflict
+        mockMvc.perform(post("/api/v1/registrations")
+                        .header("Authorization", mgr1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":10,\"participantType\":\"TEAM\",\"participantReferenceId\":100}"))
+                .andExpect(status().isCreated());
+
+        when(tournamentClient.getTeamMembers(101L)).thenReturn(List.of(
+                Map.of("id", 3, "athleteId", 202), Map.of("id", 4, "athleteId", 204)));
+        mockMvc.perform(post("/api/v1/registrations")
+                        .header("Authorization", mgr2Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":10,\"participantType\":\"TEAM\",\"participantReferenceId\":101}"))
+                .andExpect(status().isConflict());
+
+        // Fix team 101 distinct athlete 203 -> team 101 registers cleanly
+        when(tournamentClient.getTeamMembers(101L)).thenReturn(List.of(
+                Map.of("id", 3, "athleteId", 203), Map.of("id", 4, "athleteId", 204)));
+        MvcResult reg2Pending = mockMvc.perform(post("/api/v1/registrations")
+                        .header("Authorization", mgr2Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":10,\"participantType\":\"TEAM\",\"participantReferenceId\":101}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long reg2PendingId = MAPPER.readTree(reg2Pending.getResponse().getContentAsString()).get("id").asLong();
+
+        // 4. Once a match exists in competition 10 -> BOTH new register AND approveRegistration return 409 Conflict!
+        Match match = new Match(null, 1L, "Chung kết", LocalDateTime.now().plusDays(1), "Sân A", "Đội A", "Đội B", "SCHEDULED");
+        match.setCompetitionId(10L);
+        match.setParticipant1Id(1L);
+        match.setParticipant2Id(2L);
+        matchRepository.save(match);
+
+        mockMvc.perform(put("/api/v1/registrations/" + reg2PendingId + "/approve")
+                        .header("Authorization", org1Token))
+                .andExpect(status().isConflict());
+
+        when(tournamentClient.getTeamById(102L)).thenReturn(Map.of(
+                "id", 102, "name", "CLB Mới", "ownerUsername", "manager1"));
+        when(tournamentClient.getTeamMembers(102L)).thenReturn(List.of(
+                Map.of("id", 5, "athleteId", 200), Map.of("id", 6, "athleteId", 204)));
+        mockMvc.perform(post("/api/v1/registrations")
+                        .header("Authorization", mgr1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":10,\"participantType\":\"TEAM\",\"participantReferenceId\":102}"))
+                .andExpect(status().isConflict());
     }
 }

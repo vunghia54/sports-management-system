@@ -148,8 +148,12 @@ public class RegistrationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Nội dung thi đấu hiện không mở đăng ký (trạng thái: " + compStatus + ")");
         }
+        if (matchRepository != null && !matchRepository.findByCompetitionId(registration.getCompetitionId()).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Nội dung thi đấu #" + registration.getCompetitionId() + " đã có lịch thi đấu, không thể đăng ký thêm");
+        }
 
-        // 2. Verify registration window [registrationStartDate, registrationEndDate] of tournament
+        // 2. Verify registration window [registrationStartDate, registrationEndDate] of tournament and rule registrationDeadline
         Long tournamentId = parseLongField(comp.get("tournamentId"));
         Map<String, Object> tour = tournamentId != null ? tournamentClient.getTournamentById(tournamentId) : null;
         if (tour == null) {
@@ -161,6 +165,14 @@ public class RegistrationService {
         if ((regStart != null && today.isBefore(regStart)) || (regEnd != null && today.isAfter(regEnd))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Ngày hiện tại (" + today + ") nằm ngoài thời hạn đăng ký [" + regStart + ", " + regEnd + "]");
+        }
+        Map<String, Object> rule = tournamentClient.getCompetitionRule(registration.getCompetitionId());
+        if (rule != null && rule.get("registrationDeadline") != null) {
+            LocalDateTime deadline = parseLocalDateTime(rule.get("registrationDeadline"));
+            if (deadline != null && LocalDateTime.now().isAfter(deadline)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Đã quá hạn chót đăng ký của nội dung thi đấu (" + deadline + ")");
+            }
         }
 
         // 3. Verify participantType matches Sport.sportType
@@ -187,8 +199,7 @@ public class RegistrationService {
             }
         }
 
-        // 4. Verify participant (Team / Athlete), ownership, rule bounds & athlete health
-        Map<String, Object> rule = tournamentClient.getCompetitionRule(registration.getCompetitionId());
+        // 4. Verify participant (Team / Athlete), ownership, rule bounds & athlete health + no duplicate athlete across active teams
         if ("TEAM".equals(type)) {
             Map<String, Object> team = tournamentClient.getTeamById(registration.getParticipantReferenceId());
             if (team == null) {
@@ -218,6 +229,51 @@ public class RegistrationService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Đội '" + registration.getParticipantName() + "' có " + memberCount
                                 + " thành viên, vượt quá tối đa " + maxMembers + " thành viên theo điều lệ");
+            }
+            java.util.Set<Long> candidateAthleteIds = new java.util.HashSet<>();
+            if (members != null) {
+                for (Map<String, Object> m : members) {
+                    Long aid = parseLongField(m.get("athleteId"));
+                    if (aid == null) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Thành viên đội '" + registration.getParticipantName() + "' thiếu athleteId hợp lệ");
+                    }
+                    Map<String, Object> memberAthlete = tournamentClient.getAthleteById(aid);
+                    if (memberAthlete == null) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Không tìm thấy hồ sơ VĐV #" + aid + " trong đội");
+                    }
+                    String health = memberAthlete.get("healthStatus") != null
+                            ? String.valueOf(memberAthlete.get("healthStatus")).trim() : "";
+                    if (!"QUALIFIED".equalsIgnoreCase(health)) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Thành viên VĐV #" + aid + " (" + memberAthlete.get("fullName")
+                                        + ") chưa đạt trạng thái sức khỏe QUALIFIED (hiện tại: " + health + ")");
+                    }
+                    candidateAthleteIds.add(aid);
+                }
+            }
+            if (!candidateAthleteIds.isEmpty()) {
+                List<Registration> otherActiveTeamRegs = registrationRepository
+                        .findByCompetitionIdAndParticipantTypeAndStatusIn(
+                                registration.getCompetitionId(), "TEAM", List.of("PENDING", "APPROVED"));
+                for (Registration other : otherActiveTeamRegs) {
+                    if (java.util.Objects.equals(other.getParticipantReferenceId(), registration.getParticipantReferenceId())) {
+                        continue;
+                    }
+                    List<Map<String, Object>> otherMembers = tournamentClient.getTeamMembers(other.getParticipantReferenceId());
+                    if (otherMembers != null) {
+                        for (Map<String, Object> om : otherMembers) {
+                            Long otherAid = parseLongField(om.get("athleteId"));
+                            if (otherAid != null && candidateAthleteIds.contains(otherAid)) {
+                                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                        "Vận động viên #" + otherAid + " đã nằm trong đội '" + other.getParticipantName()
+                                                + "' (trạng thái " + other.getStatus() + ") ở cùng nội dung thi đấu #"
+                                                + registration.getCompetitionId());
+                            }
+                        }
+                    }
+                }
             }
         } else {
             Map<String, Object> athlete = tournamentClient.getAthleteById(registration.getParticipantReferenceId());
@@ -283,6 +339,10 @@ public class RegistrationService {
         if (!"PENDING".equalsIgnoreCase(reg.getStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Chỉ có thể duyệt đơn đăng ký đang ở trạng thái PENDING (hiện tại: " + reg.getStatus() + ")");
+        }
+        if (matchRepository != null && !matchRepository.findByCompetitionId(reg.getCompetitionId()).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Nội dung thi đấu #" + reg.getCompetitionId() + " đã có lịch thi đấu, không thể duyệt thêm đơn đăng ký");
         }
 
         Map<String, Object> rule = tournamentClient.getCompetitionRule(reg.getCompetitionId());
@@ -466,6 +526,31 @@ public class RegistrationService {
         if (text.length() >= 10) text = text.substring(0, 10);
         try {
             return LocalDate.parse(text);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private LocalDateTime parseLocalDateTime(Object val) {
+        if (val == null) return null;
+        if (val instanceof LocalDateTime ldt) return ldt;
+        if (val instanceof LocalDate ld) return ld.atTime(23, 59, 59);
+        if (val instanceof List<?> arr && arr.size() >= 3) {
+            int y = Integer.parseInt(String.valueOf(arr.get(0)));
+            int m = Integer.parseInt(String.valueOf(arr.get(1)));
+            int d = Integer.parseInt(String.valueOf(arr.get(2)));
+            int h = arr.size() >= 4 ? Integer.parseInt(String.valueOf(arr.get(3))) : 23;
+            int min = arr.size() >= 5 ? Integer.parseInt(String.valueOf(arr.get(4))) : 59;
+            int sec = arr.size() >= 6 ? Integer.parseInt(String.valueOf(arr.get(5))) : 59;
+            return LocalDateTime.of(y, m, d, h, min, sec);
+        }
+        String text = String.valueOf(val).trim();
+        if (text.isEmpty() || "null".equalsIgnoreCase(text)) return null;
+        try {
+            if (text.length() == 10) {
+                return LocalDate.parse(text).atTime(23, 59, 59);
+            }
+            return LocalDateTime.parse(text);
         } catch (Exception ex) {
             return null;
         }

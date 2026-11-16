@@ -20,6 +20,9 @@ public interface RegistrationRepository extends JpaRepository<Registration, Long
     Optional<Registration> findByCompetitionIdAndParticipantTypeAndParticipantReferenceId(
             Long competitionId, String participantType, Long participantReferenceId);
 
+    List<Registration> findByCompetitionIdAndParticipantTypeAndStatusIn(
+            Long competitionId, String participantType, Collection<String> statuses);
+
     boolean existsByParticipantTypeAndParticipantReferenceIdAndStatusIn(
             String participantType, Long participantReferenceId, Collection<String> statuses);
 }

@@ -60,8 +60,8 @@ Hệ thống Quản lý Thể thao định nghĩa 5 vai trò rõ rệt (`ROLE_AD
 | 13 | `POST` | `/api/v1/matches` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Kiểm tra giải đấu hợp lệ qua Tournament Service | 201 Created / 400 / 401 / 403 |
 | 14 | `PUT` | `/api/v1/matches/{id}` | Match | Bảo vệ | `ROLE_REFEREE`, `ROLE_ORGANIZER`, `ROLE_ADMIN` | Cho phép trọng tài cập nhật trạng thái | 200 OK / 400 / 401 / 403 / 404 |
 | 15 | `DELETE` | `/api/v1/matches/{id}` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Chỉ Admin hoặc Organizer sở hữu giải | 204 No Content / 401 / 403 / 404 |
-| 15b | `POST` | `/api/v1/registrations` | Match | Bảo vệ | `ROLE_TEAM_MANAGER`, `ROLE_VIEWER`, `ROLE_ADMIN` | `TEAM_MANAGER` chỉ đăng ký đội/VĐV của mình | 201 Created / 400 / 403 / **409 Conflict** |
-| 15c | `PUT` | `/api/v1/registrations/{id}/approve` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Chỉ Organizer sở hữu giải (hoặc Admin) | 200 OK / 400 / 403 / 409 |
+| 15b | `POST` | `/api/v1/registrations` | Match | Bảo vệ | `ROLE_TEAM_MANAGER`, `ROLE_VIEWER`, `ROLE_ADMIN` | `TEAM_MANAGER` chỉ đăng ký đội/VĐV của mình; kiểm tra `registrationDeadline`, mọi thành viên đội phải `QUALIFIED`, không trùng VĐV ở đội khác (`PENDING`/`APPROVED`), và chặn `409` nếu nội dung đã có trận | 201 Created / 400 / 403 / **409 Conflict** |
+| 15c | `PUT` | `/api/v1/registrations/{id}/approve` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Chỉ Organizer sở hữu giải (hoặc Admin); chặn `409` nếu đã vượt `maxParticipants` hoặc nội dung đã có lịch trận đấu | 200 OK / 400 / 403 / 409 |
 | 15d | `PUT` | `/api/v1/registrations/{id}/reject` | Match | Bảo vệ | `ROLE_ORGANIZER`, `ROLE_ADMIN` | Organizer sở hữu giải (409 nếu đã có trận) | 200 OK / 400 / 403 / 409 |
 | 15e | `PUT` | `/api/v1/registrations/{id}/withdraw` | Match | Bảo vệ | Người đã đăng ký (`registeredBy`), `ROLE_ADMIN` | Rút đơn (409 nếu đã có trận) | 200 OK / 400 / 403 / 409 |
 | 16 | `POST` | `/api/v1/results` | Result | Bảo vệ | `ROLE_REFEREE` (được phân công), `ROLE_ORGANIZER` (sở hữu giải), `ROLE_ADMIN` | Trọng tài không ghi đè được `CONFIRMED`; KNOCKOUT hòa phải có luân lưu | 201 Created / 400 / 403 |

@@ -4670,6 +4670,10 @@ async function openCompetitionSettingsModal(tournamentId, competitionId) {
           <input id="mCfgMaxMem" data-field="maxTeamMembers" type="number" min="1" class="input" required value="${rule.maxTeamMembers ?? 20}" />
         </div>
       </div>
+      <div class="form-group">
+        <label for="mCfgRegDeadline">Hạn chót đăng ký nội dung (tùy chọn)</label>
+        <input id="mCfgRegDeadline" data-field="registrationDeadline" type="datetime-local" class="input" value="${rule.registrationDeadline ? String(rule.registrationDeadline).slice(0, 16) : ''}" />
+      </div>
       <div class="form-group" style="margin-top:4px;">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;">
           <input id="mCfgThirdPlace" data-field="hasThirdPlaceMatch" type="checkbox" ${fmt.hasThirdPlaceMatch ? 'checked' : ''} />
@@ -4701,12 +4705,18 @@ async function submitCompetitionSettingsForm(e, tournamentId, competitionId) {
   const existingComp = tourComps.find(c => Number(c.id) === Number(competitionId));
   const nextStatus = document.getElementById('mCfgStatus').value;
 
+  const regDeadlineRaw = document.getElementById('mCfgRegDeadline')?.value;
+  const rulePayload = { maxParticipants, minTeamMembers, maxTeamMembers };
+  if (regDeadlineRaw) {
+    rulePayload.registrationDeadline = regDeadlineRaw.length === 16 ? `${regDeadlineRaw}:00` : regDeadlineRaw;
+  }
+
   const unlock = lockFormSubmit(form, 'Đang lưu...');
   try {
     const requests = [
       apiCall(`/api/v1/competitions/${competitionId}/rule`, {
         method: 'PUT',
-        body: JSON.stringify({ maxParticipants, minTeamMembers, maxTeamMembers })
+        body: JSON.stringify(rulePayload)
       }),
       apiCall(`/api/v1/competitions/${competitionId}/format`, {
         method: 'PUT',
