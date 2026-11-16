@@ -293,3 +293,153 @@ Tổng cộng **94/94** test pass (0 fail, 0 error, 0 skipped):
   5. Trọng tài bắt đầu trận đấu, ghi kết quả -> Organizer xác nhận kết quả (`CONFIRMED`, trận chuyển `FINISHED`).
   6. Xác minh bảng xếp hạng tự động cập nhật (`pts=3, gd=2`), thông báo RabbitMQ `MATCH_FINISHED` được nhận cùng trạng thái đọc riêng theo người dùng, và Gateway cho phép `http://localhost:3000` / chặn `https://evil.example.com`.
 - Sau khi hoàn tất E2E, toàn bộ tiến trình cụm test đã dừng và dữ liệu tạm `e2e_*` trong PostgreSQL đã được dọn sạch.
+
+---
+
+## 5. Vòng 2 (C1–C6, D1 & Nghiệm thu mới)
+
+Tiếp nối vòng 1 (**A1–B6**), vòng 2 xử lý các hạng mục **C1–C6** (bắt buộc) và **D1** (khuyến nghị), mỗi hạng mục gồm **01 commit Git độc lập**, test tự động trong `src/test` của module tương ứng, đồng bộ `app.js`, Postman, seed/docs và nghiệm thu E2E live trên cụm 10 service.
+
+### Bảng Tổng Hợp Commit Vòng 2
+
+| Mục | Commit | Tiêu đề | Trạng thái |
+|---|---|---|---|
+| **C1** | `1a43414` | `fix(C1): enforce single source of truth for competition format, group count splitting, and lock edits after matches exist` | Hoàn tất & Đã kiểm thử |
+| **C2** | `ae673f4` | `fix(C2): lock registrations once matches exist, enforce rule registrationDeadline, and validate team member health and cross-team uniqueness` | Hoàn tất & Đã kiểm thử |
+| **C3** | `444d54f` | `fix(C3): restrict FINISHED transition to ROLE_INTERNAL_RESULT_SYNC and include match score in MatchFinishedEvent notifications` | Hoàn tất & Đã kiểm thử |
+| **C4** | `6aec4d7` | `fix(C4): enforce athlete ownership check when team manager adds team members` | Hoàn tất & Đã kiểm thử |
+| **C5** | `4fd178e` | `fix(C5): remove test shortcuts from services, restrict sport PUT/DELETE to ADMIN, lower jwt.expiration to 3600s, handle 401 redirect, and add .env.example` | Hoàn tất & Đã kiểm thử |
+| **C6** | `05306d2` | `docs(C6): rewrite README for capstone project and synchronize BAO_CAO_THUC_HANH_1_DEN_7` | Hoàn tất & Đã kiểm thử |
+| **D1** | `c52daaa` | `fix(D1): support KNOCKOUT generate-next-round with third-place/byes and GROUP_STAGE per-group standings` | Hoàn tất & Đã kiểm thử |
+
+### Chi Tiết Thay Đổi & Tệp Đã Sửa Theo Từng Mục (Vòng 2)
+
+#### C1 — Thể thức thi đấu phải có một nguồn duy nhất (`1a43414`)
+- **Nội dung chính:** `match-service` đọc trực tiếp `formatType`, `numberOfGroups`, `hasThirdPlaceMatch` từ `GET /api/v1/competitions/{id}/format` tại `tournament-service`; trả `400` nếu client gửi `format` khác cấu hình. `GROUP_STAGE` chia đúng `numberOfGroups` bảng; `HYBRID` trả `400` thông báo chưa hỗ trợ xếp lịch tự động. `tournament-service` kiểm tra qua `match-service` trước khi sửa `PUT /competitions/{id}/format` và `/rule` (trả `409` nếu đã có trận đấu, `503` nếu `match-service` không phản hồi). Cập nhật `app.js` bỏ dropdown `mGenFormat`, hiển thị thể thức chỉ đọc kèm nút mở cấu hình và trường `#mCfgThirdPlace`.
+- **Kiểm thử chứng minh:** `CompetitionAndTournamentSecurityTest`, `MatchScheduleAndParticipantIntegrationTest`, `MatchSecurityAndConflictIntegrationTest`, `ResultValidationKnockoutAndReopenSyncTest`.
+- **Tệp đã sửa (12):**
+  - `Sports_Management_System_SOA.postman_collection.json`
+  - `api-gateway/src/main/resources/static/js/app.js`
+  - `integration/api-contract.md`
+  - `match-service/src/main/java/com/sports/management/match/client/TournamentClient.java`
+  - `match-service/src/main/java/com/sports/management/match/controller/MatchController.java`
+  - `match-service/src/main/java/com/sports/management/match/service/MatchService.java`
+  - `match-service/src/test/java/com/sports/management/match/MatchScheduleAndParticipantIntegrationTest.java`
+  - `match-service/src/test/java/com/sports/management/match/MatchSecurityAndConflictIntegrationTest.java`
+  - `result-service/src/test/java/com/sports/management/result/ResultValidationKnockoutAndReopenSyncTest.java`
+  - `security-design/role-permission-matrix.md`
+  - `tournament-service/src/main/java/com/sports/management/tournament/controller/CompetitionController.java`
+  - `tournament-service/src/test/java/com/sports/management/tournament/CompetitionAndTournamentSecurityTest.java`
+
+#### C2 — Khóa đăng ký sau khi đã có lịch & điều kiện đội tham dự (`ae673f4`)
+- **Nội dung chính:** `RegistrationService.register` và `approveRegistration` trả `409 Conflict` nếu nội dung thi đấu đã có trận đấu; tôn trọng `CompetitionRule.registrationDeadline`; đăng ký theo `TEAM` yêu cầu mọi thành viên đều có `healthStatus=QUALIFIED` và không trùng VĐV với đội khác đang `PENDING`/`APPROVED` trong cùng nội dung (`409`). Bổ sung `#mCfgRegDeadline` vào `app.js`.
+- **Kiểm thử chứng minh:** `RegistrationSecurityAndBusinessTest`.
+- **Tệp đã sửa (5):**
+  - `api-gateway/src/main/resources/static/js/app.js`
+  - `match-service/src/main/java/com/sports/management/match/repository/RegistrationRepository.java`
+  - `match-service/src/main/java/com/sports/management/match/service/RegistrationService.java`
+  - `match-service/src/test/java/com/sports/management/match/RegistrationSecurityAndBusinessTest.java`
+  - `security-design/role-permission-matrix.md`
+
+#### C3 — Trận chỉ được `FINISHED` khi kết quả xác nhận & kèm tỉ số trong thông báo (`444d54f`)
+- **Nội dung chính:** `MatchController.verifyMatchUpdatePermission` giới hạn `ROLE_REFEREE` chỉ được chuyển `SCHEDULED`/`POSTPONED -> ONGOING`, chặn `ROLE_ORGANIZER`/`ROLE_ADMIN` đặt `FINISHED` trực tiếp (`403`); chỉ `ROLE_INTERNAL_RESULT_SYNC` được chuyển sang `FINISHED`. `result-service` (`markMatchFinished`) luôn sinh internal sync token và gửi kèm tỉ số/luân lưu; `MatchFinishedEvent` và `NotificationConsumer` đưa tỉ số (và luân lưu nếu có) vào tiêu đề/nội dung thông báo. Cập nhật `app.js` và `seed_all_soa_data.py`.
+- **Kiểm thử chứng minh:** `MatchSecurityAndConflictIntegrationTest`, `MatchScheduleAndParticipantIntegrationTest`, `RabbitMQContractAndAfterCommitTest`, `ResultSecuritySyncAndBatchIntegrationTest`, `NotificationRabbitMQAndConsumerTest`.
+- **Tệp đã sửa (17):**
+  - `api-gateway/src/main/resources/static/js/app.js`
+  - `integration/api-contract.md`
+  - `match-service/src/main/java/com/sports/management/match/controller/MatchController.java`
+  - `match-service/src/main/java/com/sports/management/match/model/Match.java`
+  - `match-service/src/main/java/com/sports/management/match/service/MatchService.java`
+  - `match-service/src/main/java/com/sports/management/messaging/event/MatchFinishedEvent.java`
+  - `match-service/src/test/java/com/sports/management/match/MatchScheduleAndParticipantIntegrationTest.java`
+  - `match-service/src/test/java/com/sports/management/match/MatchSecurityAndConflictIntegrationTest.java`
+  - `match-service/src/test/java/com/sports/management/match/RabbitMQContractAndAfterCommitTest.java`
+  - `notification-service/src/main/java/com/sports/management/notification/messaging/MatchFinishedEvent.java`
+  - `notification-service/src/main/java/com/sports/management/notification/messaging/NotificationConsumer.java`
+  - `notification-service/src/test/java/com/sports/management/notification/NotificationRabbitMQAndConsumerTest.java`
+  - `result-service/src/main/java/com/sports/management/result/client/MatchAndRankingClient.java`
+  - `result-service/src/main/java/com/sports/management/result/service/ResultService.java`
+  - `result-service/src/test/java/com/sports/management/result/ResultSecuritySyncAndBatchIntegrationTest.java`
+  - `security-design/role-permission-matrix.md`
+  - `seed_all_soa_data.py`
+
+#### C4 — Quyền sở hữu VĐV khi thêm thành viên vào đội (`6aec4d7`)
+- **Nội dung chính:** `TeamController` và `TeamService.addMember` kiểm tra khi caller là `ROLE_TEAM_MANAGER` thì VĐV phải có `ownerUsername` trùng caller (VĐV không thuộc sở hữu hoặc bị ẩn `ownerUsername` trả `403`); `ROLE_ADMIN` được phép thao tác thay. Cập nhật `app.js` lọc danh sách đội/VĐV thuộc sở hữu trong `openAddAthleteToTeamModal`.
+- **Kiểm thử chứng minh:** `TeamSecurityAndMemberValidationTest`.
+- **Tệp đã sửa (5):**
+  - `api-gateway/src/main/resources/static/js/app.js`
+  - `security-design/role-permission-matrix.md`
+  - `team-service/src/main/java/com/sports/management/team/controller/TeamController.java`
+  - `team-service/src/main/java/com/sports/management/team/service/TeamService.java`
+  - `team-service/src/test/java/com/sports/management/team/TeamSecurityAndMemberValidationTest.java`
+
+#### C5 — Dọn shortcut test, siết quyền `/sports`, hạ TTL JWT & xử lý 401 (`4fd178e`)
+- **Nội dung chính:** Xóa constructor/method shortcut phục vụ test cũ khỏi `RegistrationService`, `CompetitionController`, `MatchService`; giới hạn `PUT`/`PATCH`/`DELETE /api/v1/sports/**` chỉ cho `ROLE_ADMIN`; hạ `jwt.expiration` từ `86400` xuống `3600` giây; `app.js` điều hướng về trang đăng nhập khi nhận `401` ở API bảo vệ; bổ sung `.env.example` và ignore `.env`, `.agents/`, `skills-lock.json` trong `.gitignore`.
+- **Kiểm thử chứng minh:** `DataSeederDemoDisabledTest`, `CompetitionAndTournamentSecurityTest`, `MatchServiceAndControllerTest`.
+- **Tệp đã sửa (14):**
+  - `.env.example`
+  - `.gitignore`
+  - `api-gateway/src/main/resources/static/js/app.js`
+  - `auth-service/src/main/java/com/sports/management/auth/util/JwtTokenProvider.java`
+  - `auth-service/src/main/resources/application.properties`
+  - `auth-service/src/test/java/com/sports/management/auth/DataSeederDemoDisabledTest.java`
+  - `match-service/src/main/java/com/sports/management/match/service/MatchService.java`
+  - `match-service/src/main/java/com/sports/management/match/service/RegistrationService.java`
+  - `match-service/src/test/java/com/sports/management/match/MatchServiceAndControllerTest.java`
+  - `security-design/api-security-design.md`
+  - `security-design/role-permission-matrix.md`
+  - `tournament-service/src/main/java/com/sports/management/tournament/config/SecurityConfig.java`
+  - `tournament-service/src/main/java/com/sports/management/tournament/controller/CompetitionController.java`
+  - `tournament-service/src/test/java/com/sports/management/tournament/CompetitionAndTournamentSecurityTest.java`
+
+#### C6 — Cập nhật tài liệu đồ án (`05306d2`)
+- **Nội dung chính:** Viết lại `README.md` chuẩn đồ án (luồng nghiệp vụ, 5 vai trò, sơ đồ & bảng 10 service, RabbitMQ, biến môi trường bắt buộc, 6 tài khoản demo đúng `DataSeeder.java`, hướng dẫn IntelliJ `.run` / Docker / Maven / TH7) và đồng bộ `BAO_CAO_THUC_HANH_1_DEN_7.md`.
+- **Tệp đã sửa (2):**
+  - `BAO_CAO_THUC_HANH_1_DEN_7.md`
+  - `README.md`
+
+#### D1 — Tạo vòng Knockout tiếp theo & BXH riêng theo từng bảng `GROUP_STAGE` (`c52daaa`)
+- **Nội dung chính:** Bổ sung `POST /api/v1/matches/generate-next-round` đọc kết quả `CONFIRMED` từ `result-service` (`TournamentClient.getResultsByMatchIds`), lấy đội thắng (kể cả qua luân lưu) và đội bye vòng trước để sinh `Tứ kết`/`Bán kết`/`Chung kết` kèm `Tranh hạng ba` khi `hasThirdPlaceMatch=true` (trả `409` nếu còn trận chưa `FINISHED`/chưa có kết quả `CONFIRMED` hoặc đã có Chung kết). Bổ sung `RankingItem.groupName` và cập nhật `RankingService.recalculateRanking` tính điểm và gán `rankPosition` độc lập cho từng bảng trong thể thức `GROUP_STAGE`. Cập nhật UI nút tạo vòng tiếp theo & hiển thị BXH theo từng bảng trong `app.js`, kèm Postman và docs.
+- **Kiểm thử chứng minh:** `MatchScheduleAndParticipantIntegrationTest`, `RankingServiceAndControllerTest`.
+- **Tệp đã sửa (12):**
+  - `Sports_Management_System_SOA.postman_collection.json`
+  - `api-gateway/src/main/resources/static/js/app.js`
+  - `integration/api-contract.md`
+  - `match-service/src/main/java/com/sports/management/match/client/TournamentClient.java`
+  - `match-service/src/main/java/com/sports/management/match/controller/MatchController.java`
+  - `match-service/src/main/java/com/sports/management/match/service/MatchService.java`
+  - `match-service/src/test/java/com/sports/management/match/MatchScheduleAndParticipantIntegrationTest.java`
+  - `ranking-service/src/main/java/com/sports/management/ranking/controller/RankingController.java`
+  - `ranking-service/src/main/java/com/sports/management/ranking/model/RankingItem.java`
+  - `ranking-service/src/main/java/com/sports/management/ranking/service/RankingService.java`
+  - `ranking-service/src/test/java/com/sports/management/ranking/RankingServiceAndControllerTest.java`
+  - `security-design/role-permission-matrix.md`
+
+### Kết Quả Kiểm Thử Tự Động Toàn Repo Vòng 2 (`.\mvnw.cmd test`)
+
+Tổng cộng **98/98** test pass (0 fail, 0 error, 0 skipped):
+
+| Module | Tests Run | Passed | Failed | Skipped |
+|---|---:|---:|---:|---:|
+| `service-registry` | 0 | 0 | 0 | 0 |
+| `api-gateway` | 12 | 12 | 0 | 0 |
+| `auth-service` | 16 | 16 | 0 | 0 |
+| `tournament-service` | 11 | 11 | 0 | 0 |
+| `team-service` | 8 | 8 | 0 | 0 |
+| `athlete-service` | 4 | 4 | 0 | 0 |
+| `match-service` | 20 | 20 | 0 | 0 |
+| `result-service` | 10 | 10 | 0 | 0 |
+| `ranking-service` | 13 | 13 | 0 | 0 |
+| `notification-service` | 4 | 4 | 0 | 0 |
+| **Tổng cộng** | **98** | **98** | **0** | **0** |
+
+### Kết Quả Nghiệm Thu E2E Vòng 2 Cụm 10 Service (PostgreSQL & RabbitMQ)
+
+Chạy đầy đủ cụm 10 module với `JWT_SECRET` ngẫu nhiên, `APP_DEMO_SEED_USERS=true`, `CORS_ALLOWED_ORIGINS="http://localhost:8080,http://localhost:3000"`, kết nối Docker PostgreSQL (`sports-postgres`) và RabbitMQ (`sports-rabbit`) qua `API Gateway` (`http://localhost:8080`):
+1. **Bảo mật & phân quyền (A2, C4, C5):** Đăng ký công khai `ROLE_ORGANIZER` bị chặn (`400`); `organizer1` gọi `PUT /api/v1/sports/1` bị chặn (`403`); `manager1` thêm VĐV thuộc sở hữu `admin` vào đội bị chặn (`403`).
+2. **Nội dung 1 — `ROUND_ROBIN` (C1, C2, C3):** Kiểm tra trùng VĐV khác đội cùng nội dung (`409`); gửi `format` lệch khi `generate-schedule` bị chặn (`400`); sinh lịch theo cấu hình `CompetitionFormat`; sửa format hoặc đăng ký thêm sau khi đã có lịch bị chặn (`409`); trọng tài chưa phân công -> `403`, sau phân công đặt trực tiếp `FINISHED` -> `403` (cả Organizer và Trọng tài), chuyển `ONGOING` -> `200`; ghi và xác nhận tỉ số hòa `1-1` thành công -> trận thành `FINISHED`, BXH đạt `1` điểm cho mỗi đội.
+3. **Nội dung 2 — `KNOCKOUT` + `hasThirdPlaceMatch=true` (D1, C3):** `generate-next-round` khi bán kết chưa xong bị chặn (`409`); hòa `1-1` không có luân lưu bị chặn (`400`); xác nhận Bán kết 1 hòa `1-1` (luân lưu `5-4`) và Bán kết 2 (`2-0`) -> `POST /api/v1/matches/generate-next-round` sinh đủ `Chung kết - Trận 1` và `Tranh hạng ba`.
+4. **Nội dung 3 — `GROUP_STAGE` 2 bảng (C1, D1):** Chia đúng 2 bảng (`Bảng A`, `Bảng B`) và BXH gán `rankPosition=1` độc lập theo từng bảng.
+5. **Thông báo RabbitMQ (C3):** `notification-service` nhận đủ thông báo chứa tỉ số (`"1 - 1"` và `"luân lưu 5 - 4"`).
+6. **Dọn dẹp:** Đã dừng toàn bộ 10 JVM và xóa toàn bộ dữ liệu kiểm thử khỏi 8 DB PostgreSQL, xác minh số dòng sau test khớp đúng trạng thái nền ban đầu.
+
