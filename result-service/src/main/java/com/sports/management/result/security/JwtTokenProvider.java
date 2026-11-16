@@ -7,6 +7,7 @@ import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -14,10 +15,17 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 @Component
-public class JwtTokenProvider {
+public class JwtTokenProvider implements InitializingBean {
 
-    @Value("${jwt.secret:SportsManagementSystemSuperSecretKeyWithAtLeast256BitsLongForHMACSHA256!}")
+    @Value("${jwt.secret}")
     private String jwtSecret;
+
+    @Override
+    public void afterPropertiesSet() {
+        if (jwtSecret == null || jwtSecret.isBlank() || jwtSecret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT_SECRET / jwt.secret must be configured with at least 32 bytes");
+        }
+    }
 
     public String generateInternalSyncToken() {
         try {

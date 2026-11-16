@@ -33,6 +33,16 @@ if (-not (Test-Path logs)) {
     New-Item -ItemType Directory -Path logs | Out-Null
 }
 
+if ([string]::IsNullOrWhiteSpace($env:JWT_SECRET)) {
+    $rngBytes = New-Object byte[] 48
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($rngBytes)
+    $env:JWT_SECRET = [Convert]::ToBase64String($rngBytes)
+    Write-Host "  [INFO] Da sinh JWT_SECRET ngau nhien (64 ky tu) cho phien kiem thu nay." -ForegroundColor DarkYellow
+}
+if ([string]::IsNullOrWhiteSpace($env:CORS_ALLOWED_ORIGINS)) {
+    $env:CORS_ALLOWED_ORIGINS = "http://localhost:8080"
+}
+
 function Test-PortOpen ($port) {
     try {
         $tcp = New-Object System.Net.Sockets.TcpClient

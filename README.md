@@ -66,8 +66,12 @@ powershell -ExecutionPolicy Bypass -File .\test_th7_service_discovery.ps1
 
 ### Bước 3: Hoặc khởi chạy toàn bộ bằng Docker Compose
 ```powershell
+$env:JWT_SECRET = "<chuoi-bi-mat-toi-thieu-32-ky-tu>"
+$env:CORS_ALLOWED_ORIGINS = "http://localhost:8080"
 docker compose up --build -d
 ```
+
+> **Lưu ý bảo mật (B6):** Mọi microservice xác thực JWT (`auth`, `tournament`, `team`, `athlete`, `match`, `result`, `ranking`, `notification`) bắt buộc cấu hình biến môi trường `JWT_SECRET` (>= 32 bytes, không còn khóa mặc định trong mã nguồn). API Gateway cấu hình `CORS_ALLOWED_ORIGINS` (mặc định `http://localhost:8080`, cấm wildcard `*`).
 
 ---
 

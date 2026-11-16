@@ -21,7 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "eureka.client.enabled=false",
         "eureka.client.register-with-eureka=false",
-        "eureka.client.fetch-registry=false"
+        "eureka.client.fetch-registry=false",
+        "jwt.secret=SportsManagementSystemSuperSecretKeyWithAtLeast256BitsLongForHMACSHA256!"
 })
 @ActiveProfiles("demo")
 class DataSeederDemoEnabledTest {

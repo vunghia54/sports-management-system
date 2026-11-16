@@ -23,6 +23,7 @@ class AthleteSortValidationTest {
         registry.add("spring.datasource.password", () -> "");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
         registry.add("eureka.client.enabled", () -> "false");
+        registry.add("jwt.secret", () -> "SportsManagementSystemSuperSecretKeyWithAtLeast256BitsLongForHMACSHA256!");
     }
 
     @Autowired

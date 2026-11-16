@@ -73,6 +73,13 @@ Hệ thống Quản lý Thể thao định nghĩa 5 vai trò rõ rệt (`ROLE_AD
 
 ---
 
+## 2b. Cấu hình Bảo mật Hạ tầng (JWT & CORS)
+
+- **Bắt buộc `JWT_SECRET`:** Tất cả 8 service xử lý JWT (`auth`, `tournament`, `team`, `athlete`, `match`, `result`, `ranking`, `notification`) không còn giá trị mặc định hardcoded trong mã Java hay `application.properties`. Dịch vụ sẽ dừng khởi động nếu thiếu `JWT_SECRET` (`jwt.secret`) hoặc độ dài nhỏ hơn 32 bytes.
+- **CORS trên API Gateway:** Loại bỏ `@CrossOrigin(origins = "*")`; cấu hình danh sách nguồn hợp lệ qua `CORS_ALLOWED_ORIGINS` (`app.cors.allowed-origins`, mặc định `http://localhost:8080`), từ chối giá trị wildcard `*`.
+
+---
+
 ## 3. Quy tắc kiểm tra quyền sở hữu tài nguyên (Resource Ownership Verification)
 
 Quy tắc xử lý khi người dùng gửi yêu cầu chỉnh sửa/xóa giải đấu:

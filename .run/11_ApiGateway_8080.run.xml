@@ -3,6 +3,9 @@
     <option name="MAIN_CLASS_NAME" value="com.sports.management.gateway.ApiGatewayApplication" />
     <module name="api-gateway" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <envs>
+      <env name="CORS_ALLOWED_ORIGINS" value="http://localhost:8080" />
+    </envs>
     <method v="2">
       <option name="Make" enabled="true" />
     </method>
