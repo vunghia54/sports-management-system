@@ -99,6 +99,8 @@ class MatchSecurityAndConflictIntegrationTest {
                 .thenReturn(Map.of("id", 10, "tournamentId", 1, "name", "Nội dung 10"));
         when(tournamentClient.getCompetitionById(11L))
                 .thenReturn(Map.of("id", 11, "tournamentId", 1, "name", "Nội dung 11"));
+        when(tournamentClient.getCompetitionFormat(11L))
+                .thenReturn(Map.of("competitionId", 11L, "formatType", "KNOCKOUT", "numberOfGroups", 1, "hasThirdPlaceMatch", false));
         when(tournamentClient.getCompetitionById(20L))
                 .thenReturn(Map.of("id", 20, "tournamentId", 2, "name", "Nội dung 20"));
 
@@ -326,7 +328,7 @@ class MatchSecurityAndConflictIntegrationTest {
         mockMvc.perform(post("/api/v1/matches/generate-schedule")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":11,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-12-25\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":11,\"startDate\":\"2026-12-25\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.conflicts", hasSize(greaterThanOrEqualTo(1))));
 

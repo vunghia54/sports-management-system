@@ -4670,6 +4670,12 @@ async function openCompetitionSettingsModal(tournamentId, competitionId) {
           <input id="mCfgMaxMem" data-field="maxTeamMembers" type="number" min="1" class="input" required value="${rule.maxTeamMembers ?? 20}" />
         </div>
       </div>
+      <div class="form-group" style="margin-top:4px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;">
+          <input id="mCfgThirdPlace" data-field="hasThirdPlaceMatch" type="checkbox" ${fmt.hasThirdPlaceMatch ? 'checked' : ''} />
+          <span>Có trận tranh hạng ba (dành cho thể thức Loại trực tiếp)</span>
+        </label>
+      </div>
       <div class="page-actions" style="justify-content:flex-end;margin-top:8px;">
         <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
         <button type="submit" class="btn btn-primary">Lưu cấu hình</button>
@@ -4706,7 +4712,8 @@ async function submitCompetitionSettingsForm(e, tournamentId, competitionId) {
         method: 'PUT',
         body: JSON.stringify({
           formatType: document.getElementById('mCfgFormat').value,
-          numberOfGroups
+          numberOfGroups,
+          hasThirdPlaceMatch: Boolean(document.getElementById('mCfgThirdPlace')?.checked)
         })
       })
     ];
@@ -5350,14 +5357,42 @@ async function fetchCompetitionParticipants(compId, force = false) {
 
 async function updateAutoGenParticipantsPreview() {
   const box = document.getElementById('autoGenParticipantsHint');
+  const formatBox = document.getElementById('autoGenFormatInfo');
   const compId = document.getElementById('mGenCompId')?.value;
   if (!box) return;
   if (!compId) {
     box.innerHTML = '<span style="color:var(--color-warning);">Vui lòng chọn nội dung thi đấu.</span>';
+    if (formatBox) {
+      formatBox.innerHTML = '<span style="color:var(--text-secondary);">-- Chưa chọn nội dung --</span>';
+    }
     return;
   }
   box.innerHTML = '<span style="color:var(--text-secondary);">Đang tải danh sách đội/VĐV đã duyệt...</span>';
-  const parts = await fetchCompetitionParticipants(compId, true);
+  if (formatBox) {
+    formatBox.innerHTML = '<span style="color:var(--text-secondary);">Đang tải cấu hình thể thức...</span>';
+  }
+  const [parts, fmtRes] = await Promise.all([
+    fetchCompetitionParticipants(compId, true),
+    apiCall(`/api/v1/competitions/${compId}/format`).catch(() => ({ data: null }))
+  ]);
+  if (formatBox) {
+    const fmt = fmtRes?.data;
+    if (!fmt || !fmt.formatType) {
+      formatBox.innerHTML = '<span style="color:var(--color-error);">Chưa có cấu hình thể thức</span>';
+    } else {
+      const ft = String(fmt.formatType).toUpperCase();
+      const labels = {
+        KNOCKOUT: 'Loại trực tiếp (KNOCKOUT)',
+        ROUND_ROBIN: 'Vòng tròn tính điểm (ROUND_ROBIN)',
+        GROUP_STAGE: `Chia ${fmt.numberOfGroups || 1} bảng đấu (GROUP_STAGE)`,
+        HYBRID: 'Hỗn hợp (HYBRID — chưa hỗ trợ xếp lịch tự động)'
+      };
+      const label = labels[ft] || ft;
+      const extra = ft === 'KNOCKOUT' && fmt.hasThirdPlaceMatch ? ' • Có tranh hạng ba' : '';
+      const color = ft === 'HYBRID' ? 'var(--color-error)' : 'var(--text-primary)';
+      formatBox.innerHTML = `<span style="font-weight:600;color:${color};">${escapeHtml(label + extra)}</span>`;
+    }
+  }
   if (parts.length < 2) {
     box.innerHTML = `<span style="color:var(--color-error);">Nội dung hiện có ${parts.length} đội/VĐV đã duyệt — cần tối thiểu 2 để tự động xếp lịch.</span>`;
   } else {
@@ -5365,6 +5400,17 @@ async function updateAutoGenParticipantsPreview() {
     const more = parts.length > 6 ? ` (+${parts.length - 6})` : '';
     box.innerHTML = `<span style="color:var(--color-success);">✓ Sẵn sàng xếp lịch từ ${parts.length} đội/VĐV đã duyệt: ${names}${more}</span>`;
   }
+}
+
+function openFormatFromAutoGenScheduleModal() {
+  const tourId = Number(document.getElementById('mGenTourId')?.value);
+  const compId = Number(document.getElementById('mGenCompId')?.value);
+  if (!tourId || !compId) {
+    showToast('Vui lòng chọn giải đấu và nội dung thi đấu trước.', 'warning');
+    return;
+  }
+  closeModal();
+  openCompetitionSettingsModal(tourId, compId);
 }
 
 async function openAutoGenerateScheduleModal(preselectedTourId = null) {
@@ -5403,12 +5449,11 @@ async function openAutoGenerateScheduleModal(preselectedTourId = null) {
       </div>
       <div class="form-grid">
         <div class="form-group">
-          <label for="mGenFormat">Thể thức thi đấu</label>
-          <select id="mGenFormat" data-field="format" class="select">
-            <option value="ROUND_ROBIN">Vòng tròn tính điểm</option>
-            <option value="GROUP_STAGE">Chia bảng đấu (Bảng A / B)</option>
-            <option value="KNOCKOUT">Loại trực tiếp (Knockout)</option>
-          </select>
+          <label>Thể thức thi đấu (theo cấu hình nội dung)</label>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--border-color);border-radius:var(--radius-md);background:var(--bg-muted,#f8fafc);min-height:40px;">
+            <div id="autoGenFormatInfo" style="font-size:0.88rem;">Đang tải...</div>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openFormatFromAutoGenScheduleModal()">⚙ Cấu hình</button>
+          </div>
         </div>
         <div class="form-group">
           <label for="mGenDate">Ngày bắt đầu *</label>
@@ -5451,7 +5496,6 @@ async function submitAutoGenerateSchedule(e) {
       body: JSON.stringify({
         tournamentId: tourId,
         competitionId: Number(compVal),
-        format: document.getElementById('mGenFormat').value,
         startDate: document.getElementById('mGenDate').value
       })
     });

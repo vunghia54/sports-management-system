@@ -86,6 +86,11 @@
   }
   ```
 
+### API: Tự động xếp lịch thi đấu theo cấu hình thể thức (C1)
+- **Endpoint:** `POST /api/v1/matches/generate-schedule`
+- **Nguồn thể thức duy nhất:** `Match Service` đọc `formatType`, `numberOfGroups`, `hasThirdPlaceMatch` từ `GET /api/v1/competitions/{id}/format` tại `Tournament Service`. Client **không** gửi tham số `format` riêng (nếu gửi khác với `formatType` đang cấu hình sẽ trả `400 Bad Request`).
+- **Hỗ trợ:** `KNOCKOUT`, `ROUND_ROBIN`, `GROUP_STAGE` (chia đúng `numberOfGroups` bảng); `HYBRID` trả `400 Bad Request` (`"Thể thức HYBRID chưa hỗ trợ xếp lịch tự động"`).
+
 ---
 
 ## 3. Asynchronous Message Contract: RabbitMQ Broker

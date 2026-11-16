@@ -339,5 +339,23 @@ class ResultValidationKnockoutAndReopenSyncTest {
                 .andExpect(jsonPath("$.result.matchSynced").value(true))
                 .andExpect(jsonPath("$.result.rankingSynced").value(false));
         assertEquals(0, rankingPostCalls.get(), "KNOCKOUT competition must NOT call point-table ranking recalculate");
+
+        // ROUND_ROBIN competition 10 match 11 accepts draw 1-1 without penalties and syncs point-table ranking!
+        String rrDrawJson = mockMvc.perform(post("/api/v1/results")
+                        .header("Authorization", orgToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"matchId\":11,\"scoreParticipant1\":1,\"scoreParticipant2\":1}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.result.winner").value("DRAW"))
+                .andReturn().getResponse().getContentAsString();
+        long rrResId = JSON.readTree(rrDrawJson).get("result").get("id").asLong();
+
+        mockMvc.perform(put("/api/v1/results/" + rrResId + "/confirm")
+                        .header("Authorization", orgToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.result.matchSynced").value(true))
+                .andExpect(jsonPath("$.result.rankingSynced").value(true));
+        assertEquals(1, rankingPostCalls.get(), "ROUND_ROBIN draw confirm must recalculate ranking points");
     }
 }

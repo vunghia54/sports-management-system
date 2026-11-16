@@ -88,7 +88,14 @@ class MatchScheduleAndParticipantIntegrationTest {
         for (long cid = 100L; cid <= 110L; cid++) {
             when(tournamentClient.getCompetitionById(cid))
                     .thenReturn(Map.of("id", cid, "tournamentId", 1, "name", "Nội dung " + cid));
+            String fmt = (cid == 101L) ? "ROUND_ROBIN" : "KNOCKOUT";
+            when(tournamentClient.getCompetitionFormat(cid))
+                    .thenReturn(Map.of("competitionId", cid, "formatType", fmt, "numberOfGroups", 1, "hasThirdPlaceMatch", false));
         }
+        when(tournamentClient.getCompetitionFormat(108L))
+                .thenReturn(Map.of("competitionId", 108L, "formatType", "GROUP_STAGE", "numberOfGroups", 3, "hasThirdPlaceMatch", false));
+        when(tournamentClient.getCompetitionFormat(109L))
+                .thenReturn(Map.of("competitionId", 109L, "formatType", "HYBRID", "numberOfGroups", 2, "hasThirdPlaceMatch", false));
         when(tournamentClient.getCompetitionById(200L))
                 .thenReturn(Map.of("id", 200, "tournamentId", 2, "name", "Nội dung Giải 2"));
     }
@@ -219,17 +226,36 @@ class MatchScheduleAndParticipantIntegrationTest {
         mockMvc.perform(post("/api/v1/matches/generate-schedule")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"format\":\"ROUND_ROBIN\"}"))
+                        .content("{\"tournamentId\":1}"))
                 .andExpect(status().isBadRequest());
 
-        // 4 participants -> Circle Round Robin: 6 matches across 3 distinct days, max 1 match per team per day/round
+        // Sending client format differing from configured competition format -> 400 explaining single source of truth
+        seedParticipants(100L, 4, "DefaultKO");
+        mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":100,\"format\":\"ROUND_ROBIN\",\"startDate\":\"2026-10-12\"}"))
+                .andExpect(status().isBadRequest());
+
+        // Competition left on default KNOCKOUT format without passing format -> schedules KNOCKOUT directly
+        mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":100,\"startDate\":\"2026-10-12\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.format").value("KNOCKOUT"))
+                .andExpect(jsonPath("$.generatedCount").value(2))
+                .andExpect(jsonPath("$.matches[0].round", startsWith("Bán kết")));
+
+        // 4 participants configured ROUND_ROBIN -> Circle Round Robin: 6 matches across 3 distinct days, max 1 match per team per day/round
         seedParticipants(101L, 4, "RR Team");
         MvcResult rrRes = mockMvc.perform(post("/api/v1/matches/generate-schedule")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":101,\"format\":\"ROUND_ROBIN\","
+                        .content("{\"tournamentId\":1,\"competitionId\":101,"
                                 + "\"startDate\":\"2026-10-15\",\"teams\":[\"Ignored Client Team\"]}"))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.format").value("ROUND_ROBIN"))
                 .andExpect(jsonPath("$.generatedCount").value(6))
                 .andExpect(jsonPath("$.matches", hasSize(6)))
                 .andReturn();
@@ -251,7 +277,7 @@ class MatchScheduleAndParticipantIntegrationTest {
         mockMvc.perform(post("/api/v1/matches/generate-schedule")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":101,\"format\":\"ROUND_ROBIN\",\"startDate\":\"2026-10-15\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":101,\"startDate\":\"2026-10-15\"}"))
                 .andExpect(status().isConflict());
 
         // 5 teams KNOCKOUT -> 2 matches labeled "Tứ kết" and 1 bye participant explicitly reported
@@ -259,19 +285,44 @@ class MatchScheduleAndParticipantIntegrationTest {
         mockMvc.perform(post("/api/v1/matches/generate-schedule")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":102,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-11-01\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":102,\"startDate\":\"2026-11-01\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.generatedCount").value(2))
                 .andExpect(jsonPath("$.matches[0].round", startsWith("Tứ kết")))
                 .andExpect(jsonPath("$.byeParticipants", hasSize(1)))
                 .andExpect(jsonPath("$.byeParticipants[0].displayName").value("KO5 5"));
 
+        // GROUP_STAGE with numberOfGroups = 3 and 6 participants -> splits across Bảng A, Bảng B, Bảng C (not fixed 2!)
+        seedParticipants(108L, 6, "GS Team");
+        MvcResult gsRes = mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":108,\"startDate\":\"2026-11-22\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.format").value("GROUP_STAGE"))
+                .andExpect(jsonPath("$.generatedCount").value(3))
+                .andReturn();
+        Set<String> groupNames = new HashSet<>();
+        for (JsonNode m : MAPPER.readTree(gsRes.getResponse().getContentAsString()).get("matches")) {
+            groupNames.add(m.get("groupName").asText());
+        }
+        assertEquals(Set.of("Bảng A", "Bảng B", "Bảng C"), groupNames);
+
+        // HYBRID format returns 400 explicitly instead of falling back to ROUND_ROBIN
+        seedParticipants(109L, 4, "Hybrid Team");
+        mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":109,\"startDate\":\"2026-11-28\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("chưa hỗ trợ xếp lịch tự động")));
+
         // Verify exact knockout round labels for 16 -> Vòng 1/8, 8 -> Tứ kết, 4 -> Bán kết, 2 -> Chung kết
         seedParticipants(103L, 16, "K16");
         mockMvc.perform(post("/api/v1/matches/generate-schedule")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":103,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-11-05\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":103,\"startDate\":\"2026-11-05\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.matches[0].round", startsWith("Vòng 1/8")));
 
@@ -279,7 +330,7 @@ class MatchScheduleAndParticipantIntegrationTest {
         mockMvc.perform(post("/api/v1/matches/generate-schedule")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":104,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-11-10\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":104,\"startDate\":\"2026-11-10\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.matches[0].round", startsWith("Tứ kết")));
 
@@ -287,7 +338,7 @@ class MatchScheduleAndParticipantIntegrationTest {
         mockMvc.perform(post("/api/v1/matches/generate-schedule")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":105,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-11-15\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":105,\"startDate\":\"2026-11-15\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.matches[0].round", startsWith("Bán kết")));
 
@@ -295,7 +346,7 @@ class MatchScheduleAndParticipantIntegrationTest {
         mockMvc.perform(post("/api/v1/matches/generate-schedule")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":106,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-11-20\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":106,\"startDate\":\"2026-11-20\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.matches[0].round", startsWith("Chung kết")));
     }

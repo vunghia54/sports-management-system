@@ -328,18 +328,20 @@ public class MatchController {
             assertTournamentExists(tournamentId);
         }
 
-        String format = request.get("format") != null ? String.valueOf(request.get("format")) : "ROUND_ROBIN";
+        String clientFormat = request.get("format") != null
+                ? String.valueOf(request.get("format"))
+                : (request.get("formatType") != null ? String.valueOf(request.get("formatType")) : null);
         String startDate = request.get("startDate") != null ? String.valueOf(request.get("startDate")) : null;
         List<String> venues = (List<String>) request.get("venues");
         List<String> referees = (List<String>) request.get("referees");
 
         MatchService.ScheduleGenerationResult result = matchService.generateScheduleFromParticipants(
-                tournamentId, competitionId, format, startDate, venues, referees, authentication.getName());
+                tournamentId, competitionId, clientFormat, startDate, venues, referees, authentication.getName());
 
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("tournamentId", tournamentId);
         res.put("competitionId", competitionId);
-        res.put("format", format);
+        res.put("format", result.formatType());
         res.put("generatedCount", result.matches().size());
         res.put("matches", result.matches());
         res.put("byeParticipants", result.byeParticipants());

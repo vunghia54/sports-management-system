@@ -33,8 +33,16 @@ public class MatchService {
     public record ScheduleGenerationResult(
             List<Match> matches,
             List<Map<String, Object>> byeParticipants,
-            String message
-    ) {}
+            String message,
+            String formatType
+    ) {
+        public ScheduleGenerationResult(
+                List<Match> matches,
+                List<Map<String, Object>> byeParticipants,
+                String message) {
+            this(matches, byeParticipants, message, null);
+        }
+    }
 
     private final MatchRepository matchRepository;
     private final ParticipantRepository participantRepository;
@@ -664,7 +672,7 @@ public class MatchService {
     public ScheduleGenerationResult generateScheduleFromParticipants(
             Long tournamentId,
             Long competitionId,
-            String format,
+            String clientRequestedFormat,
             String startDateStr,
             List<String> venues,
             List<String> referees,
@@ -682,6 +690,27 @@ public class MatchService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tournament ID: " + tournamentId);
         }
         validateCompetitionBelongsToTournament(competitionId, tournamentId);
+
+        Map<String, Object> formatConfig = tournamentClient.getCompetitionFormat(competitionId);
+        if (formatConfig == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Nội dung thi đấu #" + competitionId + " chưa có cấu hình thể thức thi đấu");
+        }
+        String fmt = normalizeFormatType(
+                formatConfig.get("formatType") != null ? String.valueOf(formatConfig.get("formatType")) : "KNOCKOUT");
+        if (clientRequestedFormat != null && !clientRequestedFormat.isBlank()) {
+            String requestedFmt = normalizeFormatType(clientRequestedFormat);
+            if (!requestedFmt.equals(fmt)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Không truyền thể thức thi đấu ('" + requestedFmt + "') khác với cấu hình nội dung thi đấu ('" + fmt
+                                + "'). Vui lòng sửa thể thức tại cấu hình nội dung thi đấu.");
+            }
+        }
+        if ("HYBRID".equals(fmt)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Thể thức HYBRID chưa hỗ trợ xếp lịch tự động");
+        }
+        int numberOfGroups = parsePositiveInt(formatConfig.get("numberOfGroups"), 1);
 
         if (!matchRepository.findByCompetitionId(competitionId).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -727,7 +756,6 @@ public class MatchService {
 
         List<Match> planned = new ArrayList<>();
         List<Map<String, Object>> byeParticipants = new ArrayList<>();
-        String fmt = format != null ? format.trim().toUpperCase(Locale.ROOT) : "ROUND_ROBIN";
 
         if ("KNOCKOUT".equals(fmt)) {
             String roundLabel = resolveKnockoutRoundLabel(participants.size());
@@ -769,23 +797,32 @@ public class MatchService {
                 byeInfo.put("reason", "Số lượng đội lẻ (" + participants.size() + "), được miễn thi đấu vòng đầu (" + roundLabel + ")");
                 byeParticipants.add(byeInfo);
             }
-        } else if ("GROUP_STAGE".equals(fmt) && participants.size() >= 4) {
-            List<Participant> groupA = new ArrayList<>();
-            List<Participant> groupB = new ArrayList<>();
-            for (int i = 0; i < participants.size(); i++) {
-                if (i % 2 == 0) groupA.add(participants.get(i));
-                else groupB.add(participants.get(i));
+        } else if ("GROUP_STAGE".equals(fmt)) {
+            if (participants.size() < numberOfGroups * 2) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Cần ít nhất " + (numberOfGroups * 2) + " đội/VĐV để chia thành " + numberOfGroups + " bảng đấu (mỗi bảng tối thiểu 2 đội)");
             }
-            int nextDayOffset = appendCircleRoundRobinMatches(
-                    planned, groupA, tournamentId, competitionId, "Bảng A",
-                    startDate, 0, venuePool, refPool, creatorUsername);
-            appendCircleRoundRobinMatches(
-                    planned, groupB, tournamentId, competitionId, "Bảng B",
-                    startDate, nextDayOffset, venuePool, refPool, creatorUsername);
-        } else {
+            List<List<Participant>> groups = new ArrayList<>();
+            for (int g = 0; g < numberOfGroups; g++) {
+                groups.add(new ArrayList<>());
+            }
+            for (int i = 0; i < participants.size(); i++) {
+                groups.get(i % numberOfGroups).add(participants.get(i));
+            }
+            int nextDayOffset = 0;
+            for (int g = 0; g < numberOfGroups; g++) {
+                String groupLabel = g < 26 ? ("Bảng " + (char) ('A' + g)) : ("Bảng " + (g + 1));
+                nextDayOffset = appendCircleRoundRobinMatches(
+                        planned, groups.get(g), tournamentId, competitionId, groupLabel,
+                        startDate, nextDayOffset, venuePool, refPool, creatorUsername);
+            }
+        } else if ("ROUND_ROBIN".equals(fmt)) {
             appendCircleRoundRobinMatches(
                     planned, participants, tournamentId, competitionId, "Vòng tròn",
                     startDate, 0, venuePool, refPool, creatorUsername);
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Thể thức thi đấu không được hỗ trợ xếp lịch tự động: " + fmt);
         }
 
         for (Match candidate : planned) {
@@ -815,10 +852,33 @@ public class MatchService {
 
         List<Match> saved = matchRepository.saveAll(planned);
         String msg = byeParticipants.isEmpty()
-                ? "Đã tự động tạo " + saved.size() + " trận đấu"
-                : "Đã tự động tạo " + saved.size() + " trận đấu (Miễn vòng đầu: "
+                ? "Đã tự động tạo " + saved.size() + " trận đấu theo thể thức " + fmt
+                : "Đã tự động tạo " + saved.size() + " trận đấu theo thể thức " + fmt + " (Miễn vòng đầu: "
                 + byeParticipants.stream().map(b -> String.valueOf(b.get("displayName"))).reduce((a, b) -> a + ", " + b).orElse("") + ")";
-        return new ScheduleGenerationResult(saved, byeParticipants, msg);
+        return new ScheduleGenerationResult(saved, byeParticipants, msg, fmt);
+    }
+
+    private String normalizeFormatType(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "KNOCKOUT";
+        }
+        String norm = raw.trim().toUpperCase(Locale.ROOT);
+        if ("SINGLE_ELIMINATION".equals(norm)) {
+            return "KNOCKOUT";
+        }
+        return norm;
+    }
+
+    private int parsePositiveInt(Object raw, int defaultVal) {
+        if (raw == null) {
+            return defaultVal;
+        }
+        try {
+            int val = Integer.parseInt(String.valueOf(raw).trim());
+            return val > 0 ? val : defaultVal;
+        } catch (NumberFormatException ex) {
+            return defaultVal;
+        }
     }
 
     private int appendCircleRoundRobinMatches(

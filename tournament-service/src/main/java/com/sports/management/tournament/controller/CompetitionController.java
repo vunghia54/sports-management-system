@@ -150,6 +150,7 @@ public class CompetitionController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Competition not found with id: " + id);
         }
         assertTournamentOwnership(existing.getTournamentId(), authentication);
+        assertNoMatchesForCompetition(id, "thay đổi luật thi đấu");
         CompetitionRule updated = competitionService.updateRule(id, rule);
         return ResponseEntity.ok(updated);
     }
@@ -173,6 +174,7 @@ public class CompetitionController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Competition not found with id: " + id);
         }
         assertTournamentOwnership(existing.getTournamentId(), authentication);
+        assertNoMatchesForCompetition(id, "thay đổi thể thức thi đấu");
         CompetitionFormat updated = competitionService.updateFormat(id, format);
         return ResponseEntity.ok(updated);
     }
@@ -201,7 +203,7 @@ public class CompetitionController {
         }
     }
 
-    private void assertNoLinkedRegistrationsOrMatches(Long competitionId) {
+    private void assertNoMatchesForCompetition(Long competitionId, String actionLabel) {
         if (matchRestClient == null) {
             return;
         }
@@ -212,8 +214,26 @@ public class CompetitionController {
                     .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
             if (matches != null && !matches.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Không thể xóa nội dung thi đấu #" + competitionId + " vì đang có " + matches.size() + " trận đấu liên kết.");
+                        "Không thể " + actionLabel + " cho nội dung thi đấu #" + competitionId
+                                + " vì đã có " + matches.size() + " trận đấu liên kết.");
             }
+        } catch (ResponseStatusException rse) {
+            throw rse;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Match Service is unavailable when verifying matches for competition #" + competitionId,
+                    ex
+            );
+        }
+    }
+
+    private void assertNoLinkedRegistrationsOrMatches(Long competitionId) {
+        if (matchRestClient == null) {
+            return;
+        }
+        assertNoMatchesForCompetition(competitionId, "xóa nội dung thi đấu");
+        try {
             List<Map<String, Object>> regs = matchRestClient.get()
                     .uri(matchServiceUrl + "/api/v1/registrations/competition/{id}", competitionId)
                     .retrieve()

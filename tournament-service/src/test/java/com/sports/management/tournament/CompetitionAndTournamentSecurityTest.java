@@ -366,6 +366,31 @@ class CompetitionAndTournamentSecurityTest {
                         .content("{\"formatType\":\"ROUND_ROBIN\",\"numberOfGroups\":1,\"qualifyingSpotsPerGroup\":2}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.formatType", is("ROUND_ROBIN")));
+
+        // Updating format or rule after matches already exist -> 409 Conflict; match-service down -> 503
+        matchMode.set("HAS_MATCH");
+        mockMvc.perform(put("/api/v1/competitions/" + compId + "/format")
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"formatType\":\"KNOCKOUT\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(put("/api/v1/competitions/" + compId + "/rule")
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"maxParticipants\":16,\"minTeamMembers\":5,\"maxTeamMembers\":20}"))
+                .andExpect(status().isConflict());
+
+        matchMode.set("DOWN");
+        mockMvc.perform(put("/api/v1/competitions/" + compId + "/format")
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"formatType\":\"KNOCKOUT\"}"))
+                .andExpect(status().isServiceUnavailable());
+        mockMvc.perform(put("/api/v1/competitions/" + compId + "/rule")
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"maxParticipants\":16,\"minTeamMembers\":5,\"maxTeamMembers\":20}"))
+                .andExpect(status().isServiceUnavailable());
     }
 
     @Test
