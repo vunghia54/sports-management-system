@@ -2,6 +2,7 @@ package com.sports.management.match.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 @Entity
@@ -12,9 +13,11 @@ public class Match {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotNull(message = "Tournament ID is required")
     @Column(name = "tournament_id", nullable = false)
     private Long tournamentId;
 
+    @NotNull(message = "Competition ID is required")
     @Column(name = "competition_id")
     private Long competitionId;
 
@@ -22,6 +25,7 @@ public class Match {
 
     private String groupName;
 
+    @NotNull(message = "Match time is required")
     @JsonAlias({"scheduledTime", "scheduled_time"})
     private LocalDateTime matchTime;
 
@@ -31,6 +35,14 @@ public class Match {
 
     @Column(name = "referee_username")
     private String refereeUsername;
+
+    @NotNull(message = "Participant 1 ID is required")
+    @Column(name = "participant1_id")
+    private Long participant1Id;
+
+    @NotNull(message = "Participant 2 ID is required")
+    @Column(name = "participant2_id")
+    private Long participant2Id;
 
     private String participant1;
 
@@ -109,6 +121,22 @@ public class Match {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public Long getParticipant1Id() {
+        return participant1Id;
+    }
+
+    public void setParticipant1Id(Long participant1Id) {
+        this.participant1Id = participant1Id;
+    }
+
+    public Long getParticipant2Id() {
+        return participant2Id;
+    }
+
+    public void setParticipant2Id(Long participant2Id) {
+        this.participant2Id = participant2Id;
     }
 
     public String getParticipant1() {

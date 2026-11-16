@@ -7,7 +7,9 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import com.sports.management.match.client.TournamentClient;
 import com.sports.management.match.model.Match;
+import com.sports.management.match.model.Participant;
 import com.sports.management.match.repository.MatchRepository;
+import com.sports.management.match.repository.ParticipantRepository;
 import com.sports.management.messaging.producer.MatchEventProducer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,6 +61,9 @@ class MatchSecurityAndConflictIntegrationTest {
     @Autowired
     private MatchRepository matchRepository;
 
+    @Autowired
+    private ParticipantRepository participantRepository;
+
     @MockitoBean
     private TournamentClient tournamentClient;
 
@@ -67,23 +72,53 @@ class MatchSecurityAndConflictIntegrationTest {
 
     private Match org1Match;
     private Match org2Match;
+    private Participant c10p1;
+    private Participant c10p2;
+    private Participant c10p3;
+    private Participant c10p4;
+    private Participant c20p1;
+    private Participant c20p2;
 
     @BeforeEach
     void setUp() {
         matchRepository.deleteAll();
+        participantRepository.deleteAll();
 
         when(tournamentClient.tournamentExists(1L)).thenReturn(true);
         when(tournamentClient.tournamentExists(2L)).thenReturn(true);
         when(tournamentClient.getLastHandledInstance()).thenReturn("tournament-service:8081");
         when(tournamentClient.getTournamentById(1L))
-                .thenReturn(Map.of("id", 1, "name", "Giải 1", "organizerUsername", "organizer1"));
+                .thenReturn(Map.of(
+                        "id", 1, "name", "Giải 1", "organizerUsername", "organizer1",
+                        "startDate", "2026-12-01", "endDate", "2026-12-31"));
         when(tournamentClient.getTournamentById(2L))
-                .thenReturn(Map.of("id", 2, "name", "Giải 2", "organizerUsername", "organizer2"));
+                .thenReturn(Map.of(
+                        "id", 2, "name", "Giải 2", "organizerUsername", "organizer2",
+                        "startDate", "2026-12-01", "endDate", "2026-12-31"));
+        when(tournamentClient.getCompetitionById(10L))
+                .thenReturn(Map.of("id", 10, "tournamentId", 1, "name", "Nội dung 10"));
+        when(tournamentClient.getCompetitionById(11L))
+                .thenReturn(Map.of("id", 11, "tournamentId", 1, "name", "Nội dung 11"));
+        when(tournamentClient.getCompetitionById(20L))
+                .thenReturn(Map.of("id", 20, "tournamentId", 2, "name", "Nội dung 20"));
+
+        c10p1 = participantRepository.save(new Participant(null, 10L, null, "TEAM", 1L, "Hà Nội", 1));
+        c10p2 = participantRepository.save(new Participant(null, 10L, null, "TEAM", 2L, "Nam Định", 2));
+        c10p3 = participantRepository.save(new Participant(null, 10L, null, "TEAM", 3L, "HAGL", 3));
+        c10p4 = participantRepository.save(new Participant(null, 10L, null, "TEAM", 4L, "SLNA", 4));
+        participantRepository.save(new Participant(null, 11L, null, "TEAM", 11L, "Đội A", 1));
+        participantRepository.save(new Participant(null, 11L, null, "TEAM", 12L, "Đội B", 2));
+        participantRepository.save(new Participant(null, 11L, null, "TEAM", 13L, "Đội C", 3));
+        participantRepository.save(new Participant(null, 11L, null, "TEAM", 14L, "Đội D", 4));
+        c20p1 = participantRepository.save(new Participant(null, 20L, null, "TEAM", 5L, "Viettel", 1));
+        c20p2 = participantRepository.save(new Participant(null, 20L, null, "TEAM", 6L, "CAHN", 2));
 
         Match m1 = new Match(null, 1L, "Vòng 1",
                 LocalDateTime.of(2026, 12, 10, 18, 0),
                 "SVĐ Mỹ Đình", "Hà Nội", "Nam Định", "SCHEDULED");
         m1.setCompetitionId(10L);
+        m1.setParticipant1Id(c10p1.getId());
+        m1.setParticipant2Id(c10p2.getId());
         m1.setReferee("Trọng Tài Chính");
         m1.setRefereeUsername("referee1");
         m1.setOwnerUsername("organizer1");
@@ -93,6 +128,8 @@ class MatchSecurityAndConflictIntegrationTest {
                 LocalDateTime.of(2026, 12, 11, 18, 0),
                 "SVĐ Hàng Đẫy", "Viettel", "CAHN", "SCHEDULED");
         m2.setCompetitionId(20L);
+        m2.setParticipant1Id(c20p1.getId());
+        m2.setParticipant2Id(c20p2.getId());
         m2.setReferee("referee2"); // Display name intentionally matches referee2, NOT username
         m2.setRefereeUsername("referee1"); // Assigned strictly to referee1
         m2.setOwnerUsername("organizer2");
@@ -115,7 +152,7 @@ class MatchSecurityAndConflictIntegrationTest {
     void unauthenticatedAndViewerAreRejectedByRealSecurityFilter() throws Exception {
         mockMvc.perform(post("/api/v1/matches")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"participant1\":\"A\",\"participant2\":\"B\",\"matchTime\":\"2026-12-15T18:00:00\",\"location\":\"San 1\",\"referee\":\"Ref\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":10,\"participant1Id\":" + c10p1.getId() + ",\"participant2Id\":" + c10p2.getId() + ",\"matchTime\":\"2026-12-15T18:00:00\",\"location\":\"San 1\",\"referee\":\"Ref\"}"))
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(patch("/api/v1/matches/" + org1Match.getId())
@@ -143,16 +180,18 @@ class MatchSecurityAndConflictIntegrationTest {
         mockMvc.perform(post("/api/v1/matches")
                         .header("Authorization", org1Token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":2,\"ownerUsername\":\"organizer2\",\"round\":\"Vòng 2\",\"participant1\":\"HAGL\",\"participant2\":\"SLNA\",\"matchTime\":\"2026-12-20T18:00:00\",\"location\":\"Pleiku\",\"referee\":\"Lân\"}"))
+                        .content("{\"tournamentId\":2,\"competitionId\":20,\"ownerUsername\":\"organizer2\",\"round\":\"Vòng 2\",\"participant1Id\":" + c20p1.getId() + ",\"participant2Id\":" + c20p2.getId() + ",\"matchTime\":\"2026-12-20T18:00:00\",\"location\":\"Pleiku\",\"referee\":\"Lân\"}"))
                 .andExpect(status().isForbidden());
 
         // Allowed in own tournament 1, stored ownerUsername is taken from JWT (not spoofed payload)
         mockMvc.perform(post("/api/v1/matches")
                         .header("Authorization", org1Token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"ownerUsername\":\"spoofedUser\",\"round\":\"Vòng 2\",\"participant1\":\"HAGL\",\"participant2\":\"SLNA\",\"matchTime\":\"2026-12-20T18:00:00\",\"location\":\"Pleiku\",\"referee\":\"Lân\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":10,\"ownerUsername\":\"spoofedUser\",\"round\":\"Vòng 2\",\"participant1Id\":" + c10p3.getId() + ",\"participant2Id\":" + c10p4.getId() + ",\"matchTime\":\"2026-12-20T18:00:00\",\"location\":\"Pleiku\",\"referee\":\"Lân\"}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.ownerUsername").value("organizer1"));
+                .andExpect(jsonPath("$.ownerUsername").value("organizer1"))
+                .andExpect(jsonPath("$.participant1").value("HAGL"))
+                .andExpect(jsonPath("$.participant2").value("SLNA"));
 
         // Moving own match (tournament 1) -> foreign tournament 2 must be forbidden
         mockMvc.perform(patch("/api/v1/matches/" + org1Match.getId())
@@ -165,7 +204,7 @@ class MatchSecurityAndConflictIntegrationTest {
         mockMvc.perform(put("/api/v1/matches/" + org2Match.getId())
                         .header("Authorization", org1Token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"round\":\"Vòng 1\",\"participant1\":\"Viettel\",\"participant2\":\"CAHN\",\"matchTime\":\"2026-12-11T18:00:00\",\"location\":\"SVĐ Hàng Đẫy\",\"referee\":\"Ref\",\"status\":\"SCHEDULED\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":10,\"round\":\"Vòng 1\",\"participant1Id\":" + c10p1.getId() + ",\"participant2Id\":" + c10p2.getId() + ",\"matchTime\":\"2026-12-11T18:00:00\",\"location\":\"SVĐ Hàng Đẫy\",\"referee\":\"Ref\",\"status\":\"SCHEDULED\"}"))
                 .andExpect(status().isForbidden());
 
         // Deleting foreign tournament's match is forbidden
@@ -211,7 +250,7 @@ class MatchSecurityAndConflictIntegrationTest {
         mockMvc.perform(put("/api/v1/matches/" + org1Match.getId())
                         .header("Authorization", assignedRefToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":10,\"round\":\"Vòng 1\",\"matchTime\":\"2026-12-10T18:00:00\",\"location\":\"Đổi sân\",\"referee\":\"Trọng Tài Chính\",\"refereeUsername\":\"referee1\",\"participant1\":\"Hà Nội\",\"participant2\":\"Nam Định\",\"status\":\"ONGOING\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":10,\"round\":\"Vòng 1\",\"matchTime\":\"2026-12-10T18:00:00\",\"location\":\"Đổi sân\",\"referee\":\"Trọng Tài Chính\",\"refereeUsername\":\"referee1\",\"participant1Id\":" + c10p1.getId() + ",\"participant2Id\":" + c10p2.getId() + ",\"status\":\"ONGOING\"}"))
                 .andExpect(status().isForbidden());
 
         // Assigned referee CAN patch status SCHEDULED -> ONGOING -> FINISHED (and keep internal result confirm flow intact)
@@ -246,7 +285,7 @@ class MatchSecurityAndConflictIntegrationTest {
         mockMvc.perform(post("/api/v1/matches")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"round\":\"Vòng 1\",\"participant1\":\"Bình Dương\",\"participant2\":\"Hải Phòng\",\"matchTime\":\"2026-12-10T18:30:00\",\"location\":\"SVĐ Mỹ Đình\",\"referee\":\"Trọng Tài Chính\",\"refereeUsername\":\"referee1\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":10,\"round\":\"Vòng 1\",\"participant1Id\":" + c10p3.getId() + ",\"participant2Id\":" + c10p4.getId() + ",\"matchTime\":\"2026-12-10T18:30:00\",\"location\":\"SVĐ Mỹ Đình\",\"referee\":\"Trọng Tài Chính\",\"refereeUsername\":\"referee1\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.conflicts", hasSize(greaterThanOrEqualTo(2))));
@@ -255,7 +294,7 @@ class MatchSecurityAndConflictIntegrationTest {
         mockMvc.perform(put("/api/v1/matches/" + org1Match.getId())
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":10,\"round\":\"Bán kết 1\",\"matchTime\":\"2026-12-10T18:00:00\",\"location\":\"SVĐ Mỹ Đình\",\"referee\":\"Trọng Tài Chính\",\"refereeUsername\":\"referee1\",\"participant1\":\"Hà Nội\",\"participant2\":\"Nam Định\",\"status\":\"SCHEDULED\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":10,\"round\":\"Bán kết 1\",\"matchTime\":\"2026-12-10T18:00:00\",\"location\":\"SVĐ Mỹ Đình\",\"referee\":\"Trọng Tài Chính\",\"refereeUsername\":\"referee1\",\"participant1Id\":" + c10p1.getId() + ",\"participant2Id\":" + c10p2.getId() + ",\"status\":\"SCHEDULED\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.round").value("Bán kết 1"));
 
@@ -263,7 +302,7 @@ class MatchSecurityAndConflictIntegrationTest {
         mockMvc.perform(put("/api/v1/matches/" + org2Match.getId())
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":2,\"competitionId\":20,\"round\":\"Tứ kết\",\"matchTime\":\"2026-12-10T18:00:00\",\"location\":\"SVĐ Mỹ Đình\",\"referee\":\"Trọng Tài B\",\"participant1\":\"Viettel\",\"participant2\":\"CAHN\",\"status\":\"SCHEDULED\"}"))
+                        .content("{\"tournamentId\":2,\"competitionId\":20,\"round\":\"Tứ kết\",\"matchTime\":\"2026-12-10T18:00:00\",\"location\":\"SVĐ Mỹ Đình\",\"referee\":\"Trọng Tài B\",\"participant1Id\":" + c20p1.getId() + ",\"participant2Id\":" + c20p2.getId() + ",\"status\":\"SCHEDULED\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.conflicts", hasSize(greaterThanOrEqualTo(1))));
 
@@ -274,18 +313,20 @@ class MatchSecurityAndConflictIntegrationTest {
                         .content("{\"matchTime\":\"2026-12-10T18:15:00\",\"location\":\"SVĐ Mỹ Đình\"}"))
                 .andExpect(status().isConflict());
 
-        // Atomic generate-schedule conflict check: conflicts with org1Match at 2026-12-10T18:00 at "SVĐ Quốc Gia Mỹ Đình" or team name
-        // Notice generate-schedule uses venue "SVĐ Quốc Gia Mỹ Đình" and time 18:00 on startDate; seed overlap using exact venue + date
+        // Atomic generate-schedule conflict check: conflicts with blocking match at "SVĐ Quốc Gia Mỹ Đình" 18:00
         Match blocking = new Match(null, 1L, "Blocking",
                 LocalDateTime.of(2026, 12, 25, 18, 0),
                 "SVĐ Quốc Gia Mỹ Đình", "Đội X", "Đội Y", "SCHEDULED");
+        blocking.setCompetitionId(10L);
+        blocking.setParticipant1Id(9001L);
+        blocking.setParticipant2Id(9002L);
         matchRepository.save(blocking);
         long countBefore = matchRepository.count();
 
         mockMvc.perform(post("/api/v1/matches/generate-schedule")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"competitionId\":10,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-12-25\",\"teams\":[\"Đội A\",\"Đội B\",\"Đội C\",\"Đội D\"]}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":11,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-12-25\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.conflicts", hasSize(greaterThanOrEqualTo(1))));
 

@@ -755,7 +755,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": {{competitionId}},\n  \"round\": \"Vòng Bảng - Bảng A\",\n  \"participant1\": \"CLB Bóng Đá Hà Nội\",\n  \"participant2\": \"CLB Thể Công Viettel\",\n  \"location\": \"Sân Vận Động Mỹ Đình\",\n  \"scheduledTime\": \"2026-11-25T19:00:00\",\n  \"status\": \"SCHEDULED\"\n}"
+              "raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": {{competitionId}},\n  \"round\": \"Vòng Bảng - Bảng A\",\n  \"participant1Id\": {{participant1Id}},\n  \"participant2Id\": {{participant2Id}},\n  \"location\": \"Sân Vận Động Mỹ Đình\",\n  \"scheduledTime\": \"2026-11-25T19:00:00\",\n  \"status\": \"SCHEDULED\"\n}"
             },
             "url": {
               "raw": "{{matchUrl}}/api/v1/matches",

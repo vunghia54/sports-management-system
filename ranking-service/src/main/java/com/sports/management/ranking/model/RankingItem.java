@@ -16,6 +16,9 @@ public class RankingItem {
     @Column(nullable = false)
     private Long rankingId;
 
+    @Column(name = "participant_id")
+    private Long participantId;
+
     private Integer rankPosition = 1;
 
     @NotBlank(message = "Participant name is required")
@@ -70,6 +73,14 @@ public class RankingItem {
 
     public void setRankingId(Long rankingId) {
         this.rankingId = rankingId;
+    }
+
+    public Long getParticipantId() {
+        return participantId;
+    }
+
+    public void setParticipantId(Long participantId) {
+        this.participantId = participantId;
     }
 
     public Integer getRankPosition() {

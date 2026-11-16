@@ -126,18 +126,41 @@ public class RankingService {
             }
         }
 
-        Map<String, RankingItem> statsMap = new HashMap<>();
+        Map<String, RankingItem> statsMap = new LinkedHashMap<>();
 
         for (Map<String, Object> match : matches) {
+            Long p1Id = match.get("participant1Id") != null ? Long.valueOf(String.valueOf(match.get("participant1Id"))) : null;
+            Long p2Id = match.get("participant2Id") != null ? Long.valueOf(String.valueOf(match.get("participant2Id"))) : null;
             String p1 = match.get("participant1") != null ? String.valueOf(match.get("participant1")) : null;
             String p2 = match.get("participant2") != null ? String.valueOf(match.get("participant2")) : null;
             Long matchId = match.get("id") != null ? Long.valueOf(String.valueOf(match.get("id"))) : null;
 
-            if (p1 != null && !p1.isBlank()) {
-                statsMap.putIfAbsent(p1, new RankingItem(null, ranking.getId(), 0, p1, 0, 0, 0, 0, 0, 0, 0, 0));
+            String key1 = resolveParticipantKey(p1Id, p1);
+            String key2 = resolveParticipantKey(p2Id, p2);
+
+            if (key1 != null) {
+                RankingItem item1 = statsMap.computeIfAbsent(key1, k -> {
+                    RankingItem item = new RankingItem(null, ranking.getId(), 0,
+                            (p1 != null && !p1.isBlank()) ? p1 : ("Participant #" + p1Id),
+                            0, 0, 0, 0, 0, 0, 0, 0);
+                    item.setParticipantId(p1Id);
+                    return item;
+                });
+                if (item1.getParticipantId() == null && p1Id != null) {
+                    item1.setParticipantId(p1Id);
+                }
             }
-            if (p2 != null && !p2.isBlank()) {
-                statsMap.putIfAbsent(p2, new RankingItem(null, ranking.getId(), 0, p2, 0, 0, 0, 0, 0, 0, 0, 0));
+            if (key2 != null) {
+                RankingItem item2 = statsMap.computeIfAbsent(key2, k -> {
+                    RankingItem item = new RankingItem(null, ranking.getId(), 0,
+                            (p2 != null && !p2.isBlank()) ? p2 : ("Participant #" + p2Id),
+                            0, 0, 0, 0, 0, 0, 0, 0);
+                    item.setParticipantId(p2Id);
+                    return item;
+                });
+                if (item2.getParticipantId() == null && p2Id != null) {
+                    item2.setParticipantId(p2Id);
+                }
             }
 
             if (matchId != null && resultByMatchId.containsKey(matchId)) {
@@ -146,8 +169,8 @@ public class RankingService {
 
                 // Chi tinh ket qua da xac nhan chinh thuc (CONFIRMED)
                 if ("CONFIRMED".equalsIgnoreCase(resStatus)) {
-                    RankingItem item1 = statsMap.get(p1);
-                    RankingItem item2 = statsMap.get(p2);
+                    RankingItem item1 = key1 != null ? statsMap.get(key1) : null;
+                    RankingItem item2 = key2 != null ? statsMap.get(key2) : null;
 
                     int s1 = res.get("scoreParticipant1") != null
                             ? Integer.parseInt(String.valueOf(res.get("scoreParticipant1"))) : 0;
@@ -243,6 +266,16 @@ public class RankingService {
         rankingRepository.save(ranking);
 
         return new RankingResponse(ranking, saved);
+    }
+
+    private String resolveParticipantKey(Long participantId, String displayName) {
+        if (participantId != null) {
+            return "ID:" + participantId;
+        }
+        if (displayName != null && !displayName.isBlank()) {
+            return "NAME:" + displayName.trim().toLowerCase(Locale.ROOT);
+        }
+        return null;
     }
 
     @Transactional

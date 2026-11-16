@@ -161,6 +161,47 @@ class RankingServiceAndControllerTest {
     }
 
     @Test
+    void recalculateRanking_groupsByParticipantIdFirstAndFallsBackToNameForLegacy() {
+        Ranking r10 = new Ranking(10L, 10L, "BXH Theo ParticipantId", LocalDateTime.now());
+        when(rankingProviderClient.getMatchesByCompetitionId(10L)).thenReturn(List.of(
+                Map.of("id", 201L, "tournamentId", 1L, "competitionId", 10L,
+                        "participant1Id", 50L, "participant2Id", 51L,
+                        "participant1", "Hà Nội FC", "participant2", "Viettel FC", "status", "FINISHED"),
+                Map.of("id", 202L, "tournamentId", 1L, "competitionId", 10L,
+                        "participant1Id", 50L, "participant2Id", 52L,
+                        "participant1", "CLB Hà Nội (Tên mới)", "participant2", "Nam Định", "status", "FINISHED"),
+                // Legacy match without participantIds merges by name
+                Map.of("id", 203L, "tournamentId", 1L, "competitionId", 10L,
+                        "participant1", "Legacy A", "participant2", "Legacy B", "status", "FINISHED")
+        ));
+        when(rankingProviderClient.getAllResults()).thenReturn(List.of(
+                Map.of("matchId", 201L, "status", "CONFIRMED", "scoreParticipant1", 2, "scoreParticipant2", 0),
+                Map.of("matchId", 202L, "status", "CONFIRMED", "scoreParticipant1", 1, "scoreParticipant2", 1),
+                Map.of("matchId", 203L, "status", "CONFIRMED", "scoreParticipant1", 3, "scoreParticipant2", 0)
+        ));
+        when(rankingRepository.findByCompetitionId(10L)).thenReturn(Optional.of(r10));
+        when(rankingRepository.save(any(Ranking.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(rankingItemRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        RankingResponse res = rankingService.recalculateRanking(10L);
+        RankingItem p50 = res.getItems().stream()
+                .filter(it -> Long.valueOf(50L).equals(it.getParticipantId()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(2, p50.getMatchesPlayed());
+        assertEquals(4, p50.getPoints());
+        assertEquals(3, p50.getGoalsFor());
+        assertEquals(1, p50.getGoalsAgainst());
+
+        RankingItem legacyA = res.getItems().stream()
+                .filter(it -> "Legacy A".equals(it.getParticipantName()))
+                .findFirst()
+                .orElseThrow();
+        assertNull(legacyA.getParticipantId());
+        assertEquals(3, legacyA.getPoints());
+    }
+
+    @Test
     void recalculateRanking_whenUpstreamFails_throws503AndPreservesExistingStandings() {
         when(rankingProviderClient.getMatchesByCompetitionId(10L))
                 .thenThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "match-service down"));

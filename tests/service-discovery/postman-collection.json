@@ -353,7 +353,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": 1,\n  \"round\": \"Chung kết\",\n  \"participant1\": \"CLB Hà Nội\",\n  \"participant2\": \"CLB Viettel\",\n  \"location\": \"SVĐ Mỹ Đình\",\n  \"scheduledTime\": \"2026-11-28T19:30:00\",\n  \"status\": \"SCHEDULED\"\n}"
+              "raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": 1,\n  \"round\": \"Chung kết\",\n  \"participant1Id\": 1,\n  \"participant2Id\": 2,\n  \"location\": \"SVĐ Mỹ Đình\",\n  \"scheduledTime\": \"2026-11-28T19:30:00\",\n  \"status\": \"SCHEDULED\"\n}"
             },
             "url": {
               "raw": "{{matchServiceUrl}}/api/v1/matches",

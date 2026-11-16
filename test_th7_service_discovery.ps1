@@ -212,12 +212,12 @@ try {
     $tourBody = @{
         name                  = "Giai Bong Da Sinh Vien Toan Quoc TH7 - 2026"
         description           = "Kiem thu toan dien TH1-TH7 tren 10 Microservices"
-        startDate             = "2026-11-20"
-        endDate               = "2026-12-10"
+        startDate             = "2026-11-01"
+        endDate               = "2026-12-30"
         location              = "Ha Noi"
         registrationStartDate = "2026-10-01"
-        registrationEndDate   = "2026-11-15"
-        status                = "UPCOMING"
+        registrationEndDate   = "2026-12-15"
+        status                = "ONGOING"
     } | ConvertTo-Json
     $createdTour = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/tournaments" -Method Post -Body $tourBody -ContentType "application/json" -Headers $authHeaders
 
@@ -286,13 +286,18 @@ try {
     $reg2 = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/registrations" -Method Post -Body $reg2Body -ContentType "application/json" -Headers $mgrHeaders
     Invoke-RestMethod -Uri "http://localhost:8080/api/v1/registrations/$($reg2.id)/approve" -Method Put -Headers $authHeaders | Out-Null
 
+    $participants = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/participants/competition/$($createdComp.id)" -Method Get -Headers $authHeaders
+    $p1Obj = $participants | Where-Object { $_.referenceId -eq $createdTeam1.id } | Select-Object -First 1
+    $p2Obj = $participants | Where-Object { $_.referenceId -eq $createdTeam2.id } | Select-Object -First 1
+
     $matchBody = @{
         tournamentId    = $createdTour.id
         competitionId   = $createdComp.id
         round           = "Vong Chung Ket"
-        participant1    = $createdTeam1.name
-        participant2    = $createdTeam2.name
+        participant1Id  = $p1Obj.id
+        participant2Id  = $p2Obj.id
         location        = "SVD My Dinh"
+        matchTime       = "2026-11-15T19:00:00"
         refereeUsername = "referee1"
         status          = "SCHEDULED"
     } | ConvertTo-Json

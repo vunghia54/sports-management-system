@@ -70,6 +70,8 @@ class RabbitMQContractAndAfterCommitTest {
                 LocalDateTime.of(2026, 12, 20, 19, 0),
                 "SVĐ Mỹ Đình", "Hà Nội", "Viettel", "SCHEDULED");
         m.setCompetitionId(10L);
+        m.setParticipant1Id(1L);
+        m.setParticipant2Id(2L);
         m.setOwnerUsername("organizer1");
         match = matchRepository.save(m);
     }

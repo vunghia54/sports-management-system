@@ -1,0 +1,302 @@
+package com.sports.management.match;
+
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import com.sports.management.match.client.TournamentClient;
+import com.sports.management.match.model.Match;
+import com.sports.management.match.model.Participant;
+import com.sports.management.match.repository.MatchRepository;
+import com.sports.management.match.repository.ParticipantRepository;
+import com.sports.management.messaging.producer.MatchEventProducer;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.util.*;
+
+import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest(properties = {
+        "spring.datasource.url=jdbc:h2:mem:match_a4_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=",
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "eureka.client.enabled=false",
+        "eureka.client.register-with-eureka=false",
+        "eureka.client.fetch-registry=false",
+        "jwt.secret=SportsManagementSystemSuperSecretKeyWithAtLeast256BitsLongForHMACSHA256!"
+})
+@AutoConfigureMockMvc
+class MatchScheduleAndParticipantIntegrationTest {
+
+    private static final String JWT_SECRET = "SportsManagementSystemSuperSecretKeyWithAtLeast256BitsLongForHMACSHA256!";
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private MatchRepository matchRepository;
+
+    @Autowired
+    private ParticipantRepository participantRepository;
+
+    @MockitoBean
+    private TournamentClient tournamentClient;
+
+    @MockitoBean
+    private MatchEventProducer matchEventProducer;
+
+    private String adminToken;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        matchRepository.deleteAll();
+        participantRepository.deleteAll();
+        adminToken = issueToken("admin", "ROLE_ADMIN");
+
+        when(tournamentClient.tournamentExists(1L)).thenReturn(true);
+        when(tournamentClient.tournamentExists(2L)).thenReturn(true);
+        when(tournamentClient.getLastHandledInstance()).thenReturn("tournament-service:8081");
+        when(tournamentClient.getTournamentById(1L)).thenReturn(Map.of(
+                "id", 1, "name", "Giải VĐQG", "organizerUsername", "organizer1",
+                "startDate", "2026-10-10", "endDate", "2026-12-20"
+        ));
+        when(tournamentClient.getTournamentById(2L)).thenReturn(Map.of(
+                "id", 2, "name", "Giải Khác", "organizerUsername", "organizer2",
+                "startDate", "2026-10-10", "endDate", "2026-12-20"
+        ));
+
+        for (long cid = 100L; cid <= 110L; cid++) {
+            when(tournamentClient.getCompetitionById(cid))
+                    .thenReturn(Map.of("id", cid, "tournamentId", 1, "name", "Nội dung " + cid));
+        }
+        when(tournamentClient.getCompetitionById(200L))
+                .thenReturn(Map.of("id", 200, "tournamentId", 2, "name", "Nội dung Giải 2"));
+    }
+
+    private String issueToken(String username, String role) throws Exception {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .subject(username)
+                .claim("role", role)
+                .issueTime(new Date())
+                .expirationTime(new Date(System.currentTimeMillis() + 3600_000L))
+                .build();
+        SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
+        jwt.sign(new MACSigner(JWT_SECRET.getBytes(StandardCharsets.UTF_8)));
+        return "Bearer " + jwt.serialize();
+    }
+
+    private List<Participant> seedParticipants(long compId, int count, String prefix) {
+        List<Participant> list = new ArrayList<>();
+        for (int i = 1; i <= count; i++) {
+            list.add(participantRepository.save(
+                    new Participant(null, compId, null, "TEAM", (long) (compId * 100 + i), prefix + " " + i, i)));
+        }
+        return list;
+    }
+
+    @Test
+    void createAndModifyMatch_enforcesParticipantBindingTournamentDatesAndTransitions() throws Exception {
+        List<Participant> comp100 = seedParticipants(100L, 2, "CLB");
+        Participant foreignComp = participantRepository.save(
+                new Participant(null, 200L, null, "TEAM", 999L, "Đội Giải 2", 1));
+
+        // 1. Missing required @Valid fields -> 400 with field errors
+        mockMvc.perform(post("/api/v1/matches")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.competitionId").exists())
+                .andExpect(jsonPath("$.errors.matchTime").exists())
+                .andExpect(jsonPath("$.errors.participant1Id").exists())
+                .andExpect(jsonPath("$.errors.participant2Id").exists());
+
+        // 2. Competition belonging to tournament 2 used under tournament 1 -> 400
+        mockMvc.perform(post("/api/v1/matches")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":200,\"participant1Id\":" + foreignComp.getId()
+                                + ",\"participant2Id\":" + comp100.get(1).getId() + ",\"matchTime\":\"2026-11-01T18:00:00\"}"))
+                .andExpect(status().isBadRequest());
+
+        // 3. Participant belonging to another competition -> 400
+        mockMvc.perform(post("/api/v1/matches")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":100,\"participant1Id\":" + comp100.get(0).getId()
+                                + ",\"participant2Id\":" + foreignComp.getId() + ",\"matchTime\":\"2026-11-01T18:00:00\"}"))
+                .andExpect(status().isBadRequest());
+
+        // 4. matchTime outside [2026-10-10, 2026-12-20] -> 400
+        mockMvc.perform(post("/api/v1/matches")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":100,\"participant1Id\":" + comp100.get(0).getId()
+                                + ",\"participant2Id\":" + comp100.get(1).getId() + ",\"matchTime\":\"2026-10-09T18:00:00\"}"))
+                .andExpect(status().isBadRequest());
+
+        // 5. Valid create auto-fills displayName from Participant & defaults status SCHEDULED
+        MvcResult createRes = mockMvc.perform(post("/api/v1/matches")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":100,\"round\":\"Vòng 1\","
+                                + "\"participant1Id\":" + comp100.get(0).getId()
+                                + ",\"participant2Id\":" + comp100.get(1).getId()
+                                + ",\"participant1\":\"Fake Name\",\"participant2\":\"Other Fake\","
+                                + "\"location\":\"SVĐ Mỹ Đình\",\"matchTime\":\"2026-11-15T19:00:00\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("SCHEDULED"))
+                .andExpect(jsonPath("$.participant1").value("CLB 1"))
+                .andExpect(jsonPath("$.participant2").value("CLB 2"))
+                .andReturn();
+        long matchId = MAPPER.readTree(createRes.getResponse().getContentAsString()).get("id").asLong();
+
+        // 6. Invalid status & illegal transitions
+        mockMvc.perform(patch("/api/v1/matches/" + matchId)
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"INVALID_STATE\"}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(patch("/api/v1/matches/" + matchId)
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ONGOING\"}"))
+                .andExpect(status().isOk());
+
+        // ONGOING -> SCHEDULED rejected
+        mockMvc.perform(patch("/api/v1/matches/" + matchId)
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"SCHEDULED\"}"))
+                .andExpect(status().isBadRequest());
+
+        // ONGOING -> FINISHED ok
+        mockMvc.perform(patch("/api/v1/matches/" + matchId)
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"FINISHED\"}"))
+                .andExpect(status().isOk());
+
+        // FINISHED -> SCHEDULED rejected
+        mockMvc.perform(patch("/api/v1/matches/" + matchId)
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"SCHEDULED\"}"))
+                .andExpect(status().isBadRequest());
+
+        // FINISHED match cannot change venue, time, or participants
+        mockMvc.perform(patch("/api/v1/matches/" + matchId)
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"location\":\"SVĐ Khác\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void generateSchedule_usesCircleRotationForRoundRobin_reportsKnockoutBye_andRejectsDuplicateWith409() throws Exception {
+        // Missing competitionId must return 400 (never default to 1L)
+        mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"format\":\"ROUND_ROBIN\"}"))
+                .andExpect(status().isBadRequest());
+
+        // 4 participants -> Circle Round Robin: 6 matches across 3 distinct days, max 1 match per team per day/round
+        seedParticipants(101L, 4, "RR Team");
+        MvcResult rrRes = mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":101,\"format\":\"ROUND_ROBIN\","
+                                + "\"startDate\":\"2026-10-15\",\"teams\":[\"Ignored Client Team\"]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.generatedCount").value(6))
+                .andExpect(jsonPath("$.matches", hasSize(6)))
+                .andReturn();
+
+        JsonNode rrMatches = MAPPER.readTree(rrRes.getResponse().getContentAsString()).get("matches");
+        Map<LocalDate, Set<Long>> teamsPlayedByDate = new HashMap<>();
+        for (JsonNode m : rrMatches) {
+            long p1Id = m.get("participant1Id").asLong();
+            long p2Id = m.get("participant2Id").asLong();
+            assertNotEquals(p1Id, p2Id);
+            assertTrue(m.get("participant1").asText().startsWith("RR Team"));
+            LocalDate day = LocalDate.parse(m.get("matchTime").asText().substring(0, 10));
+            Set<Long> seen = teamsPlayedByDate.computeIfAbsent(day, k -> new HashSet<>());
+            assertTrue(seen.add(p1Id), "Team " + p1Id + " played more than once on " + day);
+            assertTrue(seen.add(p2Id), "Team " + p2Id + " played more than once on " + day);
+        }
+
+        // Calling generate-schedule again on same competition -> 409 Conflict
+        mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":101,\"format\":\"ROUND_ROBIN\",\"startDate\":\"2026-10-15\"}"))
+                .andExpect(status().isConflict());
+
+        // 5 teams KNOCKOUT -> 2 matches labeled "Tứ kết" and 1 bye participant explicitly reported
+        seedParticipants(102L, 5, "KO5");
+        mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":102,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-11-01\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.generatedCount").value(2))
+                .andExpect(jsonPath("$.matches[0].round", startsWith("Tứ kết")))
+                .andExpect(jsonPath("$.byeParticipants", hasSize(1)))
+                .andExpect(jsonPath("$.byeParticipants[0].displayName").value("KO5 5"));
+
+        // Verify exact knockout round labels for 16 -> Vòng 1/8, 8 -> Tứ kết, 4 -> Bán kết, 2 -> Chung kết
+        seedParticipants(103L, 16, "K16");
+        mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":103,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-11-05\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.matches[0].round", startsWith("Vòng 1/8")));
+
+        seedParticipants(104L, 8, "K8");
+        mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":104,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-11-10\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.matches[0].round", startsWith("Tứ kết")));
+
+        seedParticipants(105L, 4, "K4");
+        mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":105,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-11-15\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.matches[0].round", startsWith("Bán kết")));
+
+        seedParticipants(106L, 2, "K2");
+        mockMvc.perform(post("/api/v1/matches/generate-schedule")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tournamentId\":1,\"competitionId\":106,\"format\":\"KNOCKOUT\",\"startDate\":\"2026-11-20\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.matches[0].round", startsWith("Chung kết")));
+    }
+}

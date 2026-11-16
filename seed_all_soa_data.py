@@ -221,6 +221,39 @@ print(f" -> Đã đồng bộ {len(team_by_name)} đội tuyển cùng đầy đ
 
 # 4. NẠP 20 TRẬN ĐẤU & 15 KẾT QUẢ (MATCH :8082 & RESULT :8087)
 print("\n[4/5] Đồng bộ 20 trận đấu & 15 kết quả (Match :8082 & Result :8087)...")
+def ensure_participant_map(cid, required_names):
+    parts = api_call(f'/api/v1/participants/competition/{cid}') or []
+    by_name = {p.get('displayName'): p.get('id') for p in parts if p.get('id')}
+    missing = [n for n in required_names if n and n not in by_name]
+    if not missing:
+        return by_name
+    for pname in missing:
+        tid = team_by_name.get(pname)
+        aid = ath_by_name.get(pname)
+        ptype = 'TEAM' if tid else 'ATHLETE'
+        ref_id = tid if tid else aid
+        if not ref_id:
+            continue
+        reg = api_call('/api/v1/registrations', 'POST', {
+            'competitionId': cid,
+            'participantType': ptype,
+            'participantReferenceId': ref_id,
+            'participantName': pname
+        })
+        if reg and reg.get('id'):
+            api_call(f"/api/v1/registrations/{reg['id']}/approve", 'PUT')
+    parts_after = api_call(f'/api/v1/participants/competition/{cid}') or []
+    return {p.get('displayName'): p.get('id') for p in parts_after if p.get('id')}
+
+participants_by_comp = {}
+comp_required_names = {}
+for m in SEED.get('matches', []):
+    new_cid = old_comp_id_to_new.get(m.get('competitionId'), m.get('competitionId'))
+    if new_cid:
+        comp_required_names.setdefault(new_cid, set()).update([m.get('participant1'), m.get('participant2')])
+for cid, names in comp_required_names.items():
+    participants_by_comp[cid] = ensure_participant_map(cid, names)
+
 current_matches = api_call('/api/v1/matches') or []
 match_key_to_id = {(m.get('participant1'), m.get('participant2'), m.get('round')): m.get('id') for m in current_matches}
 old_match_id_to_new = {}
@@ -234,6 +267,7 @@ for m in SEED.get('matches', []):
     if key not in match_key_to_id:
         new_tid = old_tour_id_to_new.get(m.get('tournamentId'), m.get('tournamentId'))
         new_cid = old_comp_id_to_new.get(m.get('competitionId'), m.get('competitionId'))
+        pmap = participants_by_comp.get(new_cid, {})
         res = api_call('/api/v1/matches', 'POST', {
             'tournamentId': new_tid,
             'competitionId': new_cid,
@@ -243,6 +277,8 @@ for m in SEED.get('matches', []):
             'location': m.get('location'),
             'referee': m.get('referee'),
             'refereeUsername': m.get('refereeUsername') or ('referee1' if m.get('status') != 'FINISHED' else 'referee1'),
+            'participant1Id': pmap.get(m.get('participant1')),
+            'participant2Id': pmap.get(m.get('participant2')),
             'participant1': m.get('participant1'),
             'participant2': m.get('participant2'),
             'status': m.get('status', 'SCHEDULED')

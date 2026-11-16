@@ -208,6 +208,7 @@ const AppState = {
     results: [],
     rankings: [],
     referees: [],
+    participantsByComp: {},
     notifications: [],
     users: [],
     gatewayRoutes: null
@@ -5067,6 +5068,41 @@ async function ensureMatchFormReferenceData() {
   if (tasks.length > 0) await Promise.all(tasks);
 }
 
+async function fetchCompetitionParticipants(compId, force = false) {
+  if (!compId) return [];
+  const key = String(compId);
+  if (!force && Array.isArray(AppState.data.participantsByComp[key])) {
+    return AppState.data.participantsByComp[key];
+  }
+  try {
+    const res = await apiCall(`/api/v1/participants/competition/${compId}`);
+    const list = Array.isArray(res?.data) ? res.data : [];
+    AppState.data.participantsByComp[key] = list;
+    return list;
+  } catch {
+    return AppState.data.participantsByComp[key] || [];
+  }
+}
+
+async function updateAutoGenParticipantsPreview() {
+  const box = document.getElementById('autoGenParticipantsHint');
+  const compId = document.getElementById('mGenCompId')?.value;
+  if (!box) return;
+  if (!compId) {
+    box.innerHTML = '<span style="color:var(--color-warning);">Vui lòng chọn nội dung thi đấu.</span>';
+    return;
+  }
+  box.innerHTML = '<span style="color:var(--text-secondary);">Đang tải danh sách đội/VĐV đã duyệt...</span>';
+  const parts = await fetchCompetitionParticipants(compId, true);
+  if (parts.length < 2) {
+    box.innerHTML = `<span style="color:var(--color-error);">Nội dung hiện có ${parts.length} đội/VĐV đã duyệt — cần tối thiểu 2 để tự động xếp lịch.</span>`;
+  } else {
+    const names = parts.slice(0, 6).map(p => escapeHtml(p.displayName)).join(', ');
+    const more = parts.length > 6 ? ` (+${parts.length - 6})` : '';
+    box.innerHTML = `<span style="color:var(--color-success);">✓ Sẵn sàng xếp lịch từ ${parts.length} đội/VĐV đã duyệt: ${names}${more}</span>`;
+  }
+}
+
 async function openAutoGenerateScheduleModal(preselectedTourId = null) {
   if (!hasPermission('matches.schedule')) {
     showToast('Bạn không có quyền xếp lịch thi đấu', 'error');
@@ -5074,27 +5110,32 @@ async function openAutoGenerateScheduleModal(preselectedTourId = null) {
   }
   await ensureMatchFormReferenceData();
   const d = AppState.data;
-  if (d.tournaments.length === 0 || d.teams.length < 2) {
-    showToast('Cần ít nhất 1 giải đấu và 2 đội tuyển để tự động xếp lịch.', 'warning');
+  if (d.tournaments.length === 0) {
+    showToast('Cần ít nhất 1 giải đấu để tự động xếp lịch.', 'warning');
     return;
   }
   const tourId = preselectedTourId || AppState.selectedTournamentId || d.tournaments[0].id;
   const comps = d.competitions.filter(c => Number(c.tournamentId) === Number(tourId));
+  if (comps.length === 0) {
+    showToast('Giải đấu chưa có nội dung thi đấu nào để xếp lịch.', 'warning');
+    return;
+  }
 
   openModal('Tự động Xếp lịch Thi đấu', `
     <form id="autoGenScheduleForm" onsubmit="submitAutoGenerateSchedule(event)">
       <div class="form-error-banner" hidden></div>
       <div class="form-group">
         <label for="mGenTourId">Giải đấu áp dụng *</label>
-        <select id="mGenTourId" data-field="tournamentId" class="select" onchange="syncCompetitionDropdown('mGenTourId', 'mGenCompId')">
+        <select id="mGenTourId" data-field="tournamentId" class="select" onchange="syncCompetitionDropdown('mGenTourId', 'mGenCompId');updateAutoGenParticipantsPreview()">
           ${d.tournaments.map(t => `<option value="${t.id}" ${Number(t.id) === Number(tourId) ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
-        <label for="mGenCompId">Nội dung thi đấu</label>
-        <select id="mGenCompId" data-field="competitionId" class="select">
-          ${comps.map(c => `<option value="${c.id}">${escapeHtml(c.name || c.competitionName)}</option>`).join('') || '<option value="">Mặc định theo giải</option>'}
+        <label for="mGenCompId">Nội dung thi đấu *</label>
+        <select id="mGenCompId" data-field="competitionId" class="select" required onchange="updateAutoGenParticipantsPreview()">
+          ${comps.map(c => `<option value="${c.id}">${escapeHtml(c.name || c.competitionName)}</option>`).join('') || '<option value="">-- Chưa có nội dung --</option>'}
         </select>
+        <div id="autoGenParticipantsHint" style="margin-top:6px;font-size:0.82rem;"></div>
       </div>
       <div class="form-grid">
         <div class="form-group">
@@ -5116,6 +5157,7 @@ async function openAutoGenerateScheduleModal(preselectedTourId = null) {
       </div>
     </form>
   `);
+  updateAutoGenParticipantsPreview();
 }
 
 function syncCompetitionDropdown(tourSelectId, compSelectId) {
@@ -5124,7 +5166,7 @@ function syncCompetitionDropdown(tourSelectId, compSelectId) {
   if (!compSel) return;
   const comps = AppState.data.competitions.filter(c => Number(c.tournamentId) === tid);
   compSel.innerHTML = comps.map(c => `<option value="${c.id}">${escapeHtml(c.name || c.competitionName)}</option>`).join('')
-    || '<option value="">Mặc định theo giải</option>';
+    || '<option value="">-- Chưa có nội dung --</option>';
 }
 
 async function submitAutoGenerateSchedule(e) {
@@ -5133,9 +5175,8 @@ async function submitAutoGenerateSchedule(e) {
   clearFormErrors(form);
   const tourId = Number(document.getElementById('mGenTourId').value);
   const compVal = document.getElementById('mGenCompId').value;
-  const teamNames = AppState.data.teams.map(t => t.name).filter(Boolean);
-  if (teamNames.length < 2) {
-    showFormError(form, 'Cần ít nhất 2 đội tuyển trong hệ thống để tự động xếp lịch.');
+  if (!compVal) {
+    setFieldError(form, 'competitionId', 'Vui lòng chọn nội dung thi đấu hợp lệ');
     return;
   }
 
@@ -5145,14 +5186,13 @@ async function submitAutoGenerateSchedule(e) {
       method: 'POST',
       body: JSON.stringify({
         tournamentId: tourId,
-        competitionId: compVal ? Number(compVal) : null,
+        competitionId: Number(compVal),
         format: document.getElementById('mGenFormat').value,
-        startDate: document.getElementById('mGenDate').value,
-        teams: teamNames.slice(0, 8)
+        startDate: document.getElementById('mGenDate').value
       })
     });
     closeModal();
-    showToast(`Đã tự động tạo ${res.data.generatedCount} trận đấu!`);
+    showToast(res.data.message || `Đã tự động tạo ${res.data.generatedCount} trận đấu!`);
     await refreshAfterMutation({ clearCache: ['matches'], paged: ['matches'], reloadTournamentId: tourId });
     renderCurrentPage(false);
   } catch (err) {
@@ -5174,8 +5214,14 @@ async function openCreateMatchModal() {
     return;
   }
   const defaultTourId = AppState.selectedTournamentId || d.tournaments[0].id;
+  const comps = d.competitions.filter(c => Number(c.tournamentId) === Number(defaultTourId));
+  const defaultCompId = comps[0]?.id || null;
+  if (defaultCompId) {
+    await fetchCompetitionParticipants(defaultCompId, true);
+  }
   openModal('Tạo Trận đấu mới', renderMatchFormHtml(null, {
     tournamentId: defaultTourId,
+    competitionId: defaultCompId,
     status: 'SCHEDULED',
     matchTime: `${getTodayLocalIsoDate()}T18:00`
   }));
@@ -5200,8 +5246,35 @@ async function openEditMatchModal(id) {
       return;
     }
   }
+  if (m.competitionId) {
+    await fetchCompetitionParticipants(m.competitionId, true);
+  }
   openModal(`Chỉnh sửa Trận đấu #${m.id}`, renderMatchFormHtml(m.id, m));
   setTimeout(() => checkMatchConflictLive(m.id), 50);
+}
+
+async function onMatchCompetitionChanged(editId = null) {
+  const compId = document.getElementById('mMatchCompId')?.value;
+  const p1Sel = document.getElementById('mMatchP1Id');
+  const p2Sel = document.getElementById('mMatchP2Id');
+  const hint = document.getElementById('matchParticipantsHint');
+  if (!p1Sel || !p2Sel) return;
+  if (!compId) {
+    p1Sel.innerHTML = '<option value="">-- Chọn nội dung trước --</option>';
+    p2Sel.innerHTML = '<option value="">-- Chọn nội dung trước --</option>';
+    if (hint) hint.innerHTML = '';
+    return;
+  }
+  const parts = await fetchCompetitionParticipants(compId, true);
+  const opts = parts.map(p => `<option value="${p.id}" data-name="${escapeHtml(p.displayName)}">${escapeHtml(p.displayName)} (${p.participantType === 'ATHLETE' ? 'VĐV' : 'Đội'})</option>`).join('');
+  p1Sel.innerHTML = `<option value="">-- Chọn Đội / VĐV 1 --</option>${opts}`;
+  p2Sel.innerHTML = `<option value="">-- Chọn Đội / VĐV 2 --</option>${opts}`;
+  if (hint) {
+    hint.innerHTML = parts.length < 2
+      ? `<span style="color:var(--color-error);">Nội dung #${escapeHtml(compId)} hiện chỉ có ${parts.length} đội/VĐV đã duyệt. Hãy duyệt hồ sơ ở tab Đăng ký thi đấu trước.</span>`
+      : '';
+  }
+  checkMatchConflictLive(editId);
 }
 
 function onRefereeUsernameSelected(username, editId = null) {
@@ -5220,9 +5293,17 @@ function renderMatchFormHtml(editId, m) {
   const d = AppState.data;
   const tourId = m.tournamentId || AppState.selectedTournamentId || d.tournaments[0]?.id;
   const comps = d.competitions.filter(c => Number(c.tournamentId) === Number(tourId));
-  const teamNames = Array.from(new Set(d.teams.map(t => t.name).concat([m.participant1, m.participant2]).filter(Boolean)));
+  const compId = m.competitionId || comps[0]?.id || '';
+  const parts = compId ? (d.participantsByComp[String(compId)] || []) : [];
+  const p1Selected = m.participant1Id || parts.find(p => p.displayName === m.participant1)?.id || '';
+  const p2Selected = m.participant2Id || parts.find(p => p.displayName === m.participant2)?.id || '';
   const referees = Array.isArray(d.referees) ? d.referees : [];
   const timeVal = m.matchTime ? String(m.matchTime).slice(0, 16) : '';
+
+  const renderParticipantOpts = (selectedId) => {
+    return '<option value="">-- Chọn từ danh sách tham dự --</option>'
+      + parts.map(p => `<option value="${p.id}" data-name="${escapeHtml(p.displayName)}" ${Number(p.id) === Number(selectedId) ? 'selected' : ''}>${escapeHtml(p.displayName)} (${p.participantType === 'ATHLETE' ? 'VĐV' : 'Đội'})</option>`).join('');
+  };
 
   return `
     <form id="matchForm" onsubmit="submitMatchForm(event, ${editId ? editId : 'null'})">
@@ -5230,21 +5311,17 @@ function renderMatchFormHtml(editId, m) {
       <div class="form-grid">
         <div class="form-group">
           <label for="mMatchTourId">Giải đấu *</label>
-          <select id="mMatchTourId" data-field="tournamentId" class="select" onchange="syncCompetitionDropdown('mMatchTourId', 'mMatchCompId');checkMatchConflictLive(${editId ? editId : 'null'})">
+          <select id="mMatchTourId" data-field="tournamentId" class="select" onchange="syncCompetitionDropdown('mMatchTourId', 'mMatchCompId');onMatchCompetitionChanged(${editId ? editId : 'null'})">
             ${d.tournaments.map(t => `<option value="${t.id}" ${Number(t.id) === Number(tourId) ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
-          <label for="mMatchCompId">Nội dung thi đấu</label>
-          <select id="mMatchCompId" data-field="competitionId" class="select">
-            ${comps.map(c => `<option value="${c.id}" ${Number(c.id) === Number(m.competitionId) ? 'selected' : ''}>${escapeHtml(c.name || c.competitionName)}</option>`).join('') || '<option value="">Mặc định theo giải</option>'}
+          <label for="mMatchCompId">Nội dung thi đấu *</label>
+          <select id="mMatchCompId" data-field="competitionId" class="select" required onchange="onMatchCompetitionChanged(${editId ? editId : 'null'})">
+            ${comps.map(c => `<option value="${c.id}" ${Number(c.id) === Number(compId) ? 'selected' : ''}>${escapeHtml(c.name || c.competitionName)}</option>`).join('') || '<option value="">-- Chưa có nội dung --</option>'}
           </select>
         </div>
       </div>
-
-      <datalist id="matchParticipantSuggestions">
-        ${teamNames.map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}
-      </datalist>
 
       <datalist id="refereeUsernameSuggestions">
         ${referees.map(r => `<option value="${escapeHtml(r.username)}" label="${escapeHtml(r.fullName || r.username)}"></option>`).join('')}
@@ -5252,13 +5329,20 @@ function renderMatchFormHtml(editId, m) {
 
       <div class="form-grid">
         <div class="form-group">
-          <label for="mMatchP1">Đội / VĐV 1 *</label>
-          <input id="mMatchP1" data-field="participant1" list="matchParticipantSuggestions" class="input" required value="${escapeHtml(m.participant1 || '')}" placeholder="Chọn hoặc nhập tên" onchange="checkMatchConflictLive(${editId ? editId : 'null'})" />
+          <label for="mMatchP1Id">Đội / VĐV 1 *</label>
+          <select id="mMatchP1Id" data-field="participant1Id" class="select" required onchange="checkMatchConflictLive(${editId ? editId : 'null'})">
+            ${renderParticipantOpts(p1Selected)}
+          </select>
         </div>
         <div class="form-group">
-          <label for="mMatchP2">Đội / VĐV 2 *</label>
-          <input id="mMatchP2" data-field="participant2" list="matchParticipantSuggestions" class="input" required value="${escapeHtml(m.participant2 || '')}" placeholder="Chọn hoặc nhập tên" onchange="checkMatchConflictLive(${editId ? editId : 'null'})" />
+          <label for="mMatchP2Id">Đội / VĐV 2 *</label>
+          <select id="mMatchP2Id" data-field="participant2Id" class="select" required onchange="checkMatchConflictLive(${editId ? editId : 'null'})">
+            ${renderParticipantOpts(p2Selected)}
+          </select>
         </div>
+      </div>
+      <div id="matchParticipantsHint" style="margin:-4px 0 10px;font-size:0.8rem;">
+        ${compId && parts.length < 2 ? `<span style="color:var(--color-error);">Nội dung #${escapeHtml(compId)} hiện chỉ có ${parts.length} đội/VĐV đã duyệt. Hãy duyệt đăng ký trước khi xếp trận.</span>` : ''}
       </div>
 
       <div class="form-grid">
@@ -5295,6 +5379,7 @@ function renderMatchFormHtml(editId, m) {
               <option value="SCHEDULED" ${m.status === 'SCHEDULED' ? 'selected' : ''}>Chờ thi đấu</option>
               <option value="ONGOING" ${m.status === 'ONGOING' ? 'selected' : ''}>Đang diễn ra</option>
               <option value="FINISHED" ${m.status === 'FINISHED' ? 'selected' : ''}>Đã kết thúc</option>
+              <option value="POSTPONED" ${m.status === 'POSTPONED' ? 'selected' : ''}>Hoãn thi đấu</option>
               <option value="CANCELLED" ${m.status === 'CANCELLED' ? 'selected' : ''}>Đã hủy</option>
             </select>
           </div>
@@ -5327,10 +5412,18 @@ async function checkMatchConflictLive(excludeId = null) {
   const timeInput = document.getElementById('mMatchTime')?.value;
   if (!box || !timeInput) return { hasConflict: false, conflicts: [] };
 
+  const p1Sel = document.getElementById('mMatchP1Id');
+  const p2Sel = document.getElementById('mMatchP2Id');
+  const p1Opt = p1Sel?.selectedOptions?.[0];
+  const p2Opt = p2Sel?.selectedOptions?.[0];
+
   const candidate = {
     tournamentId: Number(document.getElementById('mMatchTourId')?.value || 1),
-    participant1: document.getElementById('mMatchP1')?.value.trim(),
-    participant2: document.getElementById('mMatchP2')?.value.trim(),
+    competitionId: document.getElementById('mMatchCompId')?.value ? Number(document.getElementById('mMatchCompId').value) : null,
+    participant1Id: p1Sel?.value ? Number(p1Sel.value) : null,
+    participant2Id: p2Sel?.value ? Number(p2Sel.value) : null,
+    participant1: p1Opt?.dataset?.name || '',
+    participant2: p2Opt?.dataset?.name || '',
     location: document.getElementById('mMatchLoc')?.value.trim(),
     referee: document.getElementById('mMatchRef')?.value.trim(),
     refereeUsername: document.getElementById('mMatchRefUser')?.value.trim() || null,
@@ -5364,8 +5457,12 @@ async function submitMatchForm(e, editId) {
   const form = e.target;
   clearFormErrors(form);
 
-  const p1 = document.getElementById('mMatchP1').value.trim();
-  const p2 = document.getElementById('mMatchP2').value.trim();
+  const p1Sel = document.getElementById('mMatchP1Id');
+  const p2Sel = document.getElementById('mMatchP2Id');
+  const p1Id = p1Sel?.value ? Number(p1Sel.value) : null;
+  const p2Id = p2Sel?.value ? Number(p2Sel.value) : null;
+  const p1Name = p1Sel?.selectedOptions?.[0]?.dataset?.name || '';
+  const p2Name = p2Sel?.selectedOptions?.[0]?.dataset?.name || '';
   const round = document.getElementById('mMatchRound').value.trim();
   const timeInput = document.getElementById('mMatchTime').value;
   const location = document.getElementById('mMatchLoc').value.trim();
@@ -5374,10 +5471,11 @@ async function submitMatchForm(e, editId) {
   const compVal = document.getElementById('mMatchCompId')?.value;
 
   let invalid = false;
-  if (!p1) { setFieldError(form, 'participant1', 'Vui lòng nhập Đội/VĐV 1'); invalid = true; }
-  if (!p2) { setFieldError(form, 'participant2', 'Vui lòng nhập Đội/VĐV 2'); invalid = true; }
-  if (p1 && p2 && p1.toLowerCase() === p2.toLowerCase()) {
-    setFieldError(form, 'participant2', 'Hai đội tham gia trận đấu không được trùng nhau');
+  if (!compVal) { setFieldError(form, 'competitionId', 'Vui lòng chọn nội dung thi đấu'); invalid = true; }
+  if (!p1Id) { setFieldError(form, 'participant1Id', 'Vui lòng chọn Đội/VĐV 1 từ danh sách tham dự'); invalid = true; }
+  if (!p2Id) { setFieldError(form, 'participant2Id', 'Vui lòng chọn Đội/VĐV 2 từ danh sách tham dự'); invalid = true; }
+  if (p1Id && p2Id && p1Id === p2Id) {
+    setFieldError(form, 'participant2Id', 'Hai participant tham gia trận đấu không được trùng nhau');
     invalid = true;
   }
   if (!round) { setFieldError(form, 'round', 'Vui lòng nhập vòng đấu'); invalid = true; }
@@ -5387,10 +5485,12 @@ async function submitMatchForm(e, editId) {
 
   const body = {
     tournamentId: Number(document.getElementById('mMatchTourId').value),
-    competitionId: compVal ? Number(compVal) : null,
+    competitionId: Number(compVal),
     round,
-    participant1: p1,
-    participant2: p2,
+    participant1Id: p1Id,
+    participant2Id: p2Id,
+    participant1: p1Name,
+    participant2: p2Name,
     location,
     referee,
     refereeUsername: refereeUsername || null,

@@ -3,6 +3,7 @@ package com.sports.management.match.controller;
 import com.sports.management.match.client.TournamentClient;
 import com.sports.management.match.model.Match;
 import com.sports.management.match.service.MatchService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -142,7 +143,7 @@ public class MatchController {
     // CREATE
     @PostMapping
     public ResponseEntity<Match> createMatch(
-            @RequestBody Match match,
+            @Valid @RequestBody Match match,
             Authentication authentication) {
 
         assertAuthenticated(authentication);
@@ -184,7 +185,7 @@ public class MatchController {
     @PutMapping("/{id}")
     public ResponseEntity<Match> updateMatch(
             @PathVariable Long id,
-            @RequestBody Match match,
+            @Valid @RequestBody Match match,
             Authentication authentication) {
 
         assertAuthenticated(authentication);
@@ -302,10 +303,21 @@ public class MatchController {
             Authentication authentication) {
 
         assertAuthenticated(authentication);
-        if (request.get("tournamentId") == null) {
+        if (request == null || request.get("tournamentId") == null || String.valueOf(request.get("tournamentId")).isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tournament ID is required");
         }
-        Long tournamentId = Long.valueOf(String.valueOf(request.get("tournamentId")));
+        if (request.get("competitionId") == null || String.valueOf(request.get("competitionId")).isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Competition ID is required");
+        }
+
+        Long tournamentId;
+        Long competitionId;
+        try {
+            tournamentId = Long.valueOf(String.valueOf(request.get("tournamentId")));
+            competitionId = Long.valueOf(String.valueOf(request.get("competitionId")));
+        } catch (NumberFormatException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tournamentId or competitionId");
+        }
 
         if (!hasAuthority(authentication, "ROLE_ADMIN")) {
             if (!hasAuthority(authentication, "ROLE_ORGANIZER")) {
@@ -316,21 +328,22 @@ public class MatchController {
             assertTournamentExists(tournamentId);
         }
 
-        Long competitionId = request.get("competitionId") != null ? Long.valueOf(String.valueOf(request.get("competitionId"))) : 1L;
         String format = request.get("format") != null ? String.valueOf(request.get("format")) : "ROUND_ROBIN";
         String startDate = request.get("startDate") != null ? String.valueOf(request.get("startDate")) : null;
-        List<String> teams = (List<String>) request.get("teams");
         List<String> venues = (List<String>) request.get("venues");
         List<String> referees = (List<String>) request.get("referees");
 
-        List<Match> generated = matchService.generateSchedule(
-                tournamentId, competitionId, format, teams, startDate, venues, referees, authentication.getName());
+        MatchService.ScheduleGenerationResult result = matchService.generateScheduleFromParticipants(
+                tournamentId, competitionId, format, startDate, venues, referees, authentication.getName());
 
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("tournamentId", tournamentId);
+        res.put("competitionId", competitionId);
         res.put("format", format);
-        res.put("generatedCount", generated.size());
-        res.put("matches", generated);
+        res.put("generatedCount", result.matches().size());
+        res.put("matches", result.matches());
+        res.put("byeParticipants", result.byeParticipants());
+        res.put("message", result.message());
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 
@@ -403,15 +416,17 @@ public class MatchController {
                 }
             } else if (putCandidate != null) {
                 boolean modifiedProtectedFields = !Objects.equals(existing.getTournamentId(), putCandidate.getTournamentId())
-                        || (putCandidate.getCompetitionId() != null && !Objects.equals(existing.getCompetitionId(), putCandidate.getCompetitionId()))
+                        || !Objects.equals(existing.getCompetitionId(), putCandidate.getCompetitionId())
+                        || !Objects.equals(existing.getParticipant1Id(), putCandidate.getParticipant1Id())
+                        || !Objects.equals(existing.getParticipant2Id(), putCandidate.getParticipant2Id())
                         || !Objects.equals(normStr(existing.getRound()), normStr(putCandidate.getRound()))
                         || !Objects.equals(normStr(existing.getGroupName()), normStr(putCandidate.getGroupName()))
                         || !Objects.equals(existing.getMatchTime(), putCandidate.getMatchTime())
                         || !Objects.equals(normStr(existing.getLocation()), normStr(putCandidate.getLocation()))
                         || !Objects.equals(normStr(existing.getReferee()), normStr(putCandidate.getReferee()))
                         || !Objects.equals(normStr(existing.getRefereeUsername()), normStr(putCandidate.getRefereeUsername()))
-                        || !Objects.equals(normStr(existing.getParticipant1()), normStr(putCandidate.getParticipant1()))
-                        || !Objects.equals(normStr(existing.getParticipant2()), normStr(putCandidate.getParticipant2()));
+                        || (normStr(putCandidate.getParticipant1()) != null && !Objects.equals(normStr(existing.getParticipant1()), normStr(putCandidate.getParticipant1())))
+                        || (normStr(putCandidate.getParticipant2()) != null && !Objects.equals(normStr(existing.getParticipant2()), normStr(putCandidate.getParticipant2())));
                 if (modifiedProtectedFields) {
                     throw new ResponseStatusException(
                             HttpStatus.FORBIDDEN,

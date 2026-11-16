@@ -123,13 +123,10 @@ class MatchServiceAndControllerTest {
 
     @Test
     void createMatch_rejectsIdenticalParticipants() throws Exception {
-        when(tournamentClient.getTournamentById(1L))
-                .thenReturn(Map.of("id", 1, "organizerUsername", "admin"));
-
         mockMvc.perform(post("/api/v1/matches")
                         .principal(new TestingAuthenticationToken("admin", null, "ROLE_ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tournamentId\":1,\"participant1\":\"Đội A\",\"participant2\":\"Đội A\"}"))
+                        .content("{\"tournamentId\":1,\"competitionId\":10,\"participant1Id\":1,\"participant2Id\":1,\"matchTime\":\"2026-12-15T18:00:00\"}"))
                 .andExpect(status().isBadRequest());
     }
 

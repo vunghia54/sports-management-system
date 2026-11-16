@@ -48,7 +48,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"tournamentId\": 1,\n  \"competitionId\": 1,\n  \"round\": \"Vòng 1 - TH6 Integration\",\n  \"participant1\": \"Đại Học Bách Khoa\",\n  \"participant2\": \"Đại Học Quốc Gia\",\n  \"location\": \"Sân Vận Động Quốc Gia\",\n  \"status\": \"SCHEDULED\"\n}"
+          "raw": "{\n  \"tournamentId\": 1,\n  \"competitionId\": 1,\n  \"round\": \"Vòng 1 - TH6 Integration\",\n  \"participant1Id\": 1,\n  \"participant2Id\": 2,\n  \"matchTime\": \"2026-11-25T19:00:00\",\n  \"location\": \"Sân Vận Động Quốc Gia\",\n  \"status\": \"SCHEDULED\"\n}"
         },
         "url": { "raw": "{{matchUrl}}/api/v1/matches", "host": ["{{matchUrl}}"], "path": ["api", "v1", "matches"] }
       },
@@ -78,7 +78,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"tournamentId\": 999999,\n  \"competitionId\": 1,\n  \"round\": \"Vòng Lỗi\",\n  \"participant1\": \"Đội A\",\n  \"participant2\": \"Đội B\",\n  \"status\": \"SCHEDULED\"\n}"
+          "raw": "{\n  \"tournamentId\": 999999,\n  \"competitionId\": 1,\n  \"round\": \"Vòng Lỗi\",\n  \"participant1Id\": 1,\n  \"participant2Id\": 2,\n  \"matchTime\": \"2026-11-25T19:00:00\",\n  \"status\": \"SCHEDULED\"\n}"
         },
         "url": { "raw": "{{matchUrl}}/api/v1/matches", "host": ["{{matchUrl}}"], "path": ["api", "v1", "matches"] }
       },
@@ -136,7 +136,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"tournamentId\": 1,\n  \"competitionId\": 1,\n  \"round\": \"Chung kết\",\n  \"participant1\": \"Đại Học Bách Khoa\",\n  \"participant2\": \"Đại Học Quốc Gia\",\n  \"status\": \"FINISHED\"\n}"
+          "raw": "{\n  \"tournamentId\": 1,\n  \"competitionId\": 1,\n  \"round\": \"Chung kết\",\n  \"participant1Id\": 1,\n  \"participant2Id\": 2,\n  \"matchTime\": \"2026-11-25T19:00:00\",\n  \"status\": \"FINISHED\"\n}"
         },
         "url": { "raw": "{{matchUrl}}/api/v1/matches/{{testMatchId}}", "host": ["{{matchUrl}}"], "path": ["api", "v1", "matches", "{{testMatchId}}"] }
       },
