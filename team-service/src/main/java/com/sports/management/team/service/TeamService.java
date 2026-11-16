@@ -168,25 +168,15 @@ public class TeamService {
     }
 
     @Transactional
-    public TeamMember addMember(TeamMember member) {
+    public TeamMember addMember(TeamMember member, String callerUsername, boolean isAdmin) {
         if (member.getTeamId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Team ID is required");
         }
         if (member.getAthleteId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Athlete ID is required");
         }
-        if (memberRepository.existsByTeamIdAndAthleteId(member.getTeamId(), member.getAthleteId())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Vận động viên #" + member.getAthleteId() + " đã có mặt trong đội tuyển #" + member.getTeamId());
-        }
-        if (member.getJerseyNumber() != null) {
-            if (member.getJerseyNumber() <= 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Số áo (jerseyNumber) phải lớn hơn 0");
-            }
-            if (memberRepository.existsByTeamIdAndJerseyNumber(member.getTeamId(), member.getJerseyNumber())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Số áo " + member.getJerseyNumber() + " đã được sử dụng trong đội tuyển #" + member.getTeamId());
-            }
+        if (member.getJerseyNumber() != null && member.getJerseyNumber() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Số áo (jerseyNumber) phải lớn hơn 0");
         }
 
         Map<String, Object> athleteInfo = athleteClient.getAthleteById(member.getAthleteId());
@@ -194,11 +184,30 @@ public class TeamService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Athlete does not exist with id: " + member.getAthleteId());
         }
+        if (!isAdmin) {
+            Object ownerObj = athleteInfo.get("ownerUsername");
+            String athleteOwner = ownerObj != null ? String.valueOf(ownerObj).trim() : null;
+            if (callerUsername == null || callerUsername.isBlank()
+                    || athleteOwner == null || athleteOwner.isBlank()
+                    || !athleteOwner.equalsIgnoreCase(callerUsername)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Access Denied: Quản lý đội chỉ được phép thêm vận động viên thuộc quyền sở hữu của mình");
+            }
+        }
         Object healthObj = athleteInfo.get("healthStatus");
         String health = healthObj != null ? String.valueOf(healthObj).trim().toUpperCase(Locale.ROOT) : "";
         if (!"QUALIFIED".equals(health)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Vận động viên #" + member.getAthleteId() + " không đủ điều kiện thi đấu (healthStatus=" + health + ", yêu cầu QUALIFIED)");
+        }
+        if (memberRepository.existsByTeamIdAndAthleteId(member.getTeamId(), member.getAthleteId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Vận động viên #" + member.getAthleteId() + " đã có mặt trong đội tuyển #" + member.getTeamId());
+        }
+        if (member.getJerseyNumber() != null
+                && memberRepository.existsByTeamIdAndJerseyNumber(member.getTeamId(), member.getJerseyNumber())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Số áo " + member.getJerseyNumber() + " đã được sử dụng trong đội tuyển #" + member.getTeamId());
         }
         if (athleteInfo.get("fullName") != null
                 && (member.getAthleteName() == null || member.getAthleteName().isBlank())) {

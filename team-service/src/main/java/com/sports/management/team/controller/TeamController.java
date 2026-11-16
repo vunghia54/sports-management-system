@@ -215,7 +215,9 @@ public class TeamController {
         }
         checkOwnership(existing, authentication);
         member.setTeamId(id);
-        TeamMember created = teamService.addMember(member);
+        boolean isAdmin = hasAdminRole(authentication);
+        String callerUsername = authentication != null ? authentication.getName() : null;
+        TeamMember created = teamService.addMember(member, callerUsername, isAdmin);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header("X-Athlete-Provider-Instance", athleteClient.getLastHandledInstance())
                 .body(created);

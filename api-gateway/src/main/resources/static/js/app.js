@@ -4931,10 +4931,21 @@ async function openAddAthleteToTeamModal(preselectedTeamId = null) {
   if (AppState.data.teams.length === 0) await safeFetchSlice('teams', '/api/v1/teams');
   if (AppState.data.athletes.length === 0) await safeFetchSlice('athletes', '/api/v1/athletes');
 
-  const teams = AppState.data.teams;
-  const athletes = AppState.data.athletes;
+  const isManager = AppState.auth.role === 'ROLE_TEAM_MANAGER';
+  const myUsername = String(AppState.auth.username || '').toLowerCase();
+  const teams = isManager
+    ? AppState.data.teams.filter(t => t.ownerUsername && t.ownerUsername.toLowerCase() === myUsername)
+    : AppState.data.teams;
+  const athletes = isManager
+    ? AppState.data.athletes.filter(a => a.ownerUsername && a.ownerUsername.toLowerCase() === myUsername)
+    : AppState.data.athletes;
   if (teams.length === 0 || athletes.length === 0) {
-    showToast('Cần có ít nhất 1 đội tuyển và 1 VĐV trong hệ thống trước khi liên kết.', 'warning');
+    showToast(
+      isManager
+        ? 'Bạn cần có ít nhất 1 đội tuyển và 1 VĐV thuộc quyền sở hữu của mình trước khi liên kết.'
+        : 'Cần có ít nhất 1 đội tuyển và 1 VĐV trong hệ thống trước khi liên kết.',
+      'warning'
+    );
     return;
   }
 

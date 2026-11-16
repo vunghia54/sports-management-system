@@ -43,6 +43,7 @@ class TeamSecurityAndMemberValidationTest {
     private static HttpServer mockServer;
     private static int mockPort;
     private static final AtomicReference<String> athleteHealth = new AtomicReference<>("QUALIFIED");
+    private static final AtomicReference<String> athleteOwner = new AtomicReference<>("manager1");
     private static final AtomicReference<String> matchUsageMode = new AtomicReference<>("UNUSED"); // UNUSED, IN_USE, DOWN
 
     static {
@@ -59,9 +60,11 @@ class TeamSecurityAndMemberValidationTest {
                         status = 404;
                         body = "{\"message\":\"Not found\"}";
                     } else {
+                        String ownerVal = athleteOwner.get();
+                        String ownerJson = ownerVal == null ? "null" : ("\"" + ownerVal + "\"");
                         body = """
-                                {"id":%s,"fullName":"VDV Test %s","healthStatus":"%s"}
-                                """.formatted(idStr, idStr, athleteHealth.get());
+                                {"id":%s,"fullName":"VDV Test %s","healthStatus":"%s","ownerUsername":%s}
+                                """.formatted(idStr, idStr, athleteHealth.get(), ownerJson);
                     }
                 } else if (path.startsWith("/api/v1/participants/usage")) {
                     String mode = matchUsageMode.get();
@@ -120,6 +123,7 @@ class TeamSecurityAndMemberValidationTest {
     @BeforeEach
     void setUp() {
         athleteHealth.set("QUALIFIED");
+        athleteOwner.set("manager1");
         matchUsageMode.set("UNUSED");
         memberRepository.deleteAll();
         teamRepository.deleteAll();
@@ -208,6 +212,31 @@ class TeamSecurityAndMemberValidationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"athleteId\":102,\"jerseyNumber\":10}"))
                 .andExpect(status().isConflict());
+
+        // 6. C4: TEAM_MANAGER cannot add another manager's athlete OR athlete with null ownerUsername -> 403 Forbidden
+        athleteOwner.set("manager2");
+        mockMvc.perform(post("/api/v1/teams/" + team.getId() + "/members")
+                        .header("Authorization", mgr1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"athleteId\":105,\"jerseyNumber\":15}"))
+                .andExpect(status().isForbidden());
+
+        athleteOwner.set(null);
+        mockMvc.perform(post("/api/v1/teams/" + team.getId() + "/members")
+                        .header("Authorization", mgr1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"athleteId\":106,\"jerseyNumber\":16}"))
+                .andExpect(status().isForbidden());
+
+        // 7. C4: ROLE_ADMIN can add an athlete on behalf of any manager -> 201 Created
+        String adminToken = token("admin", "ROLE_ADMIN");
+        athleteOwner.set("manager2");
+        mockMvc.perform(post("/api/v1/teams/" + team.getId() + "/members")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"athleteId\":105,\"jerseyNumber\":15}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.athleteName", is("VDV Test 105")));
     }
 
     @Test
