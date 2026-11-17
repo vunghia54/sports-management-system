@@ -23,10 +23,13 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -180,7 +183,17 @@ class RankingSecurityIntegrationTest {
                 .andExpect(jsonPath("$.items[0].goalDifference").value(3));
 
         // Invalid sortBy returns 400
-        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/rankings/paged?sortBy=invalidColumn"))
+        mockMvc.perform(get("/api/v1/rankings/paged?sortBy=invalidColumn"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void actuatorPrometheusIsPublic_whileActuatorEnvRemainsSecured() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("application=\"ranking-service\"")));
+
+        mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().isUnauthorized());
     }
 }

@@ -27,15 +27,18 @@ import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -397,5 +400,15 @@ class MatchSecurityAndConflictIntegrationTest {
                         .content("{\"status\":\"FINISHED\",\"scoreParticipant1\":3,\"scoreParticipant2\":1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("FINISHED"));
+    }
+
+    @Test
+    void actuatorPrometheusIsPublic_whileActuatorEnvRemainsSecured() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("application=\"match-service\"")));
+
+        mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().isUnauthorized());
     }
 }

@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: sports-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - 'service-registry:8761'
+          - 'api-gateway:8080'
+          - 'auth-service:8083'
+          - 'tournament-service:8081'
+          - 'tournament-service-2:8091'
+          - 'team-service:8085'
+          - 'athlete-service:8086'
+          - 'match-service:8082'
+          - 'result-service:8087'
+          - 'ranking-service:8088'
+          - 'notification-service:8084'

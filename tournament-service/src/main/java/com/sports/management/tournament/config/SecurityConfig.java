@@ -35,6 +35,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/sports/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/competitions/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/instance-info").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
                         // Protected APIs (TH5 RBAC)

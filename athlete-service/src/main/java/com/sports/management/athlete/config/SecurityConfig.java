@@ -34,6 +34,7 @@ public class SecurityConfig {
                         .hasAnyAuthority("ROLE_ADMIN", "ROLE_ORGANIZER", "ROLE_TEAM_MANAGER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/athletes/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/instance-info").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/athletes/**").hasAnyAuthority("ROLE_TEAM_MANAGER", "ROLE_ORGANIZER", "ROLE_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/athletes/**").hasAnyAuthority("ROLE_TEAM_MANAGER", "ROLE_ORGANIZER", "ROLE_ADMIN")

@@ -535,4 +535,115 @@ class CompetitionAndTournamentSecurityTest {
                         .header("Authorization", adminToken))
                 .andExpect(status().isNoContent());
     }
+
+    @Test
+    void updateCompetition_blocksChangingTournamentOrSportOnceRegistrationsOrMatchesExist_allowsNameStatusUpdates() throws Exception {
+        String org1Token = token("organizer1", "ROLE_ORGANIZER");
+        Tournament tour1 = createTournamentEntity("Tour One", "organizer1");
+        Tournament tour2 = createTournamentEntity("Tour Two", "organizer1");
+        Sport sport2 = sportRepository.save(new Sport(null, "Futsal", "TEAM", "Sân trong nhà"));
+
+        String createdJson = mockMvc.perform(post("/api/v1/competitions")
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Giải Chính",
+                                  "tournamentId": %d,
+                                  "sportId": %d
+                                }
+                                """.formatted(tour1.getId(), sport.getId())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long compId = objectMapper.readTree(createdJson).get("id").asLong();
+
+        // With registrations existing -> changing tournamentId or sportId must fail with 409 Conflict
+        matchMode.set("HAS_REG");
+        mockMvc.perform(put("/api/v1/competitions/" + compId)
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Giải Chính",
+                                  "tournamentId": %d,
+                                  "sportId": %d
+                                }
+                                """.formatted(tour2.getId(), sport.getId())))
+                .andExpect(status().isConflict());
+        mockMvc.perform(put("/api/v1/competitions/" + compId)
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Giải Chính",
+                                  "tournamentId": %d,
+                                  "sportId": %d
+                                }
+                                """.formatted(tour1.getId(), sport2.getId())))
+                .andExpect(status().isConflict());
+
+        // With matches existing -> changing tournamentId fails (409), while editing name/status succeeds (200)
+        matchMode.set("HAS_MATCH");
+        mockMvc.perform(put("/api/v1/competitions/" + compId)
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Giải Chính",
+                                  "tournamentId": %d,
+                                  "sportId": %d
+                                }
+                                """.formatted(tour2.getId(), sport.getId())))
+                .andExpect(status().isConflict());
+        mockMvc.perform(put("/api/v1/competitions/" + compId)
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Giải Chính (Cập nhật mô tả)",
+                                  "tournamentId": %d,
+                                  "sportId": %d,
+                                  "status": "ONGOING"
+                                }
+                                """.formatted(tour1.getId(), sport.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name", is("Giải Chính (Cập nhật mô tả)")))
+                .andExpect(jsonPath("$.status", is("ONGOING")))
+                .andExpect(jsonPath("$.tournamentId", is(tour1.getId().intValue())))
+                .andExpect(jsonPath("$.sportId", is(sport.getId().intValue())));
+
+        // When match-service is unavailable -> attempting to change tournamentId/sportId fails closed (503)
+        matchMode.set("DOWN");
+        mockMvc.perform(put("/api/v1/competitions/" + compId)
+                        .header("Authorization", org1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Giải Chính",
+                                  "tournamentId": %d,
+                                  "sportId": %d
+                                }
+                                """.formatted(tour2.getId(), sport.getId())))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void actuatorHealth_isPublicWithoutDetails_whileUnexposedAndWriteEndpointsStayProtected() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("UP")))
+                .andExpect(jsonPath("$.components").doesNotExist());
+
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("application=\"tournament-service\"")));
+
+        mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/v1/tournaments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Unauthorized\"}"))
+                .andExpect(status().isUnauthorized());
+    }
 }

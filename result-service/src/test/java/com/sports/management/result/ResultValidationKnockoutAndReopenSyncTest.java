@@ -34,6 +34,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -64,6 +65,7 @@ class ResultValidationKnockoutAndReopenSyncTest {
     private static volatile int rankingPostStatus = 200;
     private static final AtomicInteger rankingPostCalls = new AtomicInteger();
     private static volatile List<Map<String, Object>> knockoutCompetitionMatches = List.of();
+    private static volatile String match10Status = "ONGOING";
 
     @Autowired
     private MockMvc mockMvc;
@@ -115,9 +117,9 @@ class ResultValidationKnockoutAndReopenSyncTest {
                     body.put("status", "ONGOING");
                     body.put("matchTime", LocalDateTime.now().minusMinutes(30).toString());
                 } else {
-                    // Normal Round-Robin ONGOING match
+                    // Normal Round-Robin ONGOING match (configurable status)
                     body.put("competitionId", 10);
-                    body.put("status", "ONGOING");
+                    body.put("status", match10Status);
                     body.put("matchTime", LocalDateTime.now().minusMinutes(30).toString());
                 }
                 writeJson(exchange, 200, body);
@@ -179,6 +181,7 @@ class ResultValidationKnockoutAndReopenSyncTest {
         rankingPostStatus = 200;
         rankingPostCalls.set(0);
         knockoutCompetitionMatches = List.of();
+        match10Status = "ONGOING";
     }
 
     private static void writeJson(HttpExchange exchange, int code, Object payload) throws IOException {
@@ -430,5 +433,45 @@ class ResultValidationKnockoutAndReopenSyncTest {
                         .content("{\"status\":\"PENDING_CONFIRMATION\"}"))
                 .andExpect(status().isOk());
         assertEquals("PENDING_CONFIRMATION", resultRepository.findById(resId).orElseThrow().getStatus());
+    }
+
+    @Test
+    void confirmResult_rejectsCancelledMatchAndPreservesPendingResultWithoutSyncFailure() throws Exception {
+        String refToken = issueToken("referee1", "ROLE_REFEREE");
+        String orgToken = issueToken("organizer1", "ROLE_ORGANIZER");
+
+        // Record draft result while match 10 is ONGOING
+        String draftJson = mockMvc.perform(post("/api/v1/results")
+                        .header("Authorization", refToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"matchId\":10,\"scoreParticipant1\":2,\"scoreParticipant2\":1}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long resId = JSON.readTree(draftJson).get("result").get("id").asLong();
+
+        // Match is subsequently CANCELLED before confirmation
+        match10Status = "CANCELLED";
+        rankingPostCalls.set(0);
+
+        mockMvc.perform(put("/api/v1/results/" + resId + "/confirm")
+                        .header("Authorization", orgToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("CANCELLED")));
+
+        Result unchanged = resultRepository.findById(resId).orElseThrow();
+        assertEquals("PENDING_CONFIRMATION", unchanged.getStatus());
+        assertEquals("NOT_REQUIRED", unchanged.getSyncStatus());
+        assertEquals(0, rankingPostCalls.get());
+    }
+
+    @Test
+    void actuatorPrometheusIsPublic_whileActuatorEnvRemainsSecured() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("application=\"result-service\"")));
+
+        mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().isUnauthorized());
     }
 }

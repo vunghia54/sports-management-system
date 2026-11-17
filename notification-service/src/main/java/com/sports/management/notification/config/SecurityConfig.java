@@ -33,6 +33,7 @@ public class SecurityConfig {
                         // Public / Swagger
                         .requestMatchers(HttpMethod.GET, "/api/v1/notifications", "/api/v1/notifications/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/instance-info").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error").permitAll()
 
                         // Protected

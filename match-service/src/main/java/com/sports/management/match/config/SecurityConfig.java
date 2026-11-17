@@ -36,6 +36,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/registrations/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/participants/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/instance-info").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
                         // Protected APIs

@@ -32,6 +32,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/results/sync-pending").hasAnyAuthority("ROLE_ORGANIZER", "ROLE_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/results", "/api/v1/results/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/instance-info").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
                         .requestMatchers(HttpMethod.POST, "/api/v1/results/*/sync").hasAnyAuthority("ROLE_ORGANIZER", "ROLE_ADMIN")

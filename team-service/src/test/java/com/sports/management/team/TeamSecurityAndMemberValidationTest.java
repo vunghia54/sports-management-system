@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -45,6 +46,7 @@ class TeamSecurityAndMemberValidationTest {
     private static final AtomicReference<String> athleteHealth = new AtomicReference<>("QUALIFIED");
     private static final AtomicReference<String> athleteOwner = new AtomicReference<>("manager1");
     private static final AtomicReference<String> matchUsageMode = new AtomicReference<>("UNUSED"); // UNUSED, IN_USE, DOWN
+    private static final AtomicReference<String> rosterChangeMode = new AtomicReference<>("OK"); // OK, CONFLICT, DOWN
 
     static {
         try {
@@ -75,6 +77,17 @@ class TeamSecurityAndMemberValidationTest {
                         body = "{\"hasActiveRegistrations\":true,\"hasParticipants\":true,\"inUse\":true}";
                     } else {
                         body = "{\"hasActiveRegistrations\":false,\"hasParticipants\":false,\"inUse\":false}";
+                    }
+                } else if (path.startsWith("/api/v1/registrations/teams/")) {
+                    String mode = rosterChangeMode.get();
+                    if ("CONFLICT".equals(mode)) {
+                        status = 409;
+                        body = "{\"status\":409,\"message\":\"Vi phạm điều lệ hoặc trùng VĐV trong cùng nội dung thi đấu\"}";
+                    } else if ("DOWN".equals(mode)) {
+                        status = 500;
+                        body = "{\"message\":\"Match service unavailable\"}";
+                    } else {
+                        body = "{\"valid\":true}";
                     }
                 }
                 byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
@@ -125,6 +138,7 @@ class TeamSecurityAndMemberValidationTest {
         athleteHealth.set("QUALIFIED");
         athleteOwner.set("manager1");
         matchUsageMode.set("UNUSED");
+        rosterChangeMode.set("OK");
         memberRepository.deleteAll();
         teamRepository.deleteAll();
     }
@@ -301,5 +315,67 @@ class TeamSecurityAndMemberValidationTest {
                         .header("Authorization", admin))
                 .andExpect(status().isNoContent());
         assertFalse(teamRepository.existsById(ownedByMgr1.getId()));
+    }
+
+    @Test
+    void rosterMutation_blocksConflictingAddOrRuleViolatingRemove_andFailsClosed503() throws Exception {
+        String mgr1 = token("manager1", "ROLE_TEAM_MANAGER");
+        String mgr2 = token("manager2", "ROLE_TEAM_MANAGER");
+        Team team = createTeamEntity("CLB Roster Guard", "manager1");
+
+        // Another TEAM_MANAGER cannot update or patch manager1's team -> 403
+        mockMvc.perform(put("/api/v1/teams/" + team.getId())
+                        .header("Authorization", mgr2)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Hijacked\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/v1/teams/" + team.getId())
+                        .header("Authorization", mgr2)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shortName\":\"HIJ\"}"))
+                .andExpect(status().isForbidden());
+
+        // Seed 1 valid member
+        String memJson = mockMvc.perform(post("/api/v1/teams/" + team.getId() + "/members")
+                        .header("Authorization", mgr1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"athleteId\":201,\"jerseyNumber\":9}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long memberId = objectMapper.readTree(memJson).get("id").asLong();
+
+        // When match-service reports 409 conflict (cross-team overlap or maxTeamMembers/minTeamMembers breach) -> both add and remove return 409
+        rosterChangeMode.set("CONFLICT");
+        mockMvc.perform(post("/api/v1/teams/" + team.getId() + "/members")
+                        .header("Authorization", mgr1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"athleteId\":202,\"jerseyNumber\":10}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(delete("/api/v1/teams/" + team.getId() + "/members/" + memberId)
+                        .header("Authorization", mgr1))
+                .andExpect(status().isConflict());
+        assertEquals(1, memberRepository.findByTeamId(team.getId()).size());
+
+        // When match-service is unavailable -> fail closed with 503
+        rosterChangeMode.set("DOWN");
+        mockMvc.perform(post("/api/v1/teams/" + team.getId() + "/members")
+                        .header("Authorization", mgr1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"athleteId\":202,\"jerseyNumber\":10}"))
+                .andExpect(status().isServiceUnavailable());
+        mockMvc.perform(delete("/api/v1/teams/" + team.getId() + "/members/" + memberId)
+                        .header("Authorization", mgr1))
+                .andExpect(status().isServiceUnavailable());
+        assertEquals(1, memberRepository.findByTeamId(team.getId()).size());
+    }
+
+    @Test
+    void actuatorPrometheusIsPublic_whileActuatorEnvRemainsSecured() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("application=\"team-service\"")));
+
+        mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().isUnauthorized());
     }
 }

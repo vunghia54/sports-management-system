@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.*;
@@ -299,5 +300,15 @@ class AthletePrivacyValidationAndDeleteTest {
                         .header("Authorization", adminToken))
                 .andExpect(status().isNoContent());
         assertFalse(athleteRepository.existsById(a.getId()));
+    }
+
+    @Test
+    void actuatorPrometheusIsPublic_whileActuatorEnvRemainsSecured() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("application=\"athlete-service\"")));
+
+        mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().isUnauthorized());
     }
 }
