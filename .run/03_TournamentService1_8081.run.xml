@@ -8,8 +8,6 @@
       <env name="SPRING_DATASOURCE_URL" value="jdbc:postgresql://localhost:5432/tournament_db" />
       <env name="SPRING_DATASOURCE_DRIVER" value="org.postgresql.Driver" />
       <env name="SPRING_DATASOURCE_USERNAME" value="sports" />
-      <env name="SPRING_DATASOURCE_PASSWORD" value="sports123" />
-      <env name="JWT_SECRET" value="LocalDevOnlyJwtSecretKeyPleaseOverrideInProd2026!" />
     </envs>
     <method v="2">
       <option name="Make" enabled="true" />

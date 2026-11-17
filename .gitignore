@@ -41,5 +41,9 @@ __pycache__/
 
 ### Local Environment & Agent Tooling ###
 .env
+.env.*
+!.env.example
 .agents/
 skills-lock.json
+tmp/
+backups/

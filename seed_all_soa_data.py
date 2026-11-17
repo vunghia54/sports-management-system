@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 KỊCH BẢN NẠP DỮ LIỆU TỰ ĐỘNG CHO HỆ THỐNG VN SPORTS SOA (ĐỘC LẬP 100%)
-Đọc trực tiếp dữ liệu chuẩn từ api-gateway/src/main/resources/static/js/seed-data.json:
+Đọc trực tiếp dữ liệu chuẩn từ data/seed-data.json:
 - 5 môn thể thao & 5 giải đấu tiêu biểu (5 nội dung thi đấu)
 - 22 Đội tuyển chuẩn xác:
   + 6 CLB Bóng đá V.League 1 (11 cầu thủ ĐTQG Việt Nam mỗi đội)
@@ -25,7 +25,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 GATEWAY_URL = 'http://localhost:8080'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SEED_FILE = os.path.join(BASE_DIR, 'api-gateway', 'src', 'main', 'resources', 'static', 'js', 'seed-data.json')
+SEED_FILE = os.path.join(BASE_DIR, 'data', 'seed-data.json')
 
 print("=========================================================================")
 print("  VN SPORTS SOA - TỰ ĐỘNG NẠP DỮ LIỆU (5 MÔN / 22 ĐỘI / 20 TRẬN)       ")
