@@ -601,6 +601,8 @@ body {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-xs);
   padding: 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
   transition: border-color var(--transition-fast), background-color 200ms ease;
 }
 
@@ -616,6 +618,8 @@ body {
   font-size: 1.02rem;
   font-weight: 700;
   color: var(--text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .kpi-grid {
@@ -788,6 +792,7 @@ body {
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
   vertical-align: middle;
+  overflow-wrap: break-word;
 }
 
 .data-table tbody tr {
@@ -1377,7 +1382,7 @@ body {
     display: inline-flex;
   }
   .hero-banner, .grid-2, .grid-3 {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1408,7 +1413,7 @@ body {
     right: 0;
   }
   .form-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .theme-btn span {
     display: none;

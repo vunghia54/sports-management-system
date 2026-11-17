@@ -611,7 +611,7 @@ function getFocusableElements(container) {
   if (!container) return [];
   return Array.from(container.querySelectorAll(
     'a[href], button:not(:disabled), input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
-  )).filter(el => el.offsetParent !== null || el === document.activeElement);
+  )).filter(el => (el.getClientRects().length > 0 && window.getComputedStyle(el).visibility !== 'hidden') || el === document.activeElement);
 }
 
 function openModal(title, htmlContent) {
@@ -628,7 +628,7 @@ function openModal(title, htmlContent) {
   document.body.style.overflow = 'hidden';
 
   if (window.gsap && !isReducedMotion()) {
-    gsap.fromTo(dialog, { scale: 0.97, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.18, ease: 'power2.out' });
+    gsap.fromTo(dialog, { scale: 0.97, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.18, ease: 'power2.out' });
   }
 
   requestAnimationFrame(() => {
@@ -2337,10 +2337,10 @@ function renderDashboardPage() {
   const athTotal = AppState.stats.athletes?.total ?? d.athletes.length;
   const matchTotal = AppState.stats.matches?.totalMatches ?? d.matches.length;
   const scheduledMatches = AppState.stats.matches?.scheduledMatches ?? d.matches.filter(m => m.status === 'SCHEDULED').length;
-  const todayCount = AppState.stats.matches?.todayMatches ?? d.matches.length;
-
   const todayIso = getTodayLocalIsoDate();
-  const todayMatches = d.matches.filter(m => !m.matchTime || String(m.matchTime).startsWith(todayIso));
+  // Chi tinh tran co lich trong ngay hom nay (gio dia phuong); tran chua co gio thi khong phai "hom nay"
+  const todayMatches = d.matches.filter(m => m.matchTime && String(m.matchTime).startsWith(todayIso));
+  const todayCount = AppState.stats.matches?.todayMatches ?? todayMatches.length;
   const pendingRegs = d.registrations.filter(r => String(r.status || '').toUpperCase() === 'PENDING');
   const pendingRegsTotal = AppState.stats.registrations?.pendingRegistrations ?? pendingRegs.length;
   const pendingResults = d.results.filter(r => String(r.status || '').toUpperCase() === 'PENDING_CONFIRMATION');
@@ -6856,7 +6856,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (e.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
             e.preventDefault();
             last.focus();
-          } else if (!e.shiftKey && document.activeElement === last) {
+          } else if (!e.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
             e.preventDefault();
             first.focus();
           }
