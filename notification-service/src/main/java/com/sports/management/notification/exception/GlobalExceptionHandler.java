@@ -1,5 +1,6 @@
 package com.sports.management.notification.exception;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -18,36 +19,34 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    private ErrorResponse buildError(int status, String message, Map<String, String> errors, HttpServletRequest request) {
+        String path = request != null ? request.getRequestURI() : null;
+        return new ErrorResponse(status, null, message, path, errors);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
+    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
         ex.getBindingResult().getFieldErrors().forEach(err ->
                 fieldErrors.put(err.getField(), err.getDefaultMessage()));
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
-                "status", 400,
-                "message", "Validation failed",
-                "errors", fieldErrors
-        ));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(buildError(400, "Validation failed", fieldErrors, request));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<Map<String, Object>> handleConflict(DataIntegrityViolationException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
-                "status", 409,
-                "message", "Dữ liệu thông báo bị trùng lặp hoặc vi phạm ràng buộc."
-        ));
+    public ResponseEntity<ErrorResponse> handleConflict(DataIntegrityViolationException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(buildError(409, "Dữ liệu thông báo bị trùng lặp hoặc vi phạm ràng buộc.", null, request));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex) {
+    public ResponseEntity<ErrorResponse> handleResponseStatus(ResponseStatusException ex, HttpServletRequest request) {
         int code = ex.getStatusCode().value();
         String msg = ex.getReason() != null ? ex.getReason() : "HTTP error";
         if (code >= 500) {
             log.warn("HTTP {} returned: {}", code, msg);
         }
-        return ResponseEntity.status(ex.getStatusCode()).body(Map.of(
-                "status", code,
-                "message", msg
-        ));
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(buildError(code, msg, null, request));
     }
 }

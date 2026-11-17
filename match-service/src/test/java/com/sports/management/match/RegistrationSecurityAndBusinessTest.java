@@ -334,11 +334,19 @@ class RegistrationSecurityAndBusinessTest {
     @Test
     void globalExceptionHandler_mapsDataIntegrityTo409AndConstraintViolationTo400() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
-        var integrityResp = handler.handleDataIntegrityViolation(new DataIntegrityViolationException("duplicate key"));
+        var mockReq = new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/v1/registrations");
+        var integrityResp = handler.handleDataIntegrityViolation(new DataIntegrityViolationException("duplicate key"), mockReq);
         assertEquals(409, integrityResp.getStatusCode().value());
+        assertNotNull(integrityResp.getBody());
+        assertEquals("Conflict", integrityResp.getBody().getError());
+        assertEquals("/api/v1/registrations", integrityResp.getBody().getPath());
+        assertNotNull(integrityResp.getBody().getTimestamp());
 
-        var constraintResp = handler.handleConstraintViolation(new ConstraintViolationException("invalid field", Set.of()));
+        var constraintResp = handler.handleConstraintViolation(new ConstraintViolationException("invalid field", Set.of()), mockReq);
         assertEquals(400, constraintResp.getStatusCode().value());
+        assertNotNull(constraintResp.getBody());
+        assertEquals("Bad Request", constraintResp.getBody().getError());
+        assertEquals("/api/v1/registrations", constraintResp.getBody().getPath());
     }
 
     @Test

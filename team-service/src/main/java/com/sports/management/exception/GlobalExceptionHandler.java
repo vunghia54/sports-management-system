@@ -1,6 +1,7 @@
 
 package com.sports.management.exception;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -19,16 +20,22 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    private ErrorResponse buildError(int status, String message, Map<String, String> errors, HttpServletRequest request) {
+        String path = request != null ? request.getRequestURI() : null;
+        return new ErrorResponse(status, null, message, path, errors);
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<ErrorResponse> handleConflict(DataIntegrityViolationException ex) {
-        ErrorResponse response = new ErrorResponse(409, "Tên đội tuyển đã tồn tại hoặc đang có dữ liệu ràng buộc.", null);
+    public ResponseEntity<ErrorResponse> handleConflict(DataIntegrityViolationException ex, HttpServletRequest request) {
+        ErrorResponse response = buildError(409, "Tên đội tuyển đã tồn tại hoặc đang có dữ liệu ràng buộc.", null, request);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
     // Xu ly loi Validation - 400
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(
-            MethodArgumentNotValidException ex) {
+            MethodArgumentNotValidException ex,
+            HttpServletRequest request) {
 
         Map<String, String> errors = new HashMap<>();
 
@@ -39,10 +46,11 @@ public class GlobalExceptionHandler {
                 )
         );
 
-        ErrorResponse response = new ErrorResponse(
+        ErrorResponse response = buildError(
                 400,
                 "Validation failed",
-                errors
+                errors,
+                request
         );
 
         return ResponseEntity
@@ -53,7 +61,8 @@ public class GlobalExceptionHandler {
     // Xu ly loi HTTP duoc chu dong nem ra
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ErrorResponse> handleHttpException(
-            ResponseStatusException ex) {
+            ResponseStatusException ex,
+            HttpServletRequest request) {
 
         int status = ex.getStatusCode().value();
 
@@ -66,10 +75,11 @@ public class GlobalExceptionHandler {
             log.warn("HTTP {} returned: {}", status, message);
         }
 
-        ErrorResponse response = new ErrorResponse(
+        ErrorResponse response = buildError(
                 status,
                 message,
-                null
+                null,
+                request
         );
 
         return ResponseEntity
@@ -79,12 +89,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleResourceNotFound(
-            ResourceNotFoundException ex) {
+            ResourceNotFoundException ex,
+            HttpServletRequest request) {
 
-        ErrorResponse response = new ErrorResponse(
+        ErrorResponse response = buildError(
                 404,
                 ex.getMessage(),
-                null
+                null,
+                request
         );
 
         return ResponseEntity
