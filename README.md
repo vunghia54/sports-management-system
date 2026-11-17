@@ -180,4 +180,4 @@ powershell -ExecutionPolicy Bypass -File .\test_th8_deployment.ps1 -ComposeProje
 | TH7 | Eureka, cân bằng tải, failover | [`docs/service-registry/`](docs/service-registry/), [`test_th7_service_discovery.ps1`](test_th7_service_discovery.ps1) | [`service-discovery-th7-newman.json`](docs/test/test-results/service-discovery-th7-newman.json), `th7-service-discovery-run.txt` |
 | TH8 | Docker, Compose, giám sát | Mục 3–7 ở trên | [`docs/test/deployment-test-cases.md`](docs/test/deployment-test-cases.md), [`test_th8_deployment.ps1`](test_th8_deployment.ps1) |
 
-Tổng hợp đối chiếu: [`BAO_CAO_THUC_HANH_1_DEN_7.md`](BAO_CAO_THUC_HANH_1_DEN_7.md), [`docs/05-DOI-CHIEU-TH1-TH8-2026-11-17.md`](docs/05-DOI-CHIEU-TH1-TH8-2026-11-17.md), lịch sử sửa lỗi [`KET_QUA_SUA_LOI.md`](KET_QUA_SUA_LOI.md).
+Tổng hợp đối chiếu: [`BAO_CAO_THUC_HANH_1_DEN_8.md`](BAO_CAO_THUC_HANH_1_DEN_8.md), [`docs/05-DOI-CHIEU-TH1-TH8-2026-11-17.md`](docs/05-DOI-CHIEU-TH1-TH8-2026-11-17.md), lịch sử sửa lỗi [`KET_QUA_SUA_LOI.md`](KET_QUA_SUA_LOI.md).

@@ -309,7 +309,7 @@ Tiếp nối vòng 1 (**A1–B6**), vòng 2 xử lý các hạng mục **C1–C6
 | **C3** | `444d54f` | `fix(C3): restrict FINISHED transition to ROLE_INTERNAL_RESULT_SYNC and include match score in MatchFinishedEvent notifications` | Hoàn tất & Đã kiểm thử |
 | **C4** | `6aec4d7` | `fix(C4): enforce athlete ownership check when team manager adds team members` | Hoàn tất & Đã kiểm thử |
 | **C5** | `4fd178e` | `fix(C5): remove test shortcuts from services, restrict sport PUT/DELETE to ADMIN, lower jwt.expiration to 3600s, handle 401 redirect, and add .env.example` | Hoàn tất & Đã kiểm thử |
-| **C6** | `05306d2` | `docs(C6): rewrite README for capstone project and synchronize BAO_CAO_THUC_HANH_1_DEN_7` | Hoàn tất & Đã kiểm thử |
+| **C6** | `05306d2` | `docs(C6): rewrite README for capstone project and synchronize BAO_CAO_THUC_HANH_1_DEN_8` | Hoàn tất & Đã kiểm thử |
 | **D1** | `c52daaa` | `fix(D1): support KNOCKOUT generate-next-round with third-place/byes and GROUP_STAGE per-group standings` | Hoàn tất & Đã kiểm thử |
 
 ### Chi Tiết Thay Đổi & Tệp Đã Sửa Theo Từng Mục (Vòng 2)
@@ -393,9 +393,9 @@ Tiếp nối vòng 1 (**A1–B6**), vòng 2 xử lý các hạng mục **C1–C6
   - `tournament-service/src/test/java/com/sports/management/tournament/CompetitionAndTournamentSecurityTest.java`
 
 #### C6 — Cập nhật tài liệu đồ án (`05306d2`)
-- **Nội dung chính:** Viết lại `README.md` chuẩn đồ án (luồng nghiệp vụ, 5 vai trò, sơ đồ & bảng 10 service, RabbitMQ, biến môi trường bắt buộc, 6 tài khoản demo đúng `DataSeeder.java`, hướng dẫn IntelliJ `.run` / Docker / Maven / TH7) và đồng bộ `BAO_CAO_THUC_HANH_1_DEN_7.md`.
+- **Nội dung chính:** Viết lại `README.md` chuẩn đồ án (luồng nghiệp vụ, 5 vai trò, sơ đồ & bảng 10 service, RabbitMQ, biến môi trường bắt buộc, 6 tài khoản demo đúng `DataSeeder.java`, hướng dẫn IntelliJ `.run` / Docker / Maven / TH7) và đồng bộ `BAO_CAO_THUC_HANH_1_DEN_8.md`.
 - **Tệp đã sửa (2):**
-  - `BAO_CAO_THUC_HANH_1_DEN_7.md`
+  - `BAO_CAO_THUC_HANH_1_DEN_8.md`
   - `README.md`
 
 #### D1 — Tạo vòng Knockout tiếp theo & BXH riêng theo từng bảng `GROUP_STAGE` (`c52daaa`)
@@ -506,7 +506,7 @@ Sau khi kiểm tra, biên dịch sạch và chạy thử toàn bộ thay đổi 
    - Viết lại [`integration/postman/integration-tests.json`](integration/postman/integration-tests.json) (bỏ organizer `PUT /matches/{id}` `FINISHED`, thay bằng luồng `ONGOING -> POST /results -> confirm -> GET FINISHED -> wait -> GET /notifications` assert `type=MATCH_FINISHED` & `referenceId == matchId`) -> Newman: **29/29 request, 29/29 assertion pass** (avg `34.2 ms`), [`docs/test/test-results/integration-th6-newman.json`](docs/test/test-results/integration-th6-newman.json) & cập nhật [`integration/test-results.md`](integration/test-results.md).
    - Sửa [`tests/service-discovery/postman-collection.json`](tests/service-discovery/postman-collection.json) (`organizer123`, dữ liệu & `matchTime` động) -> Newman: **27/27 request, 32/32 assertion pass** (avg `26.2 ms`), [`docs/test/test-results/service-discovery-th7-newman.json`](docs/test/test-results/service-discovery-th7-newman.json).
    - Sửa [`test_th7_service_discovery.ps1`](test_th7_service_discovery.ps1) (ngày động, không kill tiến trình ngoài script, assert cân bằng tải cả `8081` và `8091`, assert `503`, bỏ DELETE thủ công Eureka, kiểm chứng notification qua RabbitMQ theo `matchId`) -> chạy với `-KeepRunning` (exit `0`, **9/9 ứng dụng UP**, `Match ID=28`, `Notification ID=20` `referenceId=28`, **`Instance 8081 = 10 lan | Instance 8091 = 10 lan`**), lưu [`docs/test/test-results/th7-service-discovery-run.txt`](docs/test/test-results/th7-service-discovery-run.txt).
-   - Chạy lại [`test_th8_deployment.ps1`](test_th8_deployment.ps1) trên cụm Compose đang chạy -> **10/10 PASS (`DEP01`–`DEP06`, `SPORT01`–`SPORT04`)** trong [`docs/test/test-results/summary.json`](docs/test/test-results/summary.json) (eviction tự nhiên `10/10 -> 8091`, `503`, bền vững DB & RabbitMQ, cô lập `8/8` DB user, `X-Request-Id=sport04-trace-90810`), và ánh xạ `TC01–TC06` trong [`BAO_CAO_THUC_HANH_1_DEN_7.md`](BAO_CAO_THUC_HANH_1_DEN_7.md).
+   - Chạy lại [`test_th8_deployment.ps1`](test_th8_deployment.ps1) trên cụm Compose đang chạy -> **10/10 PASS (`DEP01`–`DEP06`, `SPORT01`–`SPORT04`)** trong [`docs/test/test-results/summary.json`](docs/test/test-results/summary.json) (eviction tự nhiên `10/10 -> 8091`, `503`, bền vững DB & RabbitMQ, cô lập `8/8` DB user, `X-Request-Id=sport04-trace-90810`), và ánh xạ `TC01–TC06` trong [`BAO_CAO_THUC_HANH_1_DEN_8.md`](BAO_CAO_THUC_HANH_1_DEN_8.md).
 
 4. **Front-end (`api-gateway/src/main/resources/static`) — Sửa lỗi & Kiểm thử Chrome thật (`http://localhost:8080`):**
    - Sửa [`app.js`](api-gateway/src/main/resources/static/js/app.js) và [`styles.css`](api-gateway/src/main/resources/static/css/styles.css): hiển thị toast lỗi `5xx` khi tải danh sách phân trang (`fetchPagedResource`), thống nhất bộ lọc/biểu mẫu về `FINISHED` (vẫn hiển thị nhãn cho dữ liệu cũ `COMPLETED`), khóa nút xóa đội/VĐV đúng quyền `ADMIN` và phạm vi nút nhập/sửa kết quả theo trọng tài được phân công/BTC, bổ sung điều hướng hash URL (hiển thị trang `403` khi mở trực tiếp trang không đủ quyền), sửa lỗi runtime `ReferenceError: getStatusLabel is not defined` khi bấm `▶ Bắt đầu trận` bằng helper dùng chung `STATUS_LABEL_TONES`/`getStatusLabel`, rà soát `escapeHtml`/`.textContent` và thêm CSS `.btn-warning`.

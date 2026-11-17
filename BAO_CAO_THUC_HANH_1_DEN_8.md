@@ -1,8 +1,8 @@
-# BÁO CÁO TỔNG HỢP & KIỂM TRA ĐỐI CHIẾU THỰC HÀNH 1 – THỰC HÀNH 7
+# BÁO CÁO TỔNG HỢP & KIỂM TRA ĐỐI CHIẾU THỰC HÀNH 1 – THỰC HÀNH 8
 ## Đề tài: Xây dựng và Phát triển Hệ thống Quản lý Thi đấu Thể thao theo Kiến trúc Hướng Dịch vụ (SOA / Microservices)
 
-> **Ghi chú cập nhật (Ngày lập báo cáo đối chiếu học phần ban đầu: 09/11/2026 — Đã rà soát đồng bộ ngày 16/11/2026):**  
-> Các kết quả `ĐẠT` dưới đây phản ánh lần đối chiếu học phần TH1–TH7 tại thời điểm ban đầu. Mã nguồn sau đó đã được rà soát, chuẩn hóa 5 vai trò RBAC, siết chặt bảo mật và sửa các lỗi logic qua hai vòng (**A1–B6** và **C1–C5+**); kết quả kiểm thử tự động và E2E mới nhất xem chi tiết tại [`KET_QUA_SUA_LOI.md`](KET_QUA_SUA_LOI.md).
+> **Ghi chú cập nhật (Ngày lập báo cáo đối chiếu học phần ban đầu: 09/11/2026 — Đã rà soát đồng bộ TH1–TH8 ngày 17–18/11/2026):**  
+> Các kết quả `ĐẠT` dưới đây tổng hợp toàn bộ đối chiếu học phần **TH1–TH8**. Mã nguồn và bộ kiểm thử đã được chuẩn hóa 5 vai trò RBAC, siết chặt bảo mật, bổ sung đa framework (TH2), chuẩn hóa `ErrorResponse`, đóng gói Docker Compose (TH8) và nghiệm thu tự động qua các vòng sửa lỗi; lịch sử và kết quả mới nhất xem chi tiết tại [`KET_QUA_SUA_LOI.md`](KET_QUA_SUA_LOI.md).
 
 ---
 
