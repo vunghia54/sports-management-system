@@ -25,7 +25,7 @@ average response:   34.2 ms [min: 7ms, max: 137ms]
 | Bước | Nhóm kiểm thử | Endpoint & Vai trò | HTTP thực tế | Bằng chứng ghi nhận | Trạng thái |
 |---|---|---|---:|---|:---:|
 | **1.1–1.3** | Đăng nhập JWT | `POST /api/v1/auth/login` (`organizer1`, `manager1`, `referee1`) | `200 OK` | Cấp 3 Bearer token theo đúng RBAC (`expiresIn: 3600`) | **ĐẠT** |
-| **2.1–2.16** | Tạo dữ liệu động (không hardcode ID/ngày) | `sports`, `tournaments`, `competitions`, `rule`, `format`, `athletes`, `teams`, `members`, `registrations`, `approve`, `participants` | `200`/`201` | Tournament ID `12` (`TH6 Integration Cup 8596273`), Competition ID `12`, Team Alpha & Beta đã duyệt tham gia | **ĐẠT** |
+| **2.1–2.17** | Tạo dữ liệu động (không hardcode ID/ngày, cửa sổ 72h qua 00:00) | `sports`, `tournaments` (`POST` + `PATCH ONGOING`), `competitions`, `rule`, `format`, `athletes`, `teams`, `members`, `registrations`, `approve`, `participants` | `200`/`201` | Tournament ID `12` (`TH6 Integration Cup 8596273`), Competition ID `12`, Team Alpha & Beta đã duyệt tham gia | **ĐẠT** |
 | **3.1** | Tích hợp đồng bộ S2S thành công | `POST /api/v1/matches` (`organizer1`, `tournamentId=12`, `competitionId=12`) | `201 Created` | `match-service` xác thực tournament & competition qua `TournamentClient`; tạo Match ID `27` (`SCHEDULED`), gán `referee1` | **ĐẠT** |
 | **3.2** | Tích hợp xử lý lỗi 400 (Invalid Tournament ID) | `POST /api/v1/matches` (`tournamentId=999999`) | `400 Bad Request` | `TournamentClient` phát hiện giải đấu không tồn tại, trả về lỗi 400 rõ ràng | **ĐẠT** |
 | **3.3** | Bảo mật Token thiếu (AuthN) | `POST /api/v1/matches` (không có `Authorization`) | `401 Unauthorized` | `JwtAuthenticationFilter` chặn với status `401` | **ĐẠT** |
@@ -39,4 +39,4 @@ average response:   34.2 ms [min: 7ms, max: 137ms]
 ## 3. Kết luận
 
 - Toàn bộ chuỗi tích hợp **S2S đồng bộ** (Gateway -> Match -> Tournament -> Result -> Ranking) và **bất đồng bộ Event-Driven** (Match -> RabbitMQ `sports.exchange` / `match.finished` -> `notification.queue` -> Notification Service -> PostgreSQL) hoạt động ổn định, không phụ thuộc dữ liệu hardcode.
-- **Tỷ lệ đạt:** `29/29` assertions (**100% PASSED**).
+- **Tỷ lệ đạt:** `30/30` assertions (**100% PASSED**).

@@ -1,12 +1,12 @@
 ﻿{
-    "competitionId":  26,
-    "matchId":  39,
+    "competitionId":  40,
+    "matchId":  60,
     "matchFinalStatus":  "FINISHED",
-    "resultId":  27,
+    "resultId":  35,
     "resultStatus":  "CONFIRMED",
     "rankingItemsCount":  2,
-    "topRankedTeam":  "CLB Thang Long 81881",
+    "topRankedTeam":  "CLB Thang Long 70693",
     "topRankedPoints":  3,
-    "notificationId":  27,
-    "notificationTitle":  "Trận đấu đã kết thúc: CLB Thang Long 81881 vs CLB Sai Gon 81881 (3-1)"
+    "notificationId":  35,
+    "notificationTitle":  "Trận đấu đã kết thúc: CLB Thang Long 70693 vs CLB Sai Gon 70693 (3-1)"
 }

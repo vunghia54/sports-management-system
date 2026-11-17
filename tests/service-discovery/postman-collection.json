@@ -189,8 +189,27 @@
 									"pm.collectionVariables.set('regStart', fmt(addDays(now, -3)));",
 									"pm.collectionVariables.set('regEnd', fmt(now));",
 									"pm.collectionVariables.set('tourStart', fmt(now));",
-									"pm.collectionVariables.set('tourEnd', fmt(addDays(now, 20)));",
-									"pm.collectionVariables.set('matchTimeDynamic', fmt(addDays(now, 2)) + 'T19:00:00');",
+									"pm.collectionVariables.set('tourEnd', fmt(addDays(now, 90)));",
+									"pm.collectionVariables.set('matchTimeDynamic', fmt(addDays(now, 3 + (Number(tag) % 75))) + 'T19:00:00');",
+									"pm.sendRequest(pm.collectionVariables.replaceIn('{{matchServiceUrl}}/api/v1/matches'), function (err, res) {",
+									"    if (err || !res) return;",
+									"    try {",
+									"        const body = res.json();",
+									"        const list = Array.isArray(body) ? body : (body.content || []);",
+									"        const toMs = (v) => Array.isArray(v) ? new Date(v[0], v[1]-1, v[2], v[3]||0, v[4]||0).getTime() : new Date(v).getTime();",
+									"        const busyTimes = list.filter((m) => m.matchTime && (!m.refereeUsername || m.refereeUsername === 'referee1')).map((m) => toMs(m.matchTime));",
+									"        for (let d = 3; d <= 85; d++) {",
+									"            for (const hh of ['09', '14', '19']) {",
+									"                const candStr = `${fmt(addDays(now, d))}T${hh}:00:00`;",
+									"                const candMs = new Date(candStr).getTime();",
+									"                if (busyTimes.every((b) => Math.abs(candMs - b) >= 3 * 3600 * 1000)) {",
+									"                    pm.collectionVariables.set('matchTimeDynamic', candStr);",
+									"                    return;",
+									"                }",
+									"            }",
+									"        }",
+									"    } catch (_) {}",
+									"});",
 									"pm.collectionVariables.set('dobDynamic', fmt(addDays(now, -21 * 365)));",
 									"pm.collectionVariables.set('cccd1', '0797' + tag + '1');",
 									"pm.collectionVariables.set('cccd2', '0797' + tag + '2');"
@@ -492,7 +511,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": {{competitionId}},\n  \"round\": \"Chung kết\",\n  \"participant1Id\": {{participant1Id}},\n  \"participant2Id\": {{participant2Id}},\n  \"matchTime\": \"{{matchTimeDynamic}}\",\n  \"location\": \"SVĐ Mỹ Đình\",\n  \"refereeUsername\": \"referee1\",\n  \"status\": \"SCHEDULED\"\n}"
+							"raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": {{competitionId}},\n  \"round\": \"Chung kết\",\n  \"participant1Id\": {{participant1Id}},\n  \"participant2Id\": {{participant2Id}},\n  \"matchTime\": \"{{matchTimeDynamic}}\",\n  \"location\": \"SVĐ Mỹ Đình - {{runTag}}\",\n  \"refereeUsername\": \"referee1\",\n  \"status\": \"SCHEDULED\"\n}"
 						},
 						"url": { "raw": "{{matchServiceUrl}}/api/v1/matches", "host": ["{{matchServiceUrl}}"], "path": ["api", "v1", "matches"] }
 					}

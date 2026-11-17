@@ -1091,13 +1091,14 @@ async function loadMatchDetail(matchId) {
     AppState.errors.matches = null;
 
     try {
-      const resResp = await apiCall(`/api/v1/results/match/${mid}`);
+      const resResp = await apiCall(`/api/v1/results/by-matches?matchIds=${mid}`);
       if (detail._seq !== reqSeq) return;
-      const fetched = resResp.data?.result || resResp.data || null;
+      const fetched = Array.isArray(resResp.data) ? (resResp.data[0] || null) : (resResp.data?.result || resResp.data || null);
       if (fetched && Number(fetched.matchId) === mid) {
         detail.result = fetched;
         AppState.caches.resultsByMatchId[String(mid)] = fetched;
       } else {
+        delete AppState.caches.resultsByMatchId[String(mid)];
         detail.result = null;
       }
       detail.resultError = null;
@@ -6230,9 +6231,9 @@ async function openRecordResultModal(preselectedMatchId = null) {
   }
   if (!existingRes) {
     try {
-      const rResp = await apiCall(`/api/v1/results/match/${selectedMid}`);
+      const rResp = await apiCall(`/api/v1/results/by-matches?matchIds=${selectedMid}`);
       if (AppState.modalSeq.resultForm !== modalSeq) return;
-      const fetched = rResp?.data?.result || rResp?.data || null;
+      const fetched = Array.isArray(rResp?.data) ? (rResp.data[0] || null) : (rResp?.data?.result || rResp?.data || null);
       existingRes = (fetched && Number(fetched.matchId) === selectedMid) ? fetched : null;
       if (existingRes) AppState.caches.resultsByMatchId[String(selectedMid)] = existingRes;
     } catch { /* ignore 404 */ }
@@ -6289,9 +6290,9 @@ async function prefillExistingResultScores(matchId) {
   }
   if (!existing) {
     try {
-      const rResp = await apiCall(`/api/v1/results/match/${mid}`);
+      const rResp = await apiCall(`/api/v1/results/by-matches?matchIds=${mid}`);
       if (AppState.modalSeq.resultForm !== seq) return;
-      const fetched = rResp?.data?.result || rResp?.data || null;
+      const fetched = Array.isArray(rResp?.data) ? (rResp.data[0] || null) : (rResp?.data?.result || rResp?.data || null);
       if (fetched && Number(fetched.matchId) === mid) {
         existing = fetched;
         AppState.caches.resultsByMatchId[String(mid)] = existing;

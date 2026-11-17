@@ -554,6 +554,14 @@ Sau khi kiểm tra, biên dịch sạch và chạy thử toàn bộ thay đổi 
      2. *Tên dài ~80 ký tự không dấu cách làm tràn thẻ `.card` và vỡ khung `375px` (`styles.css`):* Với chuỗi ~80 ký tự liền không khoảng trắng trên trang Đội tuyển (`#/teams`), ở `1366px` chữ tràn khỏi khung `.card` (`overflowingCards = 1`) và ở `375px` quy tắc `@media` `grid-template-columns: 1fr` (`min-width: auto`) đẩy chiều ngang trang lên `846px` (`pageOverflowPx = 471px`). **Cách sửa:** Đổi lưới responsive sang `minmax(0, 1fr)` và thêm `min-width: 0; overflow-wrap: anywhere` cho `.card`, `.card-title` cùng `overflow-wrap: break-word` cho `.data-table td` -> kiểm tra lại ở cả `1366px` và `375px` đạt `pageOverflowPx = 0`, `overflowingCards = 0` cho cả tên tiếng Việt có khoảng trắng lẫn chuỗi liền ~80 ký tự.
    - **Trạng thái rỗng / đang tải / lỗi & Phân trang (`2.5`):** Cả 8 vùng danh sách phân trang hiển thị thông báo rỗng rõ ràng, không kẹt `"Đang tải"`; giả lập lỗi `503` trên `/api/v1/athletes/paged` hiển thị đúng `.state-banner.error` kèm mã yêu cầu và khôi phục dữ liệu khi bấm `"↻ Thử lại"`. Phân trang tự lùi từ trang `2/2` về trang `1/1` khi xóa phần tử cuối cùng trên trang cuối và tự quay về trang `1` (`page = 0`) khi đổi bộ lọc.
 
+## 10. Vòng 7 – kiểm tra tổng thể (18/11/2026)
+
+- **Build & Unit/Integration Test:** `.\mvnw.cmd clean test` đạt **121/121 pass** (`0` fail); `express-tournament-consumer` `npm test` đạt **6/6 pass**; `node --check app.js` hợp lệ; `docker compose --profile th2-demo up -d --build` đạt **14/14 container `healthy`**.
+- **Newman (4 bộ, `0` fail, `0` lộ secret) & TH8:** TH1/TH3 (`21` req / `21` assert), TH5 (`47` req / `48` assert), TH6 (`30` req / `30` assert — sửa cửa sổ `pastMatchTime` 72h qua mốc `00:00`), TH7 (`28` req / `32` assert — dò slot `matchTimeDynamic` & địa điểm động tránh `409` khi chạy lặp lại); `test_th8_deployment.ps1` đạt **10/10 PASS** (`DEP01`–`DEP06`, `SPORT01`–`SPORT04`).
+- **Chrome thật (5 vai trò, 14 trang, `1366px` & `375px`):** Sửa truy vấn kết quả đơn lẻ trong [`app.js`](api-gateway/src/main/resources/static/js/app.js) sang `/api/v1/results/by-matches?matchIds=...` (loại bỏ log `404` trên Console khi trận chưa có tỷ số) và thêm `max-width: 100%; min-width: 0` cho `.select`/`.page-actions` trong [`styles.css`](api-gateway/src/main/resources/static/css/styles.css) -> đạt **`0` lỗi Console, `0` vi phạm CSP, `overflowPx = 0`** ở cả `1366px` và `375px`, luồng E2E (`tournamentId=43`, `matchId=62`) cập nhật đầy đủ `FINISHED` + BXH + Thông báo.
+- **Rà soát Repo & Bảo mật:** `0` liên kết Markdown tương đối bị hỏng trên toàn bộ 30 tệp `.md`; `.env` không bị track; `JWT_SECRET` và `DB_PASSWORD` có `0` kết quả trong `git grep -F`.
+
+
 
 
 

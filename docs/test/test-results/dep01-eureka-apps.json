@@ -5,7 +5,7 @@
                           {
                               "port":  8086,
                               "status":  "UP",
-                              "hostName":  "172.19.0.5",
+                              "hostName":  "172.19.0.10",
                               "instanceId":  "athlete-service:8086"
                           }
                       ]
@@ -16,7 +16,7 @@
                           {
                               "port":  8080,
                               "status":  "UP",
-                              "hostName":  "172.19.0.14",
+                              "hostName":  "172.19.0.5",
                               "instanceId":  "api-gateway:8080"
                           }
                       ]
@@ -27,13 +27,13 @@
                           {
                               "port":  8081,
                               "status":  "UP",
-                              "hostName":  "172.19.0.12",
+                              "hostName":  "172.19.0.8",
                               "instanceId":  "tournament-service:8081"
                           },
                           {
                               "port":  8091,
                               "status":  "UP",
-                              "hostName":  "172.19.0.13",
+                              "hostName":  "172.19.0.7",
                               "instanceId":  "tournament-service:8091"
                           }
                       ]
@@ -44,7 +44,7 @@
                           {
                               "port":  8083,
                               "status":  "UP",
-                              "hostName":  "172.19.0.8",
+                              "hostName":  "172.19.0.14",
                               "instanceId":  "auth-service:8083"
                           }
                       ]
@@ -55,7 +55,7 @@
                           {
                               "port":  8082,
                               "status":  "UP",
-                              "hostName":  "172.19.0.9",
+                              "hostName":  "172.19.0.11",
                               "instanceId":  "match-service:8082"
                           }
                       ]
@@ -66,7 +66,7 @@
                           {
                               "port":  8085,
                               "status":  "UP",
-                              "hostName":  "172.19.0.10",
+                              "hostName":  "172.19.0.6",
                               "instanceId":  "team-service:8085"
                           }
                       ]
@@ -77,19 +77,8 @@
                           {
                               "port":  8088,
                               "status":  "UP",
-                              "hostName":  "172.19.0.11",
+                              "hostName":  "172.19.0.12",
                               "instanceId":  "ranking-service:8088"
-                          }
-                      ]
-    },
-    {
-        "name":  "RESULT-SERVICE",
-        "instances":  [
-                          {
-                              "port":  8087,
-                              "status":  "UP",
-                              "hostName":  "172.19.0.6",
-                              "instanceId":  "result-service:8087"
                           }
                       ]
     },
@@ -99,8 +88,19 @@
                           {
                               "port":  8084,
                               "status":  "UP",
-                              "hostName":  "172.19.0.7",
+                              "hostName":  "172.19.0.9",
                               "instanceId":  "notification-service:8084"
+                          }
+                      ]
+    },
+    {
+        "name":  "RESULT-SERVICE",
+        "instances":  [
+                          {
+                              "port":  8087,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.13",
+                              "instanceId":  "result-service:8087"
                           }
                       ]
     }

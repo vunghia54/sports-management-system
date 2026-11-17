@@ -507,6 +507,8 @@ body {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Buttons */
@@ -753,6 +755,8 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 0.86rem;
+  max-width: 100%;
+  min-width: 0;
   transition: border-color var(--transition-fast);
 }
 
