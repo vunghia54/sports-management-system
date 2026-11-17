@@ -5,6 +5,8 @@ import com.sports.management.result.model.Result;
 import com.sports.management.result.repository.RankingSyncTaskRepository;
 import com.sports.management.result.repository.ResultRepository;
 import com.sports.management.result.security.JwtTokenProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -17,6 +19,8 @@ import java.util.List;
 
 @Component
 public class ResultSyncRecoveryWorker {
+
+    private static final Logger log = LoggerFactory.getLogger(ResultSyncRecoveryWorker.class);
 
     private final ResultRepository resultRepository;
     private final RankingSyncTaskRepository rankingSyncTaskRepository;
@@ -80,7 +84,7 @@ public class ResultSyncRecoveryWorker {
                 resultService.executeSyncPipeline(job.getId(), internalBearer);
                 processed++;
             } catch (Exception ex) {
-                System.out.println("[WARN] Sync worker failed processing resultId=" + job.getId() + ": " + ex.getMessage());
+                log.warn("Sync worker failed processing resultId={}: {}", job.getId(), ex.getMessage());
             }
         }
         for (RankingSyncTask task : dueRankingTasks) {
@@ -88,7 +92,7 @@ public class ResultSyncRecoveryWorker {
                 resultService.executeRankingSyncTask(task.getId(), internalBearer);
                 processed++;
             } catch (Exception ex) {
-                System.out.println("[WARN] Sync worker failed processing rankingSyncTaskId=" + task.getId() + ": " + ex.getMessage());
+                log.warn("Sync worker failed processing rankingSyncTaskId={}: {}", task.getId(), ex.getMessage());
             }
         }
         return processed;

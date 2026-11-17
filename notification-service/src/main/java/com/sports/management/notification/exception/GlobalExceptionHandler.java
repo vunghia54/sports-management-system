@@ -1,5 +1,7 @@
 package com.sports.management.notification.exception;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +15,8 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
@@ -38,6 +42,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex) {
         int code = ex.getStatusCode().value();
         String msg = ex.getReason() != null ? ex.getReason() : "HTTP error";
+        if (code >= 500) {
+            log.warn("HTTP {} returned: {}", code, msg);
+        }
         return ResponseEntity.status(ex.getStatusCode()).body(Map.of(
                 "status", code,
                 "message", msg

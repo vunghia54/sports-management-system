@@ -5,6 +5,8 @@ import com.sports.management.exception.ResourceNotFoundException;
 import com.sports.management.exception.TransientSyncException;
 import com.sports.management.result.security.JwtTokenProvider;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +29,8 @@ import java.util.Map;
 
 @Component
 public class MatchAndRankingClient {
+
+    private static final Logger log = LoggerFactory.getLogger(MatchAndRankingClient.class);
 
     private final RestClient matchRestClient;
     private final RestClient rankingRestClient;
@@ -94,6 +98,7 @@ public class MatchAndRankingClient {
         } catch (ResourceNotFoundException ex) {
             throw ex;
         } catch (Exception ex) {
+            log.warn("Match Service unavailable for matchId={}: {}", matchId, ex.getMessage());
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "Match Service (MATCH-SERVICE) is unavailable via Service Discovery",

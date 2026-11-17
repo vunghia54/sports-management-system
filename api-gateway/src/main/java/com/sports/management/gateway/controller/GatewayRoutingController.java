@@ -1,6 +1,8 @@
 package com.sports.management.gateway.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
@@ -24,6 +26,8 @@ import java.util.Map;
 
 @RestController
 public class GatewayRoutingController {
+
+    private static final Logger log = LoggerFactory.getLogger(GatewayRoutingController.class);
 
     private final RestClient restClient;
     private final DiscoveryClient discoveryClient;
@@ -134,15 +138,18 @@ public class GatewayRoutingController {
             return requestSpec.exchange((clientRequest, clientResponse) -> {
                 HttpHeaders responseHeaders = new HttpHeaders();
                 clientResponse.getHeaders().forEach((k, v) -> {
-                    if (!k.equalsIgnoreCase("Transfer-Encoding")) {
+                    if (!k.equalsIgnoreCase("X-Request-Id") && !k.equalsIgnoreCase("Transfer-Encoding")) {
                         responseHeaders.put(k, v);
                     }
                 });
                 responseHeaders.set("X-Gateway-Routed-Service", targetService.toUpperCase());
                 byte[] respBody = StreamUtils.copyToByteArray(clientResponse.getBody());
+                log.info("Gateway routed {} {} -> {} status={}",
+                        method, path, targetService, clientResponse.getStatusCode().value());
                 return new ResponseEntity<>(respBody, responseHeaders, clientResponse.getStatusCode());
             });
         } catch (Exception ex) {
+            log.warn("Gateway proxy failed for {} {} -> {}: {}", method, path, targetService, ex.getMessage());
             String errJson = String.format(
                     "{\"status\":503,\"error\":\"Service Unavailable\",\"message\":\"Service %s is currently unavailable via Eureka Registry\",\"path\":\"%s\"}",
                     targetService.toUpperCase(), path

@@ -2,6 +2,8 @@ package com.sports.management.notification.messaging;
 
 import com.sports.management.notification.model.Notification;
 import com.sports.management.notification.repository.NotificationRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,6 +12,8 @@ import java.time.LocalDateTime;
 
 @Component
 public class NotificationConsumer {
+
+    private static final Logger log = LoggerFactory.getLogger(NotificationConsumer.class);
 
     private final NotificationRepository notificationRepository;
 
@@ -24,10 +28,10 @@ public class NotificationConsumer {
             return;
         }
         if (notificationRepository.existsByTypeAndReferenceId("MATCH_FINISHED", event.getMatchId())) {
-            System.out.println(">>> [NOTIFICATION SERVICE] Skipped duplicate MATCH_FINISHED event for Match ID: " + event.getMatchId());
+            log.info("Skipped duplicate MATCH_FINISHED event for matchId={}", event.getMatchId());
             return;
         }
-        System.out.println(">>> [NOTIFICATION SERVICE] Received MatchFinishedEvent for Match ID: " + event.getMatchId());
+        log.info("Received MatchFinishedEvent for matchId={}", event.getMatchId());
 
         Notification notification = new Notification();
         notification.setRecipient("ALL_USERS");
@@ -52,6 +56,6 @@ public class NotificationConsumer {
         notification.setRead(false);
 
         Notification saved = notificationRepository.save(notification);
-        System.out.println(">>> [NOTIFICATION SERVICE] Created Notification ID: " + saved.getId());
+        log.info("Created notificationId={} for matchId={}", saved.getId(), event.getMatchId());
     }
 }

@@ -9,6 +9,8 @@ import com.sports.management.match.repository.MatchRepository;
 import com.sports.management.match.repository.ParticipantRepository;
 import com.sports.management.messaging.event.MatchFinishedEvent;
 import com.sports.management.messaging.producer.MatchEventProducer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -25,6 +27,8 @@ import java.util.*;
 
 @Service
 public class MatchService {
+
+    private static final Logger log = LoggerFactory.getLogger(MatchService.class);
 
     public static final Set<String> ALLOWED_STATUSES = Set.of(
             "SCHEDULED", "ONGOING", "FINISHED", "CANCELLED", "POSTPONED"
@@ -165,7 +169,7 @@ public class MatchService {
 
         match.setId(null);
         Match savedMatch = matchRepository.save(match);
-        System.out.println("[MATCH CREATED] ID = " + savedMatch.getId());
+        log.info("Match created id={}", savedMatch.getId());
         return savedMatch;
     }
 
@@ -1333,7 +1337,7 @@ public class MatchService {
             event.setPenaltyScore2(savedMatch.getPenaltyScore2());
 
             eventPublisher.publishEvent(event);
-            System.out.println("[MATCH FINISHED] Event queued for AFTER_COMMIT publish, Match ID = " + savedMatch.getId());
+            log.info("Match finished event queued for AFTER_COMMIT publish, matchId={}", savedMatch.getId());
         }
     }
 

@@ -2,6 +2,8 @@ package com.sports.management.messaging.producer;
 
 import com.sports.management.messaging.config.RabbitMQConfig;
 import com.sports.management.messaging.event.MatchFinishedEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -9,6 +11,8 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
 public class MatchEventProducer {
+
+    private static final Logger log = LoggerFactory.getLogger(MatchEventProducer.class);
 
     private final RabbitTemplate rabbitTemplate;
 
@@ -28,16 +32,11 @@ public class MatchEventProducer {
                     RabbitMQConfig.ROUTING_KEY,
                     event
             );
-            System.out.println(
-                    "[RABBITMQ] Published MATCH_FINISHED event to "
-                            + RabbitMQConfig.EXCHANGE + " [" + RabbitMQConfig.ROUTING_KEY + "], Match ID = "
-                            + event.getMatchId()
-            );
+            log.info("[RABBITMQ] Published MATCH_FINISHED event to {} [{}], matchId={}",
+                    RabbitMQConfig.EXCHANGE, RabbitMQConfig.ROUTING_KEY, event.getMatchId());
         } catch (Exception ex) {
-            System.out.println(
-                    "[RABBITMQ WARN] Broker unavailable, skipped publishing MATCH_FINISHED event for Match ID = "
-                            + event.getMatchId() + " (" + ex.getMessage() + ")"
-            );
+            log.warn("[RABBITMQ] Broker unavailable, skipped publishing MATCH_FINISHED event for matchId={}: {}",
+                    event.getMatchId(), ex.getMessage());
         }
     }
 }

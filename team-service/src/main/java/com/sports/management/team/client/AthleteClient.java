@@ -1,6 +1,8 @@
 package com.sports.management.team.client;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.core.ParameterizedTypeReference;
@@ -17,6 +19,8 @@ import java.util.Map;
 
 @Component
 public class AthleteClient {
+
+    private static final Logger log = LoggerFactory.getLogger(AthleteClient.class);
 
     private final RestClient restClient;
     private final String athleteServiceUrl;
@@ -68,6 +72,8 @@ public class AthleteClient {
                 lastException = ex;
             }
         }
+        log.warn("Athlete Service unavailable for athleteId={}: {}",
+                athleteId, lastException != null ? lastException.getMessage() : "unknown error");
         throw new ResponseStatusException(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "Athlete Service (ATHLETE-SERVICE) is temporarily unavailable via Service Discovery",

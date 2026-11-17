@@ -5,6 +5,8 @@ import com.sports.management.tournament.model.Tournament;
 import com.sports.management.tournament.service.CompetitionService;
 import com.sports.management.tournament.service.TournamentService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
@@ -24,6 +26,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/tournaments")
 public class TournamentController {
+
+    private static final Logger log = LoggerFactory.getLogger(TournamentController.class);
 
     private final TournamentService tournamentService;
     private final CompetitionService competitionService;
@@ -187,7 +191,7 @@ public class TournamentController {
     @GetMapping("/{id}")
     public ResponseEntity<Tournament> getTournamentById(@PathVariable Long id) {
         String instanceId = applicationName + ":" + serverPort;
-        System.out.println(">>> [" + instanceId + "] Handling GET /api/v1/tournaments/" + id);
+        log.info("[{}] Handling GET /api/v1/tournaments/{}", instanceId, id);
         Tournament tournament = tournamentService.getTournamentById(id);
 
         if (tournament == null) {
@@ -213,7 +217,7 @@ public class TournamentController {
                 || authentication.getName() == null || authentication.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Full authentication is required");
         }
-        String caller = authentication.getName();
+        String caller = authentication.getName().trim().toLowerCase(java.util.Locale.ROOT);
         boolean isAdmin = hasAdminRole(authentication);
 
         if (!isAdmin) {
@@ -228,6 +232,8 @@ public class TournamentController {
             tournament.setOrganizerUsername(caller);
         } else if (tournament.getOrganizerUsername() == null || tournament.getOrganizerUsername().isBlank()) {
             tournament.setOrganizerUsername(caller);
+        } else {
+            tournament.setOrganizerUsername(tournament.getOrganizerUsername().trim().toLowerCase(java.util.Locale.ROOT));
         }
 
         Tournament created = tournamentService.createTournament(tournament);
@@ -370,7 +376,8 @@ public class TournamentController {
         }
 
         String owner = tournament.getOrganizerUsername();
-        if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(authentication.getName())) {
+        String caller = authentication.getName() != null ? authentication.getName().trim() : "";
+        if (owner == null || owner.isBlank() || !owner.trim().equalsIgnoreCase(caller)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Access Denied: You do not own this tournament"

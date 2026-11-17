@@ -1,6 +1,8 @@
 package com.sports.management.exception;
 
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,8 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(ScheduleConflictException.class)
     public ResponseEntity<Map<String, Object>> handleScheduleConflict(ScheduleConflictException ex) {
@@ -86,6 +90,9 @@ public class GlobalExceptionHandler {
 
         if (message == null) {
             message = "HTTP error";
+        }
+        if (status >= 500) {
+            log.warn("HTTP {} returned: {}", status, message);
         }
 
         ErrorResponse response = new ErrorResponse(

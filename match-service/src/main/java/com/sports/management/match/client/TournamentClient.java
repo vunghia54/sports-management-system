@@ -2,6 +2,8 @@ package com.sports.management.match.client;
 
 import com.sports.management.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.core.ParameterizedTypeReference;
@@ -21,6 +23,8 @@ import java.util.Map;
 
 @Component
 public class TournamentClient {
+
+    private static final Logger log = LoggerFactory.getLogger(TournamentClient.class);
 
     private final RestClient tournamentRestClient;
     private final RestClient teamRestClient;
@@ -88,8 +92,8 @@ public class TournamentClient {
                 String instanceId = response.getHeaders().getFirst("X-Instance-Id");
                 if (instanceId != null && !instanceId.isBlank()) {
                     this.lastHandledInstance = instanceId;
-                    System.out.println("[SERVICE DISCOVERY] MatchService -> " + tournamentServiceUrl
-                            + "/api/v1/tournaments/" + tournamentId + " handled by instance: " + instanceId);
+                    log.debug("Service discovery {} -> /api/v1/tournaments/{} handled by {}",
+                            tournamentServiceUrl, tournamentId, instanceId);
                 }
 
                 return true;
@@ -102,6 +106,8 @@ public class TournamentClient {
             }
         }
 
+        log.warn("Provider {} unavailable verifying tournamentId={}: {}",
+                tournamentServiceUrl, tournamentId, lastException != null ? lastException.getMessage() : "unknown error");
         throw new ResponseStatusException(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "Tournament Service (TOURNAMENT-SERVICE) is temporarily unavailable via Service Discovery",
@@ -138,6 +144,8 @@ public class TournamentClient {
                 lastException = ex;
             }
         }
+        log.warn("Provider {} unavailable loading tournamentId={}: {}",
+                tournamentServiceUrl, tournamentId, lastException != null ? lastException.getMessage() : "unknown error");
         throw new ResponseStatusException(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "Tournament Service (TOURNAMENT-SERVICE) is unavailable when verifying Tournament ID: " + tournamentId,
@@ -401,6 +409,8 @@ public class TournamentClient {
                 lastException = ex;
             }
         }
+        log.warn("Provider {} discovery failed via Eureka/LoadBalancer: {}",
+                tournamentServiceUrl, lastException != null ? lastException.getMessage() : "unknown error");
         throw new ResponseStatusException(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "Tournament Service (TOURNAMENT-SERVICE) has no available instances in Eureka Registry",
