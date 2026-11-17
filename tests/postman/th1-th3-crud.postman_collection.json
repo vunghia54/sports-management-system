@@ -533,6 +533,55 @@
       }
     },
     {
+      "name": "13b. [TH3] Combined Query - name + gender + page + size + sortBy -> 200 OK",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Combined search+filter+sort+pagination returns 200 with MALE sorted by fullName asc and page metadata', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.page).to.eql(0);",
+              "    pm.expect(json.size).to.eql(5);",
+              "    pm.expect(json.totalElements).to.eql(2);",
+              "    pm.expect(json.totalPages).to.eql(1);",
+              "    pm.expect(json.content).to.be.an('array').with.lengthOf(2);",
+              "    const tag = pm.collectionVariables.get('runTag');",
+              "    json.content.forEach(a => {",
+              "        pm.expect(a.gender).to.eql('MALE');",
+              "        pm.expect(a.fullName).to.include(tag);",
+              "    });",
+              "    for (let i = 1; i < json.content.length; i++) {",
+              "        pm.expect(json.content[i - 1].fullName.localeCompare(json.content[i].fullName)).to.be.at.most(0);",
+              "    }",
+              "    pm.expect(json.content[0].fullName).to.include('AAA');",
+              "    pm.expect(json.content[1].fullName).to.include('BBB');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/paged?name={{runTag}}&gender=MALE&page=0&size=5&sortBy=fullName&direction=asc",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "paged"],
+          "query": [
+            { "key": "name", "value": "{{runTag}}" },
+            { "key": "gender", "value": "MALE" },
+            { "key": "page", "value": "0" },
+            { "key": "size", "value": "5" },
+            { "key": "sortBy", "value": "fullName" },
+            { "key": "direction", "value": "asc" }
+          ]
+        }
+      }
+    },
+    {
       "name": "14. [TH3] Invalid sortBy -> 400 Bad Request",
       "event": [
         {

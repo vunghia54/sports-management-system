@@ -59,7 +59,7 @@ sequenceDiagram
 
 ## 2. Sequence Diagram: Tích hợp Bất đồng bộ Event-Driven qua RabbitMQ
 
-Biểu đồ mô tả sự kiện kết thúc trận đấu và thông báo tự động:
+Biểu đồ mô tả sự kiện kết thúc trận đấu và thông báo tự động (bản ảnh xuất tĩnh: [`integration-flow.png`](integration-flow.png)):
 
 ```mermaid
 sequenceDiagram
