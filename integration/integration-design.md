@@ -56,7 +56,7 @@ Trong một hệ thống hướng dịch vụ thực tế, một dịch vụ kh�
 
 ## 4. Xử lý các tình huống lỗi tích hợp & Tính chịu lỗi
 
-Hệ thống đã triển khai đầy đủ các cơ chế xử lý lỗi trong mã nguồn [`TournamentClient.java`](file:///d:/PTPMHDV/sports-management-system-main/match-service/src/main/java/com/sports/management/match/client/TournamentClient.java):
+Hệ thống đã triển khai đầy đủ các cơ chế xử lý lỗi trong mã nguồn [`TournamentClient.java`](../match-service/src/main/java/com/sports/management/match/client/TournamentClient.java):
 
 1. **Giải đấu không tồn tại (Resource Not Found):**
    - Khi `TournamentClient` nhận status code `404` từ `Tournament Service`, client bắt ngoại lệ nội bộ và trả về `false`.

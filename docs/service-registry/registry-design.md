@@ -17,13 +17,13 @@ Trong kiến trúc Microservices của hệ thống Quản lý Thi đấu Thể 
 
 ## 2. Cấu hình kỹ thuật của Eureka Server (`service-registry`)
 
-- **Thư mục mã nguồn:** [`service-registry/`](file:///d:/PTPMHDV/sports-management-system-main/service-registry)
-- **Main Class:** [`ServiceRegistryApplication.java`](file:///d:/PTPMHDV/sports-management-system-main/service-registry/src/main/java/com/sports/management/registry/ServiceRegistryApplication.java) với annotation `@EnableEurekaServer`.
+- **Thư mục mã nguồn:** [`service-registry/`](../../service-registry)
+- **Main Class:** [`ServiceRegistryApplication.java`](../../service-registry/src/main/java/com/sports/management/registry/ServiceRegistryApplication.java) với annotation `@EnableEurekaServer`.
 - **Cổng mặc định:** `8761`
 - **Giao diện quản trị (Dashboard):** `http://localhost:8761`
 - **REST Endpoint tra cứu danh bạ (JSON/XML):** `http://localhost:8761/eureka/apps`
 
-### Cấu hình [`application.properties`](file:///d:/PTPMHDV/sports-management-system-main/service-registry/src/main/resources/application.properties):
+### Cấu hình [`application.properties`](../../service-registry/src/main/resources/application.properties):
 ```properties
 spring.application.name=service-registry
 server.port=8761

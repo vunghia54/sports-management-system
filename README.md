@@ -166,3 +166,18 @@ powershell -ExecutionPolicy Bypass -File .\test_th8_deployment.ps1 -ComposeProje
 - [`docs/operation/failure-analysis.md`](docs/operation/failure-analysis.md) — Phân tích các lỗi thực tế và kịch bản sự cố đã kiểm chứng.
 - [`docs/test/deployment-test-cases.md`](docs/test/deployment-test-cases.md) — Bộ test case `DEP01`–`DEP06`, `SPORT01`–`SPORT04` và kiểm tra monitoring kèm kết quả chạy thực tế.
 - [`docs/test/test-results/`](docs/test/test-results/) — Log thực tế, kết quả JSON, ảnh `docker compose ps` và Eureka Dashboard.
+
+## 8. Bản đồ tài liệu và bằng chứng theo bài thực hành (TH1–TH8)
+
+| Bài | Nội dung | Tài liệu / mã nguồn | Bằng chứng kiểm thử |
+|---|---|---|---|
+| TH1 | CRUD RESTful, `/hello`, `/info` | Các `*Controller.java`, Swagger `/swagger-ui.html` | [`tests/postman/th1-th3-crud.postman_collection.json`](tests/postman/th1-th3-crud.postman_collection.json), [`th1-th3-crud-newman.json`](docs/test/test-results/th1-th3-crud-newman.json) |
+| TH2 | Provider/Consumer, đa framework, xử lý lỗi gọi service | [`framework-comparison/express-tournament-consumer/`](framework-comparison/express-tournament-consumer/), [`so-sanh-framework.md`](framework-comparison/so-sanh-framework.md) | [`ket-qua-chay.md`](framework-comparison/ket-qua-chay.md), `npm test` |
+| TH3 | Thiết kế REST, phân trang/lọc/sắp xếp, versioning | [`docs/rest-api-design.md`](docs/rest-api-design.md) | Như TH1 |
+| TH4 | Database-per-Service, transaction, kết nối service | [`docs/data-and-service-design.md`](docs/data-and-service-design.md) | `RabbitMQContractAndAfterCommitTest` (Maven) |
+| TH5 | JWT, RBAC, ownership | [`security-design/`](security-design/) | [`security-design/test-results.md`](security-design/test-results.md), [`security-th5-newman.json`](docs/test/test-results/security-th5-newman.json) |
+| TH6 | Tích hợp REST + RabbitMQ | [`integration/`](integration/) | [`integration/test-results.md`](integration/test-results.md), [`integration-th6-newman.json`](docs/test/test-results/integration-th6-newman.json) |
+| TH7 | Eureka, cân bằng tải, failover | [`docs/service-registry/`](docs/service-registry/), [`test_th7_service_discovery.ps1`](test_th7_service_discovery.ps1) | [`service-discovery-th7-newman.json`](docs/test/test-results/service-discovery-th7-newman.json), `th7-service-discovery-run.txt` |
+| TH8 | Docker, Compose, giám sát | Mục 3–7 ở trên | [`docs/test/deployment-test-cases.md`](docs/test/deployment-test-cases.md), [`test_th8_deployment.ps1`](test_th8_deployment.ps1) |
+
+Tổng hợp đối chiếu: [`BAO_CAO_THUC_HANH_1_DEN_7.md`](BAO_CAO_THUC_HANH_1_DEN_7.md), [`docs/05-DOI-CHIEU-TH1-TH8-2026-11-17.md`](docs/05-DOI-CHIEU-TH1-TH8-2026-11-17.md), lịch sử sửa lỗi [`KET_QUA_SUA_LOI.md`](KET_QUA_SUA_LOI.md).

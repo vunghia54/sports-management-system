@@ -110,8 +110,8 @@ Bảng mô tả chi tiết ranh giới nghiệp vụ, quyền sở hữu dữ li
 ### 4.1. Chuyển Consumer (`Match Service`) từ URL cố định sang Service Discovery
 - Trước đây (Buổi 6): `services.tournament.url=http://localhost:8081`
 - Hiện tại (Buổi 7): `services.tournament.url=http://tournament-service`
-- Cấu hình `@Bean @LoadBalanced RestClient.Builder` trong [`RestClientConfig.java`](file:///d:/PTPMHDV/sports-management-system-main/match-service/src/main/java/com/sports/management/match/config/RestClientConfig.java).
-- Khi [`TournamentClient.java`](file:///d:/PTPMHDV/sports-management-system-main/match-service/src/main/java/com/sports/management/match/client/TournamentClient.java) thực hiện lời gọi `GET http://tournament-service/api/v1/tournaments/{id}`:
+- Cấu hình `@Bean @LoadBalanced RestClient.Builder` trong [`RestClientConfig.java`](../../match-service/src/main/java/com/sports/management/match/config/RestClientConfig.java).
+- Khi [`TournamentClient.java`](../../match-service/src/main/java/com/sports/management/match/client/TournamentClient.java) thực hiện lời gọi `GET http://tournament-service/api/v1/tournaments/{id}`:
   1. `LoadBalancerInterceptor` chặn request và lấy tên dịch vụ `tournament-service`.
   2. Truy vấn danh sách các instance `UP` của `TOURNAMENT-SERVICE` từ Eureka Client Cache.
   3. Thuật toán `RoundRobinLoadBalancer` chọn tuần tự từng instance (`localhost:8081` rồi đến `localhost:8091`).
@@ -127,7 +127,7 @@ Bảng mô tả chi tiết ranh giới nghiệp vụ, quyền sở hữu dữ li
 ## 5. Kết quả kiểm thử, hạn chế và hướng hoàn thiện
 
 ### 5.1. Tóm tắt kết quả kiểm thử
-- Toàn bộ 6 kịch bản kiểm thử (`TC01` → `TC06`) đều đạt **PASSED 100%** (chi tiết tại [`load-balancing-results.md`](file:///d:/PTPMHDV/sports-management-system-main/tests/service-discovery/load-balancing-results.md) và [`failure-tests.md`](file:///d:/PTPMHDV/sports-management-system-main/tests/service-discovery/failure-tests.md)):
+- Toàn bộ 6 kịch bản kiểm thử (`TC01` → `TC06`) đều đạt **PASSED 100%** (chi tiết tại [`load-balancing-results.md`](../../tests/service-discovery/load-balancing-results.md) và [`failure-tests.md`](../../tests/service-discovery/failure-tests.md)):
   - **20 requests liên tiếp** gửi qua Consumer `Match Service` được phân phối đều **50% (10 requests)** vào Instance 1 (`8081`) và **50% (10 requests)** vào Instance 2 (`8091`).
   - Khi dừng Instance 1 (`8081`), hệ thống tự động chuyển 100% lưu lượng sang Instance 2 (`8091`) mà không làm gián đoạn nghiệp vụ tạo trận đấu.
   - Khi dừng cả 2 instance, `Match Service` bắt lỗi an toàn và trả về `503 Service Unavailable` rõ ràng, không bị treo vô hạn và không lộ stack trace.
