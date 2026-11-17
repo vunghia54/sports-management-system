@@ -1,303 +1,442 @@
-version: '3.8'
+name: sports-management-system
+
+x-java-env: &java-common-env
+  JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms64m -Xmx224m -XX:MaxMetaspaceSize=128m -Duser.timezone=Asia/Ho_Chi_Minh}
+  EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+  JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in .env}
+  SERVICES_CONNECT_TIMEOUT_MS: ${SERVICES_CONNECT_TIMEOUT_MS:-2000}
+  SERVICES_READ_TIMEOUT_MS: ${SERVICES_READ_TIMEOUT_MS:-10000}
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 30s
 
 services:
   # =====================================================
   # 0. INFRASTRUCTURE: POSTGRESQL & RABBITMQ
   # =====================================================
   postgres-db:
-    image: postgres:15-alpine
-    container_name: sports-postgres
+    image: postgres:17
     environment:
-      POSTGRES_USER: sports
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-sports123}
+      POSTGRES_USER: ${DB_USERNAME:-sports}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/init-multiple-dbs.sql:/docker-entrypoint-initdb.d/init-multiple-dbs.sql:ro
     networks:
       - sports-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sports -d tournament_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-sports} -d tournament_db"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: sports-rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+  # Tao tai khoan DB rieng cho tung service (chay mot lan moi khi `up`, idempotent)
+  db-init:
+    image: postgres:17
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres-db
+      PGUSER: ${DB_USERNAME:-sports}
+      PGPASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:-${DB_PASSWORD}}
+      TOURNAMENT_DB_PASSWORD: ${TOURNAMENT_DB_PASSWORD:-${DB_PASSWORD}}
+      TEAM_DB_PASSWORD: ${TEAM_DB_PASSWORD:-${DB_PASSWORD}}
+      ATHLETE_DB_PASSWORD: ${ATHLETE_DB_PASSWORD:-${DB_PASSWORD}}
+      MATCH_DB_PASSWORD: ${MATCH_DB_PASSWORD:-${DB_PASSWORD}}
+      RESULT_DB_PASSWORD: ${RESULT_DB_PASSWORD:-${DB_PASSWORD}}
+      RANKING_DB_PASSWORD: ${RANKING_DB_PASSWORD:-${DB_PASSWORD}}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-${DB_PASSWORD}}
+    volumes:
+      - ./docker/create-service-db-users.sh:/scripts/create-service-db-users.sh:ro
+    entrypoint: ["sh", "-c", "tr -d '\\r' < /scripts/create-service-db-users.sh | sh"]
     networks:
       - sports-net
+    restart: "no"
+
+  rabbitmq:
+    image: rabbitmq:management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - sports-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
 
   # =====================================================
-  # 1. SERVICE REGISTRY (EUREKA SERVER - PORT 8761) - TH7
+  # 1. SERVICE REGISTRY (EUREKA SERVER - PORT 8761)
   # =====================================================
   service-registry:
     build:
       context: .
       dockerfile: service-registry/Dockerfile
-    container_name: sports-service-registry
+    environment:
+      EUREKA_HOSTNAME: service-registry
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms64m -Xmx224m -XX:MaxMetaspaceSize=128m -Duser.timezone=Asia/Ho_Chi_Minh}
     ports:
-      - "8761:8761"
+      - "${REGISTRY_PORT:-8761}:8761"
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8761/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
 
   # =====================================================
-  # 2. API GATEWAY (PORT 8080) - TH6 & TH7
+  # 2. API GATEWAY (PORT 8080)
   # =====================================================
   api-gateway:
     build:
       context: .
       dockerfile: api-gateway/Dockerfile
-    container_name: sports-api-gateway
-    ports:
-      - "8080:8080"
     environment:
-      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in environment or .env}
+      <<: *java-common-env
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8080}
+      APP_DEMO_ENABLED: ${APP_DEMO_ENABLED:-false}
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
     depends_on:
-      - service-registry
+      service-registry:
+        condition: service_healthy
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
 
   # =====================================================
-  # 3. AUTH SERVICE (PORT 8083) - TH1 -> TH7
+  # 3. AUTH SERVICE (PORT 8083)
   # =====================================================
   auth-service:
     build:
       context: .
       dockerfile: auth-service/Dockerfile
-    container_name: sports-auth-service
-    ports:
-      - "8083:8083"
     environment:
+      <<: *java-common-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/auth_db
       SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
-      SPRING_DATASOURCE_USERNAME: sports
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
-      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in environment or .env}
+      SPRING_DATASOURCE_USERNAME: auth_user
+      SPRING_DATASOURCE_PASSWORD: ${AUTH_DB_PASSWORD:-${DB_PASSWORD}}
+      APP_DEMO_SEED_USERS: ${APP_DEMO_SEED_USERS:-false}
+    ports:
+      - "${AUTH_PORT:-8083}:8083"
     depends_on:
       postgres-db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       service-registry:
-        condition: service_started
+        condition: service_healthy
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8083/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
 
   # =====================================================
-  # 4A. TOURNAMENT SERVICE - INSTANCE 1 (PORT 8081) - TH1 -> TH7
+  # 4A. TOURNAMENT SERVICE - INSTANCE 1 (PORT 8081)
   # =====================================================
   tournament-service:
     build:
       context: .
       dockerfile: tournament-service/Dockerfile
-    container_name: sports-tournament-service-1
-    ports:
-      - "8081:8081"
     environment:
+      <<: *java-common-env
       SERVER_PORT: 8081
+      EUREKA_INSTANCE_ID: tournament-service:8081
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/tournament_db
       SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
-      SPRING_DATASOURCE_USERNAME: sports
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
-      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in environment or .env}
+      SPRING_DATASOURCE_USERNAME: tournament_user
+      SPRING_DATASOURCE_PASSWORD: ${TOURNAMENT_DB_PASSWORD:-${DB_PASSWORD}}
+    ports:
+      - "${TOURNAMENT_PORT:-8081}:8081"
     depends_on:
       postgres-db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       service-registry:
-        condition: service_started
+        condition: service_healthy
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
 
   # =====================================================
-  # 4B. TOURNAMENT SERVICE - INSTANCE 2 (PORT 8091) - TH7 LOAD BALANCING
+  # 4B. TOURNAMENT SERVICE - INSTANCE 2 (PORT 8091)
   # =====================================================
   tournament-service-2:
     build:
       context: .
       dockerfile: tournament-service/Dockerfile
-    container_name: sports-tournament-service-2
-    ports:
-      - "8091:8091"
     environment:
+      <<: *java-common-env
       SERVER_PORT: 8091
+      EUREKA_INSTANCE_ID: tournament-service:8091
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/tournament_db
       SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
-      SPRING_DATASOURCE_USERNAME: sports
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
-      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in environment or .env}
+      SPRING_DATASOURCE_USERNAME: tournament_user
+      SPRING_DATASOURCE_PASSWORD: ${TOURNAMENT_DB_PASSWORD:-${DB_PASSWORD}}
+    ports:
+      - "${TOURNAMENT_2_PORT:-8091}:8091"
     depends_on:
       postgres-db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       service-registry:
-        condition: service_started
+        condition: service_healthy
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8091/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
 
   # =====================================================
-  # 5. TEAM SERVICE (PORT 8085) - TH1 -> TH7
+  # 5. TEAM SERVICE (PORT 8085)
   # =====================================================
   team-service:
     build:
       context: .
       dockerfile: team-service/Dockerfile
-    container_name: sports-team-service
-    ports:
-      - "8085:8085"
     environment:
+      <<: *java-common-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/team_db
       SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
-      SPRING_DATASOURCE_USERNAME: sports
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
-      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in environment or .env}
+      SPRING_DATASOURCE_USERNAME: team_user
+      SPRING_DATASOURCE_PASSWORD: ${TEAM_DB_PASSWORD:-${DB_PASSWORD}}
+    ports:
+      - "${TEAM_PORT:-8085}:8085"
     depends_on:
       postgres-db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       service-registry:
-        condition: service_started
+        condition: service_healthy
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8085/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
 
   # =====================================================
-  # 6. ATHLETE SERVICE (PORT 8086) - TH1 -> TH7
+  # 6. ATHLETE SERVICE (PORT 8086)
   # =====================================================
   athlete-service:
     build:
       context: .
       dockerfile: athlete-service/Dockerfile
-    container_name: sports-athlete-service
-    ports:
-      - "8086:8086"
     environment:
+      <<: *java-common-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/athlete_db
       SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
-      SPRING_DATASOURCE_USERNAME: sports
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
-      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in environment or .env}
+      SPRING_DATASOURCE_USERNAME: athlete_user
+      SPRING_DATASOURCE_PASSWORD: ${ATHLETE_DB_PASSWORD:-${DB_PASSWORD}}
+    ports:
+      - "${ATHLETE_PORT:-8086}:8086"
     depends_on:
       postgres-db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       service-registry:
-        condition: service_started
+        condition: service_healthy
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8086/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
 
   # =====================================================
-  # 7. MATCH SERVICE (PORT 8082) - TH1 -> TH7
+  # 7. MATCH SERVICE (PORT 8082)
   # =====================================================
   match-service:
     build:
       context: .
       dockerfile: match-service/Dockerfile
-    container_name: sports-match-service
-    ports:
-      - "8082:8082"
     environment:
+      <<: *java-common-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/match_db
       SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
-      SPRING_DATASOURCE_USERNAME: sports
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      SPRING_DATASOURCE_USERNAME: match_user
+      SPRING_DATASOURCE_PASSWORD: ${MATCH_DB_PASSWORD:-${DB_PASSWORD}}
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       SERVICES_TOURNAMENT_URL: http://tournament-service
-      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in environment or .env}
+    ports:
+      - "${MATCH_PORT:-8082}:8082"
     depends_on:
       postgres-db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       service-registry:
-        condition: service_started
+        condition: service_healthy
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8082/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
 
   # =====================================================
-  # 8. RESULT SERVICE (PORT 8087) - TH1 -> TH7
+  # 8. RESULT SERVICE (PORT 8087)
   # =====================================================
   result-service:
     build:
       context: .
       dockerfile: result-service/Dockerfile
-    container_name: sports-result-service
-    ports:
-      - "8087:8087"
     environment:
+      <<: *java-common-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/result_db
       SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
-      SPRING_DATASOURCE_USERNAME: sports
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
-      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in environment or .env}
+      SPRING_DATASOURCE_USERNAME: result_user
+      SPRING_DATASOURCE_PASSWORD: ${RESULT_DB_PASSWORD:-${DB_PASSWORD}}
+    ports:
+      - "${RESULT_PORT:-8087}:8087"
     depends_on:
       postgres-db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       service-registry:
-        condition: service_started
+        condition: service_healthy
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8087/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
 
   # =====================================================
-  # 9. RANKING SERVICE (PORT 8088) - TH1 -> TH7
+  # 9. RANKING SERVICE (PORT 8088)
   # =====================================================
   ranking-service:
     build:
       context: .
       dockerfile: ranking-service/Dockerfile
-    container_name: sports-ranking-service
-    ports:
-      - "8088:8088"
     environment:
+      <<: *java-common-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/ranking_db
       SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
-      SPRING_DATASOURCE_USERNAME: sports
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
-      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in environment or .env}
+      SPRING_DATASOURCE_USERNAME: ranking_user
+      SPRING_DATASOURCE_PASSWORD: ${RANKING_DB_PASSWORD:-${DB_PASSWORD}}
+    ports:
+      - "${RANKING_PORT:-8088}:8088"
     depends_on:
       postgres-db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       service-registry:
-        condition: service_started
+        condition: service_healthy
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8088/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
 
   # =====================================================
-  # 10. NOTIFICATION SERVICE (PORT 8084) - TH1 -> TH7
+  # 10. NOTIFICATION SERVICE (PORT 8084)
   # =====================================================
   notification-service:
     build:
       context: .
       dockerfile: notification-service/Dockerfile
-    container_name: sports-notification-service
-    ports:
-      - "8084:8084"
     environment:
+      <<: *java-common-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/notification_db
       SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
-      SPRING_DATASOURCE_USERNAME: sports
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sports123}
+      SPRING_DATASOURCE_USERNAME: notification_user
+      SPRING_DATASOURCE_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-${DB_PASSWORD}}
       SPRING_RABBITMQ_HOST: rabbitmq
-      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (>=32 chars) in environment or .env}
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "${NOTIFICATION_PORT:-8084}:8084"
     depends_on:
       postgres-db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       service-registry:
-        condition: service_started
+        condition: service_healthy
     networks:
       - sports-net
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8084/actuator/health | grep -q '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"]
+    restart: unless-stopped
+
+  # =====================================================
+  # GIAM SAT (tuy chon): docker compose --profile monitoring up -d
+  # =====================================================
+  prometheus:
+    image: prom/prometheus
+    profiles: ["monitoring"]
+    volumes:
+      - ./docker/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - sports-net
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me-grafana}
+    volumes:
+      - ./docker/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - sports-net
+    restart: unless-stopped
 
 networks:
   sports-net:
@@ -305,3 +444,6 @@ networks:
 
 volumes:
   postgres_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
