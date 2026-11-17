@@ -343,43 +343,42 @@ function formatTeamCrestInitials(name, shortName) {
   return words.slice(0, 3).map(w => w[0]).join('').toUpperCase();
 }
 
+const STATUS_LABEL_TONES = {
+  ONGOING: ['Đang diễn ra', 'success'],
+  FINISHED: ['Đã kết thúc', 'success'],
+  APPROVED: ['Đã duyệt', 'success'],
+  FIT: ['Đủ thể lực', 'success'],
+  QUALIFIED: ['Đủ điều kiện', 'success'],
+  CONFIRMED: ['Đã xác nhận', 'success'],
+  UP: ['Đang hoạt động', 'success'],
+  COMPLETED: ['Đã hoàn thành', 'success'],
+  ACTIVE: ['Hoạt động', 'success'],
+  UPCOMING: ['Sắp khởi tranh', 'warning'],
+  SCHEDULED: ['Chờ thi đấu', 'warning'],
+  PENDING: ['Chờ duyệt', 'warning'],
+  PENDING_CONFIRMATION: ['Chờ xác nhận', 'warning'],
+  INJURED: ['Chấn thương', 'warning'],
+  OPEN_REGISTRATION: ['Mở đăng ký', 'warning'],
+  PAUSED: ['Tạm dừng', 'warning'],
+  DRAFT: ['Bản nháp', 'warning'],
+  CANCELLED: ['Đã hủy', 'error'],
+  REJECTED: ['Từ chối', 'error'],
+  WITHDRAWN: ['Đã rút lui', 'error'],
+  SUSPENDED: ['Treo giò', 'error'],
+  DOWN: ['Mất kết nối', 'error'],
+  INACTIVE: ['Đã khóa', 'error'],
+  CLOSED: ['Đã đóng', 'error']
+};
+
+function getStatusLabel(status) {
+  const s = String(status || '').toUpperCase();
+  return STATUS_LABEL_TONES[s]?.[0] || (s || 'Chưa rõ');
+}
+
 function statusBadgeHtml(status) {
   const s = String(status || '').toUpperCase();
-  const successMap = {
-    ONGOING: 'Đang diễn ra',
-    FINISHED: 'Đã kết thúc',
-    APPROVED: 'Đã duyệt',
-    FIT: 'Đủ thể lực',
-    QUALIFIED: 'Đủ điều kiện',
-    CONFIRMED: 'Đã xác nhận',
-    UP: 'Đang hoạt động',
-    COMPLETED: 'Đã hoàn thành',
-    ACTIVE: 'Hoạt động'
-  };
-  if (successMap[s]) return `<span class="badge badge-success">${successMap[s]}</span>`;
-
-  const warningMap = {
-    UPCOMING: 'Sắp khởi tranh',
-    SCHEDULED: 'Chờ thi đấu',
-    PENDING: 'Chờ duyệt',
-    PENDING_CONFIRMATION: 'Chờ xác nhận',
-    INJURED: 'Chấn thương',
-    OPEN_REGISTRATION: 'Mở đăng ký',
-    PAUSED: 'Tạm dừng',
-    DRAFT: 'Bản nháp'
-  };
-  if (warningMap[s]) return `<span class="badge badge-warning">${warningMap[s]}</span>`;
-
-  const dangerMap = {
-    CANCELLED: 'Đã hủy',
-    REJECTED: 'Từ chối',
-    WITHDRAWN: 'Đã rút lui',
-    SUSPENDED: 'Treo giò',
-    DOWN: 'Mất kết nối',
-    INACTIVE: 'Đã khóa',
-    CLOSED: 'Đã đóng'
-  };
-  if (dangerMap[s]) return `<span class="badge badge-error">${dangerMap[s]}</span>`;
+  const entry = STATUS_LABEL_TONES[s];
+  if (entry) return `<span class="badge badge-${entry[1]}">${entry[0]}</span>`;
   return `<span class="badge badge-neutral">${escapeHtml(s || 'Chưa rõ')}</span>`;
 }
 
@@ -514,6 +513,9 @@ async function initAuthState() {
   }
 }
 
+const API_TIMEOUT_MS = 15000;
+const API_LONG_TIMEOUT_MS = 60000;
+
 async function apiCall(path, options = {}) {
   const isLoginRequest = path.includes('/api/v1/auth/login') || path.includes('/api/v1/auth/register');
   if (AppState.token && !isLoginRequest && isJwtExpired(AppState.token)) {
@@ -529,12 +531,27 @@ async function apiCall(path, options = {}) {
     headers['Authorization'] = `Bearer ${AppState.token}`;
   }
 
+  const requestId = (window.crypto && typeof window.crypto.randomUUID === 'function')
+    ? window.crypto.randomUUID()
+    : `fe-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  headers['X-Request-Id'] = requestId;
+  const effectiveTimeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : API_TIMEOUT_MS;
+
   let resp;
   try {
-    resp = await fetch(path, Object.assign({}, options, { headers }));
-  } catch {
-    const netErr = new Error('Không thể kết nối tới máy chủ API Gateway. Vui lòng kiểm tra kết nối dịch vụ.');
-    netErr.status = 0;
+    const fetchOptions = Object.assign({}, options, { headers });
+    delete fetchOptions.timeoutMs;
+    if (!fetchOptions.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      fetchOptions.signal = AbortSignal.timeout(effectiveTimeoutMs);
+    }
+    resp = await fetch(path, fetchOptions);
+  } catch (fetchErr) {
+    const timedOut = fetchErr && (fetchErr.name === 'TimeoutError' || fetchErr.name === 'AbortError');
+    const netErr = new Error(timedOut
+      ? `Máy chủ phản hồi quá ${Math.round(effectiveTimeoutMs / 1000)} giây. Vui lòng thử lại sau. (Mã yêu cầu: ${requestId})`
+      : 'Không thể kết nối tới máy chủ API Gateway. Vui lòng kiểm tra kết nối dịch vụ.');
+    netErr.status = timedOut ? 504 : 0;
+    netErr.requestId = requestId;
     throw netErr;
   }
 
@@ -554,9 +571,18 @@ async function apiCall(path, options = {}) {
       authErr.status = 401;
       throw authErr;
     }
-    const rawMsg = (body && (body.message || body.error)) || `Lỗi hệ thống (HTTP ${resp.status})`;
+    const traceId = resp.headers.get('X-Request-Id') || requestId;
+    let rawMsg = (body && (body.message || body.error)) || `Lỗi hệ thống (HTTP ${resp.status})`;
+    if (resp.status === 502 || resp.status === 503) {
+      rawMsg = `Dịch vụ tạm thời không khả dụng, vui lòng thử lại sau ít phút. (Mã yêu cầu: ${traceId})`;
+    } else if (resp.status === 504) {
+      rawMsg = `Dịch vụ phản hồi quá chậm, vui lòng thử lại sau. (Mã yêu cầu: ${traceId})`;
+    } else if (resp.status >= 500) {
+      rawMsg = `Lỗi hệ thống (HTTP ${resp.status}). Vui lòng báo quản trị viên kèm mã yêu cầu: ${traceId}`;
+    }
     const err = new Error(rawMsg);
     err.status = resp.status;
+    err.requestId = traceId;
     err.fieldErrors = (body && (body.errors || body.fieldErrors)) || null;
     err.conflicts = (body && Array.isArray(body.conflicts)) ? body.conflicts : null;
     err.body = body;
@@ -1353,6 +1379,11 @@ async function fetchPagedResource(resourceKey, partialRenderer = null) {
       AppState.errors.rankingItems = slice.error;
       AppState.stale.rankingItems = slice.stale;
     }
+    if (err && (err.status >= 500 || err.status === 0) && shouldAutoRenderPaged(resourceKey)) {
+      if (resourceKey !== 'rankingItems' || !AppState.paged.rankings.error) {
+        showToast(slice.error, 'error');
+      }
+    }
   } finally {
     slice.loading = false;
     if (partialRenderer) {
@@ -1599,6 +1630,50 @@ function toggleMobileSidebar(forceOpen = null) {
 }
 
 /* ---------- NAVIGATION & ROUTE GUARD ---------- */
+let __syncingHashFromNav = false;
+
+function parseHashRouteTarget(rawHash) {
+  const cleaned = String(rawHash || '').replace(/^#\/?/, '').trim();
+  if (!cleaned) return null;
+  const parts = cleaned.split('/').filter(Boolean);
+  const head = (parts[0] || '').toLowerCase();
+  const sub = parts[1] ? Number(parts[1]) : null;
+  const aliasMap = { home: 'public-home', auth: 'auth-page', login: 'auth-page' };
+  if (head === 'tournaments' && Number.isFinite(sub) && sub > 0) {
+    return { pageId: 'tournament-detail', selectedTournamentId: sub };
+  }
+  if (head === 'matches' && Number.isFinite(sub) && sub > 0) {
+    return { pageId: 'match-detail', selectedMatchId: sub };
+  }
+  const pageId = aliasMap[head] || head;
+  if (Object.prototype.hasOwnProperty.call(PAGE_PERMISSIONS, pageId)) {
+    return { pageId };
+  }
+  return null;
+}
+
+function syncUrlHashForPage(pageId) {
+  if (typeof window === 'undefined' || !window.history?.replaceState) return;
+  let targetHash = `#/${pageId}`;
+  if (pageId === 'tournament-detail' && AppState.selectedTournamentId) {
+    targetHash = `#/tournaments/${AppState.selectedTournamentId}`;
+  } else if (pageId === 'match-detail' && AppState.selectedMatchId) {
+    targetHash = `#/matches/${AppState.selectedMatchId}`;
+  } else if (pageId === 'auth-page') {
+    targetHash = '#/auth';
+  } else if (pageId === 'public-home') {
+    targetHash = '#/home';
+  }
+  if (window.location.hash !== targetHash) {
+    __syncingHashFromNav = true;
+    try {
+      window.history.replaceState(null, '', targetHash);
+    } finally {
+      setTimeout(() => { __syncingHashFromNav = false; }, 0);
+    }
+  }
+}
+
 function navigateTo(pageId) {
   const requiredPerm = PAGE_PERMISSIONS[pageId];
   toggleMobileSidebar(false);
@@ -1611,6 +1686,7 @@ function navigateTo(pageId) {
       return;
     }
     AppState.currentPage = pageId;
+    syncUrlHashForPage(pageId);
     updateActiveNavState();
     document.getElementById('breadcrumbCurrent').textContent = '403 — Không có quyền truy cập';
     renderForbiddenPage(pageId, requiredPerm);
@@ -1618,6 +1694,7 @@ function navigateTo(pageId) {
   }
 
   AppState.currentPage = pageId;
+  syncUrlHashForPage(pageId);
   updateActiveNavState();
   document.getElementById('breadcrumbCurrent').textContent = PAGE_TITLES[pageId] || pageId;
   renderCurrentPage(true);
@@ -2552,7 +2629,6 @@ function renderTournamentsPage() {
             <option value="OPEN_REGISTRATION" ${slice.filters.status === 'OPEN_REGISTRATION' ? 'selected' : ''}>Đang mở đăng ký</option>
             <option value="UPCOMING" ${slice.filters.status === 'UPCOMING' ? 'selected' : ''}>Sắp khởi tranh</option>
             <option value="ONGOING" ${slice.filters.status === 'ONGOING' ? 'selected' : ''}>Đang diễn ra</option>
-            <option value="COMPLETED" ${slice.filters.status === 'COMPLETED' ? 'selected' : ''}>Đã hoàn thành</option>
             <option value="FINISHED" ${slice.filters.status === 'FINISHED' ? 'selected' : ''}>Đã kết thúc</option>
             <option value="CANCELLED" ${slice.filters.status === 'CANCELLED' ? 'selected' : ''}>Đã hủy</option>
           </select>
@@ -2604,7 +2680,7 @@ function renderTournamentsTableInner() {
                 <div class="page-actions">
                   <button class="btn btn-secondary btn-sm" onclick="AppState.selectedTournamentId=${t.id};navigateTo('tournament-detail')">Chi tiết</button>
                   ${canManage ? `<button class="btn btn-secondary btn-sm" onclick="openEditTournamentModal(${t.id})">Sửa</button>` : ''}
-                  ${canManage ? `<button class="btn btn-secondary btn-sm" onclick="patchTournamentStatus(${t.id}, '${t.status === 'ONGOING' ? 'COMPLETED' : 'ONGOING'}', this)">Đổi TT</button>` : ''}
+                  ${canManage ? `<button class="btn btn-secondary btn-sm" onclick="patchTournamentStatus(${t.id}, '${t.status === 'ONGOING' ? 'FINISHED' : 'ONGOING'}', this)">Đổi TT</button>` : ''}
                   ${canManage ? `<button class="btn btn-danger btn-sm" data-name="${escapeHtml(t.name)}" onclick="confirmDeleteTournament(${t.id}, this.dataset.name)">Xóa</button>` : ''}
                 </div>
               </td>
@@ -3247,7 +3323,7 @@ function renderAthletesTableInner() {
                     <div class="page-actions">
                       ${canEditRow ? `<button class="btn btn-secondary btn-sm" onclick="openEditAthleteModal(${a.id})">Sửa</button>` : ''}
                       ${canEditRow ? `<button class="btn btn-secondary btn-sm" onclick="patchAthleteHealth(${a.id}, '${nextHealth}', this)">Đổi thể lực</button>` : ''}
-                      ${canDelete ? `<button class="btn btn-danger btn-sm" data-name="${escapeHtml(a.fullName)}" onclick="confirmDeleteAthlete(${a.id}, this.dataset.name)">Xóa</button>` : ''}
+                      ${(canDelete) ? `<button class="btn btn-danger btn-sm" data-name="${escapeHtml(a.fullName)}" onclick="confirmDeleteAthlete(${a.id}, this.dataset.name)">Xóa</button>` : ''}
                     </div>
                   </td>
                 ` : ''}
@@ -3314,6 +3390,7 @@ function renderScheduleTableInner() {
   const slice = AppState.paged.matches;
   const canSchedule = hasPermission('matches.schedule');
   const canSubmitResult = hasPermission('results.submit_assigned');
+  const canApproveResult = hasPermission('results.approve');
   const canDelete = hasPermission('tournaments.manage');
   const startIdx = slice.page * slice.size;
 
@@ -3330,6 +3407,8 @@ function renderScheduleTableInner() {
         <tbody>
           ${slice.items.map((m, idx) => {
             const matchTitle = `${m.participant1 || 'Đội 1'} vs ${m.participant2 || 'Đội 2'}`;
+            const isAssignedRef = Boolean(AppState.user?.username && m.refereeUsername
+              && AppState.user.username.toLowerCase() === m.refereeUsername.toLowerCase());
             return `
               <tr>
                 <td class="tabular-nums"><strong>#${String(startIdx + idx + 1).padStart(2, '0')}</strong></td>
@@ -3343,7 +3422,7 @@ function renderScheduleTableInner() {
                   <div class="page-actions">
                     <button class="btn btn-secondary btn-sm" onclick="viewMatchDetails(${m.id})">Chi tiết</button>
                     ${canSchedule ? `<button class="btn btn-secondary btn-sm" onclick="openEditMatchModal(${m.id})">Sửa</button>` : ''}
-                    ${canSubmitResult ? `<button class="btn btn-primary btn-sm" onclick="openRecordResultModal(${m.id})">Nhập KQ</button>` : ''}
+                    ${canSubmitResult && (canApproveResult || isAssignedRef) ? `<button class="btn btn-primary btn-sm" onclick="openRecordResultModal(${m.id})">Nhập KQ</button>` : ''}
                     ${canDelete ? `<button class="btn btn-danger btn-sm" data-name="${escapeHtml(matchTitle)}" onclick="confirmDeleteMatch(${m.id}, this.dataset.name)">Xóa</button>` : ''}
                   </div>
                 </td>
@@ -3440,7 +3519,7 @@ function renderMatchDetailPage() {
       <div class="page-actions">
         ${canSchedule ? `<button class="btn btn-secondary" onclick="openEditMatchModal(${match.id})">Sửa lịch trận</button>` : ''}
         ${isAssignedRef && (match.status === 'SCHEDULED' || match.status === 'POSTPONED') ? `<button class="btn btn-secondary" onclick="patchMatchStatusOnly(${match.id}, 'ONGOING', this)">▶ Bắt đầu trận</button>` : ''}
-        ${canSubmit ? `<button class="btn btn-primary" onclick="openRecordResultModal(${match.id})">Nhập / Cập nhật tỷ số</button>` : ''}
+        ${canSubmit && (canApprove || isAssignedRef) ? `<button class="btn btn-primary" onclick="openRecordResultModal(${match.id})">Nhập / Cập nhật tỷ số</button>` : ''}
         ${canApprove && needsSyncRetry ? `<button class="btn btn-warning" onclick="retrySyncResultNow(${res.id}, ${match.id}, this)">↻ Đồng bộ lại Trận & BXH</button>` : ''}
       </div>
     </div>
@@ -3542,6 +3621,8 @@ function renderResultsTableInner() {
             const m = AppState.data.matches.find(x => Number(x.id) === Number(r.matchId)) || {};
             const matchTitle = m.participant1 ? `${m.participant1} vs ${m.participant2}` : `Trận #${r.matchId}`;
             const isConfirmed = String(r.status || '').toUpperCase() === 'CONFIRMED';
+            const isAssignedRef = Boolean(AppState.user?.username && m.refereeUsername
+              && AppState.user.username.toLowerCase() === m.refereeUsername.toLowerCase());
             return `
               <tr>
                 <td class="tabular-nums"><strong>#${String(startIdx + idx + 1).padStart(2, '0')}</strong></td>
@@ -3561,7 +3642,7 @@ function renderResultsTableInner() {
                 </td>
                 <td>
                   <div class="page-actions">
-                    ${canSubmit && !isConfirmed ? `<button class="btn btn-secondary btn-sm" onclick="openRecordResultModal(${r.matchId})">Sửa</button>` : ''}
+                    ${canSubmit && (canApprove || isAssignedRef) && !isConfirmed ? `<button class="btn btn-secondary btn-sm" onclick="openRecordResultModal(${r.matchId})">Sửa</button>` : ''}
                     ${canApprove && !isConfirmed ? `<button class="btn btn-primary btn-sm" onclick="confirmMatchResult(${r.id}, this)">✓ Xác nhận</button>` : ''}
                     ${isConfirmed && String(r.syncStatus || 'SYNCED').toUpperCase() === 'SYNCED' ? `<span class="badge badge-success">Hoàn tất</span>` : ''}
                     ${canApprove && isConfirmed ? `<button class="btn btn-secondary btn-sm" onclick="reopenResultById(${r.id}, ${r.matchId}, this)">Mở lại</button>` : ''}
@@ -4367,7 +4448,7 @@ function renderTournamentFormHtml(editId, t) {
             <option value="OPEN_REGISTRATION" ${t.status === 'OPEN_REGISTRATION' ? 'selected' : ''}>Đang mở đăng ký</option>
             <option value="UPCOMING" ${t.status === 'UPCOMING' ? 'selected' : ''}>Sắp khởi tranh</option>
             <option value="ONGOING" ${t.status === 'ONGOING' ? 'selected' : ''}>Đang diễn ra</option>
-            <option value="COMPLETED" ${t.status === 'COMPLETED' ? 'selected' : ''}>Đã hoàn thành</option>
+            ${t.status === 'COMPLETED' ? '<option value="COMPLETED" selected>Đã hoàn thành (dữ liệu cũ)</option>' : ''}
             <option value="FINISHED" ${t.status === 'FINISHED' ? 'selected' : ''}>Đã kết thúc</option>
             <option value="CANCELLED" ${t.status === 'CANCELLED' ? 'selected' : ''}>Đã hủy</option>
           </select>
@@ -4602,8 +4683,7 @@ async function openCreateCompetitionModal(tournamentId) {
             <option value="DRAFT">Bản nháp</option>
             <option value="SCHEDULED">Đã xếp lịch</option>
             <option value="ONGOING">Đang diễn ra</option>
-            <option value="COMPLETED">Hoàn thành</option>
-            <option value="FINISHED">Kết thúc</option>
+            <option value="FINISHED">Đã kết thúc</option>
             <option value="CANCELLED">Đã hủy</option>
           </select>
         </div>
@@ -4679,8 +4759,8 @@ async function openCompetitionSettingsModal(tournamentId, competitionId) {
             <option value="OPEN_REGISTRATION" ${comp.status === 'OPEN_REGISTRATION' ? 'selected' : ''}>Mở đăng ký</option>
             <option value="SCHEDULED" ${comp.status === 'SCHEDULED' ? 'selected' : ''}>Đã xếp lịch</option>
             <option value="ONGOING" ${comp.status === 'ONGOING' ? 'selected' : ''}>Đang diễn ra</option>
-            <option value="COMPLETED" ${comp.status === 'COMPLETED' ? 'selected' : ''}>Hoàn thành</option>
-            <option value="FINISHED" ${comp.status === 'FINISHED' ? 'selected' : ''}>Kết thúc</option>
+            ${comp.status === 'COMPLETED' ? '<option value="COMPLETED" selected>Đã hoàn thành (dữ liệu cũ)</option>' : ''}
+            <option value="FINISHED" ${comp.status === 'FINISHED' ? 'selected' : ''}>Đã kết thúc</option>
             <option value="CANCELLED" ${comp.status === 'CANCELLED' ? 'selected' : ''}>Đã hủy</option>
           </select>
         </div>
@@ -5305,6 +5385,14 @@ async function openRegisterParticipantModal(tournamentId) {
     return;
   }
   const d = AppState.data;
+  const isManager = AppState.user?.role === 'ROLE_TEAM_MANAGER';
+  const myUsername = String(AppState.user?.username || '').toLowerCase();
+  const regTeams = isManager
+    ? d.teams.filter(t => t.ownerUsername && t.ownerUsername.toLowerCase() === myUsername)
+    : d.teams;
+  const regAthletes = isManager
+    ? d.athletes.filter(a => a.ownerUsername && a.ownerUsername.toLowerCase() === myUsername)
+    : d.athletes;
 
   openModal('Đăng ký Tham gia Giải đấu', `
     <form id="registrationForm" onsubmit="submitRegistrationForm(event)">
@@ -5319,13 +5407,13 @@ async function openRegisterParticipantModal(tournamentId) {
         <label for="mRegType">Đối tượng đăng ký *</label>
         <select id="mRegType" data-field="participantType" class="select" onchange="toggleRegistrationParticipantOptions()">
           <option value="TEAM">Đội tuyển / Câu lạc bộ</option>
-          ${d.athletes.length > 0 ? '<option value="ATHLETE">Vận động viên cá nhân</option>' : ''}
+          ${regAthletes.length > 0 ? '<option value="ATHLETE">Vận động viên cá nhân</option>' : ''}
         </select>
       </div>
       <div class="form-group">
         <label for="mRegRefId">Chọn Đội tuyển / VĐV *</label>
         <select id="mRegRefId" data-field="participantReferenceId" class="select">
-          ${d.teams.map(t => `<option value="${t.id}" data-label="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join('')}
+          ${regTeams.map(t => `<option value="${t.id}" data-label="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join('') || '<option value="">-- Bạn chưa có đội tuyển phù hợp --</option>'}
         </select>
       </div>
       <div class="page-actions" style="justify-content:flex-end;">
@@ -5340,14 +5428,22 @@ function toggleRegistrationParticipantOptions() {
   const type = document.getElementById('mRegType')?.value;
   const refSel = document.getElementById('mRegRefId');
   if (!refSel) return;
+  const isManager = AppState.user?.role === 'ROLE_TEAM_MANAGER';
+  const myUsername = String(AppState.user?.username || '').toLowerCase();
   if (type === 'ATHLETE') {
-    refSel.innerHTML = AppState.data.athletes
+    const list = isManager
+      ? AppState.data.athletes.filter(a => a.ownerUsername && a.ownerUsername.toLowerCase() === myUsername)
+      : AppState.data.athletes;
+    refSel.innerHTML = list
       .map(a => `<option value="${a.id}" data-label="${escapeHtml(a.fullName)}">${escapeHtml(a.fullName)}</option>`)
-      .join('');
+      .join('') || '<option value="">-- Bạn chưa có VĐV phù hợp --</option>';
   } else {
-    refSel.innerHTML = AppState.data.teams
+    const list = isManager
+      ? AppState.data.teams.filter(t => t.ownerUsername && t.ownerUsername.toLowerCase() === myUsername)
+      : AppState.data.teams;
+    refSel.innerHTML = list
       .map(t => `<option value="${t.id}" data-label="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`)
-      .join('');
+      .join('') || '<option value="">-- Bạn chưa có đội tuyển phù hợp --</option>';
   }
 }
 
@@ -5631,6 +5727,7 @@ async function submitAutoGenerateSchedule(e) {
   const unlock = lockFormSubmit(form, 'Đang tạo lịch...');
   try {
     const res = await apiCall('/api/v1/matches/generate-schedule', {
+      timeoutMs: API_LONG_TIMEOUT_MS,
       method: 'POST',
       body: JSON.stringify({
         tournamentId: tourId,
@@ -5712,6 +5809,7 @@ async function submitGenerateNextRound(e) {
   const unlock = lockFormSubmit(form, 'Đang tạo vòng tiếp theo...');
   try {
     const res = await apiCall('/api/v1/matches/generate-next-round', {
+      timeoutMs: API_LONG_TIMEOUT_MS,
       method: 'POST',
       body: JSON.stringify(payload)
     });
@@ -6319,8 +6417,8 @@ async function confirmMatchResult(resultId, btn = null) {
       );
     }
     await refreshAfterMutation({
-      clearCache: ['results', 'rankings'],
-      paged: ['results'],
+      clearCache: ['results', 'rankings', 'matches'],
+      paged: ['results', 'notifications'],
       reloadMatchId: saved?.matchId || AppState.selectedMatchId,
       reloadTournamentId: AppState.selectedTournamentId
     });
@@ -6384,7 +6482,7 @@ async function recalculateStandingsNow(btn = null) {
   }
   if (btn) btn.disabled = true;
   try {
-    await apiCall(`/api/v1/rankings/competition/${cid}/recalculate`, { method: 'POST' });
+    await apiCall(`/api/v1/rankings/competition/${cid}/recalculate`, { method: 'POST', timeoutMs: API_LONG_TIMEOUT_MS });
     showToast('Đã tính toán lại Bảng xếp hạng từ kết quả đã xác nhận!');
     await refreshAfterMutation({
       clearCache: ['rankings'],
@@ -6615,7 +6713,7 @@ async function exportFullSystemReportJSON(btn = null, allowPartial = false) {
 
   try {
     const query = allowPartial ? '?allowPartial=true' : '';
-    const resp = await apiCall(`/api/v1/reports/system-export${query}`);
+    const resp = await apiCall(`/api/v1/reports/system-export${query}`, { timeoutMs: API_LONG_TIMEOUT_MS });
     const report = resp.data || {};
     const dateTag = String(report.generatedAt || new Date().toISOString()).slice(0, 10);
     const filename = report.partial
@@ -6819,7 +6917,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   await loadCoreStats();
-  if (AppState.currentPage === 'auth-page') {
+  window.addEventListener('hashchange', async () => {
+    if (__syncingHashFromNav) return;
+    const target = parseHashRouteTarget(window.location.hash);
+    if (!target) return;
+    if (target.selectedTournamentId) AppState.selectedTournamentId = target.selectedTournamentId;
+    if (target.selectedMatchId) AppState.selectedMatchId = target.selectedMatchId;
+    await navigateTo(target.pageId);
+  });
+
+  const initialHashTarget = parseHashRouteTarget(window.location.hash);
+  if (initialHashTarget && AppState.currentPage !== 'auth-page') {
+    if (initialHashTarget.selectedTournamentId) AppState.selectedTournamentId = initialHashTarget.selectedTournamentId;
+    if (initialHashTarget.selectedMatchId) AppState.selectedMatchId = initialHashTarget.selectedMatchId;
+    await navigateTo(initialHashTarget.pageId);
+  } else if (AppState.currentPage === 'auth-page') {
     await navigateTo('auth-page');
   } else {
     await navigateTo(AppState.currentPage);

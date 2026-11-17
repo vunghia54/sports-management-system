@@ -567,6 +567,17 @@ body {
   color: #06281E;
 }
 
+.btn-warning {
+  background-color: var(--color-warning-soft);
+  color: var(--color-warning);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.btn-warning:hover:not(:disabled) {
+  background-color: var(--color-warning);
+  color: #1E293B;
+}
+
 .btn-danger {
   background-color: var(--color-error-soft);
   color: var(--color-error);
