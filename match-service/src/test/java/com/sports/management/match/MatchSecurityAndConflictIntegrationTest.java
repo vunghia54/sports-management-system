@@ -153,6 +153,42 @@ class MatchSecurityAndConflictIntegrationTest {
         return "Bearer " + jwt.serialize();
     }
 
+    private String issueExpiredToken(String username, String role) throws Exception {
+        long now = System.currentTimeMillis();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .subject(username)
+                .claim("role", role)
+                .issueTime(new Date(now - 7_200_000L))
+                .expirationTime(new Date(now - 3_600_000L))
+                .build();
+        SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
+        jwt.sign(new MACSigner(JWT_SECRET.getBytes(StandardCharsets.UTF_8)));
+        return "Bearer " + jwt.serialize();
+    }
+
+    @Test
+    void expiredTokenSignedWithCorrectSecretIsRejectedWith401() throws Exception {
+        // Token ky dung secret, dung role, chi khac la da het han -> phai bi 401 vi het han (khong phai vi sai chu ky)
+        mockMvc.perform(patch("/api/v1/matches/" + org1Match.getId())
+                        .header("Authorization", issueExpiredToken("organizer1", "ROLE_ORGANIZER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"location\":\"San het han\"}"))
+                .andExpect(status().isUnauthorized());
+
+        // Doi chung tren cung endpoint bao ve (PATCH) va GET: cung nguoi dung, cung secret nhung con han -> 200 OK
+        String validOrg1Token = issueToken("organizer1", "ROLE_ORGANIZER");
+        mockMvc.perform(patch("/api/v1/matches/" + org1Match.getId())
+                        .header("Authorization", validOrg1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"location\":\"San hop le\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.location").value("San hop le"));
+
+        mockMvc.perform(get("/api/v1/matches/" + org1Match.getId())
+                        .header("Authorization", validOrg1Token))
+                .andExpect(status().isOk());
+    }
+
     @Test
     void unauthenticatedAndViewerAreRejectedByRealSecurityFilter() throws Exception {
         mockMvc.perform(post("/api/v1/matches")

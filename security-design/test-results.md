@@ -1,8 +1,13 @@
 # BÁO CÁO KẾT QUẢ KIỂM THỬ BẢO MẬT (SECURITY TEST RESULTS)
 **Học phần:** Phát triển phần mềm hướng dịch vụ (PTPMHDV) — Buổi thực hành 5  
 **Hệ thống:** Sports Management Multi-Service System  
-**Ngày thực hiện:** 17/11/2026  
-**Công cụ kiểm thử:** Newman 6.2.3 (`security-design/postman-collection.json` -> `docs/test/test-results/security-th5-newman.json`, 45 requests / 46 assertions — **0 failed**, avg `34.0 ms`)  
+**Ngày thực hiện:** 17–18/11/2026  
+**Công cụ kiểm thử:** Newman 6.2.3 (`security-design/postman-collection.json` -> `docs/test/test-results/security-th5-newman.json`, 47 requests / 48 assertions — **0 failed**, avg `40 ms`)  
+**Cách chạy với secret thật (không ghi secret ra file):**
+```powershell
+$s = (Select-String '^JWT_SECRET=' .env).Line.Substring(11).Trim()
+npx newman run security-design/postman-collection.json --env-var "jwtSecret=$s" -r cli,json --reporter-json-export docs/test/test-results/security-th5-newman.json
+```
 
 ---
 
@@ -26,10 +31,11 @@
 | **TC14** | Admin Override | `PUT /api/v1/tournaments/{id}` | `admin` (`ROLE_ADMIN`) | `200 OK`, Admin có toàn quyền can thiệp mọi giải đấu | `200 OK`, Admin cập nhật giải đấu thành công | **ĐẠT** |
 | **TC15** | Bảo mật liên dịch vụ | `POST /api/v1/matches` | `organizer1` (Token Propagation) | `201 Created`, Match Service gọi Tournament Service thành công | `201 Created`, xác nhận Tournament 1 tồn tại qua REST | **ĐẠT** |
 | **TC16** | Dữ liệu không tồn tại | `POST /api/v1/matches` | `organizer1` (`tournamentId: 999999`) | `400 Bad Request`, báo giải đấu không tồn tại | `400 Bad Request`, Invalid tournament ID | **ĐẠT** |
-| **TC17** | Phân quyền Trọng tài & Kết quả | `PATCH /api/v1/matches/{id}` (`ONGOING`) -> `POST /api/v1/results` -> Organizer `PUT /api/v1/results/{rid}/confirm` -> `GET /api/v1/matches/{id}` | `referee1` (`ROLE_REFEREE`) & `organizer1` (`ROLE_ORGANIZER`) | Trọng tài bắt đầu trận và nhập điểm (`201`), BTC xác nhận (`200`), trận chuyển sang `FINISHED` | Trọng tài chuyển `ONGOING` (`200`) + ghi điểm (`201`, `PENDING_CONFIRMATION`), BTC xác nhận (`200`), trận #25 chuyển `FINISHED` | **ĐẠT** |
+| **TC17** | Phân quyền Trọng tài & Kết quả | `PATCH /api/v1/matches/{id}` (`ONGOING`) -> `POST /api/v1/results` -> Organizer `PUT /api/v1/results/{rid}/confirm` -> `GET /api/v1/matches/{id}` | `referee1` (`ROLE_REFEREE`) & `organizer1` (`ROLE_ORGANIZER`) | Trọng tài bắt đầu trận và nhập điểm (`201`), BTC xác nhận (`200`), trận chuyển sang `FINISHED` | Trọng tài chuyển `ONGOING` (`200`) + ghi điểm (`201`, `PENDING_CONFIRMATION`), BTC xác nhận (`200`), trận #36 chuyển `FINISHED` | **ĐẠT** |
 | **TC18** | Phân quyền Trọng tài | `PATCH /api/v1/matches/{id}` | `user1` (`ROLE_VIEWER`) | `403 Forbidden`, User thường không được sửa trận đấu | `403 Forbidden`, Access Denied | **ĐẠT** |
 | **TC19** | Quyền xóa trận đấu | `DELETE /api/v1/matches/{id}` | `admin` (`ROLE_ADMIN`) | `204 No Content`, xóa thành công trận đấu | `204 No Content`, trận đấu đã bị xóa | **ĐẠT** |
-| **TC20** | Token hết hạn | `GET /api/v1/auth/me` | JWT có `exp` trong quá khứ | `401 Unauthorized`, từ chối token hết hạn | `401 Unauthorized` (`Invalid or expired token`) | **ĐẠT** |
+| **TC20b** | Đối chứng chữ ký JWT | `GET /api/v1/auth/me` | Token ký đúng secret (`jwtSecret`), còn hạn (`exp = now + 3600`, `sub = organizer1`) | `200 OK`, chứng minh chữ ký HMAC-SHA256 hợp lệ với secret của server | `200 OK` (`username: organizer1`) | **ĐẠT** |
+| **TC20** | Token hết hạn | `GET /api/v1/auth/me` | Token ký đúng secret, chỉ khác `exp` đã qua (`iat = now - 7200`, `exp = now - 3600`) | `401 Unauthorized`, từ chối riêng vì hết hạn (không trùng TC09 sai chữ ký) | `401 Unauthorized` (`Invalid or expired token`) | **ĐẠT** |
 
 ---
 
@@ -49,6 +55,13 @@
   - `TournamentClient` lấy token từ request gốc và chuyển tiếp trong header HTTP outbound.
   - Cả hai service phối hợp nhịp nhàng, đảm bảo an toàn end-to-end.
 
+### 2.3. Kiểm tra Token hết hạn có chữ ký hợp lệ (TC20b vs TC20)
+* **Kịch bản đối chứng:**
+  - **TC20b (Đối chứng dương):** Pre-request script ký JWT HS256 cho `organizer1` bằng đúng `jwtSecret` của hệ thống nhưng `exp = now + 3600`. `GET /api/v1/auth/me` trả **`200 OK`** (`username = organizer1`), chứng minh chữ ký HMAC khớp với server.
+  - **TC20 (Token hết hạn):** Cùng thuật toán và cùng `jwtSecret`, chỉ thay `iat = now - 7200`, `exp = now - 3600` (đã qua). `GET /api/v1/auth/me` trả **`401 Unauthorized`**, chứng minh token bị từ chối chính xác vì hết hạn (`exp`) chứ không phải vì sai secret như `TC09`.
+  - Sau khi ký ở `TC20`, test script gọi `pm.environment.unset('jwtSecret')` nên file xuất `docs/test/test-results/security-th5-newman.json` hoàn toàn không lưu chuỗi secret.
+  - Ở tầng JUnit (`match-service`), `MatchSecurityAndConflictIntegrationTest#expiredTokenSignedWithCorrectSecretIsRejectedWith401` cũng xác minh trực tiếp bằng cùng `JWT_SECRET` test: token hết hạn bị `401` trên `PATCH /api/v1/matches/{id}`, trong khi token còn hạn trả `200` trên cả `PATCH` và `GET /api/v1/matches/{id}`.
+
 ---
 
 ## 3. Tổng kết đánh giá theo thang điểm Buổi thực hành 5
@@ -59,6 +72,6 @@
 | 2. Đăng nhập, BCrypt và JWT | 2.0 | Xây dựng hoàn chỉnh `Auth Service` với mã hóa mật khẩu `BCryptPasswordEncoder` và cấp phát JWT chuẩn HS256 (`expiresIn: 3600`). | **ĐẠT (2.0/2.0)** |
 | 3. Cấu hình bảo vệ API | 1.5 | Cấu hình `SecurityFilterChain`, `JwtAuthenticationFilter`, chuẩn hóa mã lỗi 401/403 cho tất cả các service. | **ĐẠT (1.5/1.5)** |
 | 4. Phân quyền theo vai trò và quyền sở hữu | 2.0 | Triển khai cả RBAC và Resource Ownership (chỉ owner hoặc admin mới được sửa/xóa giải đấu). | **ĐẠT (2.0/2.0)** |
-| 5. Kiểm thử các trường hợp truy cập trái phép | 2.0 | Bộ kiểm thử Postman 45 requests / 46 assertions (TC01–TC20, bao gồm thiếu token, token giả mạo, token hết hạn, VIEWER 403, ownership IDOR 403) pass 100% qua Newman (`security-th5-newman.json`). | **ĐẠT (2.0/2.0)** |
+| 5. Kiểm thử các trường hợp truy cập trái phép | 2.0 | Bộ kiểm thử Postman 47 requests / 48 assertions (TC01–TC20 + đối chứng TC20b, gồm thiếu token, token giả mạo, token ký đúng secret nhưng hết hạn, VIEWER 403, ownership IDOR 403) pass 100% qua Newman (`security-th5-newman.json`). | **ĐẠT (2.0/2.0)** |
 | 6. Áp dụng vào Bài tập lớn và giải thích kiến trúc | 1.0 | Áp dụng trực tiếp vào Sports Management System, có kiến trúc Token Propagation liên dịch vụ. | **ĐẠT (1.0/1.0)** |
 | **TỔNG ĐIỂM** | **10.0** | **Hệ thống đáp ứng toàn diện mọi yêu cầu lý thuyết và thực hành.** | **10.0 / 10.0** |

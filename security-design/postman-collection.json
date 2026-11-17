@@ -21,26 +21,29 @@
 									"const now = new Date();",
 									"const pad = (n) => String(n).padStart(2, '0');",
 									"const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;",
+									"const fmtDt = (d) => `${fmt(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;",
 									"const addDays = (d, n) => new Date(d.getTime() + n * 86400000);",
 									"const todayStr = fmt(now);",
-									"pm.collectionVariables.set('regStart', fmt(addDays(now, -3)));",
+									"pm.collectionVariables.set('regStart', fmt(addDays(now, -5)));",
+									"pm.collectionVariables.set('pastStart', fmt(addDays(now, -3)));",
 									"pm.collectionVariables.set('regEnd', todayStr);",
 									"pm.collectionVariables.set('tourStart', todayStr);",
 									"pm.collectionVariables.set('tourEnd', fmt(addDays(now, 20)));",
-									"pm.collectionVariables.set('pastMatchTime', todayStr + 'T00:05:00');",
+									"pm.collectionVariables.set('pastMatchTime', fmtDt(new Date(now.getTime() - 24 * 3600000)));",
 									"pm.collectionVariables.set('deleteMatchTime', fmt(addDays(now, 10 + (Number(tag) % 8))) + 'T18:00:00');",
 									"pm.sendRequest(pm.collectionVariables.replaceIn('{{matchUrl}}/api/v1/matches'), function (err, res) {",
 									"    if (err || !res) return;",
 									"    try {",
 									"        const body = res.json();",
 									"        const list = Array.isArray(body) ? body : (body.content || []);",
-									"        const busyTimes = list.filter((m) => String(m.matchTime || '').startsWith(todayStr) && (!m.refereeUsername || m.refereeUsername === 'referee1')).map((m) => new Date(m.matchTime).getTime());",
-									"        const maxHour = Math.max(0, Math.min(22, now.getHours() - 1));",
-									"        for (let h = maxHour; h >= 0; h--) {",
-									"            const candStr = `${todayStr}T${pad(h)}:15:00`;",
-									"            const candMs = new Date(candStr).getTime();",
-									"            if (busyTimes.every((b) => Math.abs(candMs - b) >= 3 * 3600 * 1000)) {",
-									"                pm.collectionVariables.set('pastMatchTime', candStr);",
+									"        const toMs = (v) => Array.isArray(v) ? new Date(v[0], v[1]-1, v[2], v[3]||0, v[4]||0).getTime() : new Date(v).getTime();",
+									"        const busyTimes = list.filter((m) => m.matchTime && (!m.refereeUsername || m.refereeUsername === 'referee1')).map((m) => toMs(m.matchTime));",
+									"        for (let minsAgo = 60; minsAgo <= 68 * 60; minsAgo += 30) {",
+									"            const cand = new Date(now.getTime() - minsAgo * 60000);",
+									"            cand.setSeconds(0, 0);",
+									"            const candMs = cand.getTime();",
+									"            if (busyTimes.every((b) => Math.abs(candMs - b) >= 2.5 * 3600 * 1000)) {",
+									"                pm.collectionVariables.set('pastMatchTime', fmtDt(cand));",
 									"                return;",
 									"            }",
 									"        }",
@@ -468,6 +471,55 @@
 					}
 				},
 				{
+					"name": "TC20b - Valid Secret Control: Call Protected API with Unexpired JWT (Expected 200)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const b64url = (str) => CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(str))",
+									"    .replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+									"const nowSec = Math.floor(Date.now() / 1000);",
+									"const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));",
+									"const payload = b64url(JSON.stringify({",
+									"    sub: 'organizer1',",
+									"    role: 'ROLE_ORGANIZER',",
+									"    iat: nowSec,",
+									"    exp: nowSec + 3600",
+									"}));",
+									"const secret = pm.environment.get('jwtSecret') || pm.variables.get('jwtSecret') || 'local-dev-test-jwt-secret-key-at-least-32-bytes';",
+									"const sig = CryptoJS.enc.Base64.stringify(CryptoJS.HmacSHA256(header + '.' + payload, secret))",
+									"    .replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+									"pm.collectionVariables.set('validControlJwtToken', `${header}.${payload}.${sig}`);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Validly signed unexpired JWT returns 200 OK (proves secret matches)', function () {",
+									"    pm.response.to.have.status(200);",
+									"    const body = pm.response.json();",
+									"    pm.expect(body.username).to.eql('organizer1');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{validControlJwtToken}}" }],
+						"url": {
+							"raw": "{{authUrl}}/api/v1/auth/me",
+							"host": ["{{authUrl}}"],
+							"path": ["api", "v1", "auth", "me"]
+						}
+					}
+				},
+				{
 					"name": "TC20 - Expired Token: Call Protected API with Expired JWT (Expected 401)",
 					"event": [
 						{
@@ -484,7 +536,7 @@
 									"    iat: nowSec - 7200,",
 									"    exp: nowSec - 3600",
 									"}));",
-									"const secret = pm.environment.get('jwtSecret') || 'local-dev-test-jwt-secret-key-at-least-32-bytes';",
+									"const secret = pm.environment.get('jwtSecret') || pm.variables.get('jwtSecret') || 'local-dev-test-jwt-secret-key-at-least-32-bytes';",
 									"const sig = CryptoJS.enc.Base64.stringify(CryptoJS.HmacSHA256(header + '.' + payload, secret))",
 									"    .replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
 									"pm.collectionVariables.set('expiredJwtToken', `${header}.${payload}.${sig}`);"
@@ -496,6 +548,7 @@
 							"listen": "test",
 							"script": {
 								"exec": [
+									"pm.environment.unset('jwtSecret');",
 									"pm.test('Expired JWT returns 401 Unauthorized', function () {",
 									"    pm.response.to.have.status(401);",
 									"});"
@@ -1070,6 +1123,36 @@
 							"raw": "{{matchUrl}}/api/v1/participants/competition/{{secCompId}}",
 							"host": ["{{matchUrl}}"],
 							"path": ["api", "v1", "participants", "competition", "{{secCompId}}"]
+						}
+					}
+				},
+				{
+					"name": "Setup - Shift Tournament Start Date for Past Match Result Entry",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Shift tournament start date 200', function () { pm.response.to.have.status(200); });"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{organizer1Token}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"registrationEndDate\": \"{{pastStart}}\",\n  \"startDate\": \"{{pastStart}}\",\n  \"status\": \"ONGOING\"\n}"
+						},
+						"url": {
+							"raw": "{{tournamentUrl}}/api/v1/tournaments/{{createdTournamentId}}",
+							"host": ["{{tournamentUrl}}"],
+							"path": ["api", "v1", "tournaments", "{{createdTournamentId}}"]
 						}
 					}
 				}
