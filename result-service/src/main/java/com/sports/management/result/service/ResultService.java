@@ -194,7 +194,12 @@ public class ResultService {
             Map<String, Object> verifiedMatch) {
 
         Result existing = getResultById(id);
-        Long competitionId = extractCompetitionId(verifiedMatch);
+        Map<String, Object> currentMatch = verifiedMatch != null
+                ? verifiedMatch
+                : matchAndRankingClient.getMatchById(existing.getMatchId());
+        assertMatchEligibleForResult(currentMatch, existing.getMatchId());
+
+        Long competitionId = extractCompetitionId(currentMatch);
         if (competitionId == null) {
             competitionId = existing.getCompetitionId();
         }
@@ -442,9 +447,13 @@ public class ResultService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không tìm thấy thông tin trận đấu #" + matchId);
         }
         String mStatus = match.get("status") != null ? String.valueOf(match.get("status")).trim().toUpperCase() : "";
+        if ("CANCELLED".equals(mStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Trận đấu #" + matchId + " đã bị hủy (CANCELLED), không thể ghi hoặc xác nhận kết quả");
+        }
         if (!"ONGOING".equals(mStatus) && !"FINISHED".equals(mStatus)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Chỉ được ghi kết quả khi trận đấu đang diễn ra (ONGOING) hoặc đã kết thúc (FINISHED); trạng thái hiện tại: " + mStatus);
+                    "Chỉ được ghi hoặc xác nhận kết quả khi trận đấu đang diễn ra (ONGOING) hoặc đã kết thúc (FINISHED); trạng thái hiện tại: " + mStatus);
         }
         LocalDateTime matchTime = parseLocalDateTime(match.get("matchTime"));
         if (matchTime != null && matchTime.isAfter(LocalDateTime.now())) {

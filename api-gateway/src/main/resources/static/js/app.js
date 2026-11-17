@@ -407,7 +407,8 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function getTodayLocalIsoDate() {
@@ -4057,7 +4058,7 @@ function renderUsersTableInner() {
                     <option value="ROLE_TEAM_MANAGER" ${u.role === 'ROLE_TEAM_MANAGER' ? 'selected' : ''}>Lãnh đội / HLV</option>
                     <option value="ROLE_VIEWER" ${u.role === 'ROLE_VIEWER' || u.role === 'ROLE_USER' ? 'selected' : ''}>Khán giả</option>
                   </select>
-                  <button class="btn btn-secondary btn-sm" onclick="openAdminResetPasswordModal(${u.id}, '${escapeHtml(u.username)}')">Đặt lại MK</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-action="admin-reset-password" data-user-id="${u.id}" data-username="${escapeHtml(u.username)}">Đặt lại MK</button>
                   <button class="btn btn-secondary btn-sm" onclick="toggleUserActiveStatus(${u.id}, ${!u.active}, this)">${u.active ? 'Khóa' : 'Mở'}</button>
                 </div>
               </td>
@@ -6807,6 +6808,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   document.addEventListener('click', (e) => {
+    const resetBtn = e.target?.closest?.('button[data-action="admin-reset-password"]');
+    if (resetBtn) {
+      openAdminResetPasswordModal(Number(resetBtn.dataset.userId), resetBtn.dataset.username || '');
+      return;
+    }
     if (searchContainer && !searchContainer.contains(e.target)) {
       closeGlobalSearchDropdown();
     }

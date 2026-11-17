@@ -1,10 +1,12 @@
 package com.sports.management.team.service;
 
 import com.sports.management.team.client.AthleteClient;
+import com.sports.management.team.client.MatchClient;
 import com.sports.management.team.model.Team;
 import com.sports.management.team.model.TeamMember;
 import com.sports.management.team.repository.TeamMemberRepository;
 import com.sports.management.team.repository.TeamRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -38,14 +40,25 @@ public class TeamService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository memberRepository;
     private final AthleteClient athleteClient;
+    private final MatchClient matchClient;
 
     public TeamService(
             TeamRepository teamRepository,
             TeamMemberRepository memberRepository,
             AthleteClient athleteClient) {
+        this(teamRepository, memberRepository, athleteClient, null);
+    }
+
+    @Autowired
+    public TeamService(
+            TeamRepository teamRepository,
+            TeamMemberRepository memberRepository,
+            AthleteClient athleteClient,
+            MatchClient matchClient) {
         this.teamRepository = teamRepository;
         this.memberRepository = memberRepository;
         this.athleteClient = athleteClient;
+        this.matchClient = matchClient;
     }
 
     public List<Team> getAllTeams() {
@@ -209,6 +222,10 @@ public class TeamService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Số áo " + member.getJerseyNumber() + " đã được sử dụng trong đội tuyển #" + member.getTeamId());
         }
+        if (matchClient != null) {
+            int nextCount = memberRepository.findByTeamId(member.getTeamId()).size() + 1;
+            matchClient.validateTeamRosterChange(member.getTeamId(), member.getAthleteId(), nextCount);
+        }
         if (athleteInfo.get("fullName") != null
                 && (member.getAthleteName() == null || member.getAthleteName().isBlank())) {
             member.setAthleteName(String.valueOf(athleteInfo.get("fullName")));
@@ -235,13 +252,18 @@ public class TeamService {
 
     @Transactional
     public boolean removeMember(Long teamId, Long memberId) {
-        return memberRepository.findById(memberId)
+        TeamMember target = memberRepository.findById(memberId)
                 .filter(member -> Objects.equals(member.getTeamId(), teamId))
-                .map(member -> {
-                    memberRepository.delete(member);
-                    return true;
-                })
-                .orElse(false);
+                .orElse(null);
+        if (target == null) {
+            return false;
+        }
+        if (matchClient != null) {
+            int nextCount = Math.max(0, memberRepository.findByTeamId(teamId).size() - 1);
+            matchClient.validateTeamRosterChange(teamId, null, nextCount);
+        }
+        memberRepository.delete(target);
+        return true;
     }
 
     public Map<String, Object> getStatistics() {

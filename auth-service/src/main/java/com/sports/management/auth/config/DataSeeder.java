@@ -30,9 +30,10 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void seedUserIfNotExists(String username, String rawPassword, String fullName, String email, String role) {
-        if (!userRepository.existsByUsername(username)) {
+        String normalized = com.sports.management.auth.service.AuthService.normalizeUsername(username);
+        if (normalized != null && !normalized.isEmpty() && userRepository.findAllByNormalizedUsername(normalized).isEmpty()) {
             User user = new User();
-            user.setUsername(username);
+            user.setUsername(normalized);
             user.setPassword(passwordEncoder.encode(rawPassword));
             user.setFullName(fullName);
             user.setEmail(email);

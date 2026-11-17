@@ -117,7 +117,7 @@ public class TeamController {
                 || authentication.getName() == null || authentication.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Full authentication is required");
         }
-        String caller = authentication.getName();
+        String caller = authentication.getName().trim().toLowerCase(java.util.Locale.ROOT);
         boolean isAdmin = hasAdminRole(authentication);
         if (!isAdmin) {
             if (team.getOwnerUsername() != null && !team.getOwnerUsername().isBlank()
@@ -128,6 +128,8 @@ public class TeamController {
             team.setOwnerUsername(caller);
         } else if (team.getOwnerUsername() == null || team.getOwnerUsername().isBlank()) {
             team.setOwnerUsername(caller);
+        } else {
+            team.setOwnerUsername(team.getOwnerUsername().trim().toLowerCase(java.util.Locale.ROOT));
         }
         Team created = teamService.createTeam(team);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -270,7 +272,8 @@ public class TeamController {
             return;
         }
         String owner = team.getOwnerUsername();
-        if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(authentication.getName())) {
+        String caller = authentication.getName() != null ? authentication.getName().trim() : "";
+        if (owner == null || owner.isBlank() || !owner.trim().equalsIgnoreCase(caller)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access Denied: You do not own this team");
         }
     }

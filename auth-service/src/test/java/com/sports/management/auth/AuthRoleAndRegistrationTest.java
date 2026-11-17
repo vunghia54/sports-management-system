@@ -160,4 +160,40 @@ class AuthRoleAndRegistrationTest {
                 .andExpect(status().isBadRequest());
         assertTrue(userRepository.existsById(secondAdmin.getId()));
     }
+
+    @Test
+    void registerAndLogin_enforceNormalizedUsernameUniqueness_andReportDuplicatesWithoutAutoMerging() throws Exception {
+        // 1. Registering uppercase or whitespace variant of existing "viewer1" must fail with 400
+        for (String variant : new String[]{"VIEWER1", "Viewer1", "  viewer1  "}) {
+            mockMvc.perform(post("/api/v1/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"username\":\"" + variant + "\",\"password\":\"secret123\",\"role\":\"ROLE_TEAM_MANAGER\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+        assertEquals(2, userRepository.count());
+
+        // 2. Registering with mixed case + whitespace stores canonical lowercase trimmed username
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"  ManagerUpper  \",\"password\":\"secret123\",\"role\":\"ROLE_TEAM_MANAGER\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.username").value("managerupper"));
+        assertTrue(userRepository.existsByUsername("managerupper"));
+
+        // 3. Login with mixed case + whitespace resolves same canonical identity & JWT subject
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"  MANAGERUPPER  \",\"password\":\"secret123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("managerupper"));
+
+        // 4. Legacy DB containing two duplicate variants after normalization -> reports 409 Conflict without deleting or merging
+        userRepository.save(new User(null, "DupLegacy", passwordEncoder.encode("secret123"), "D1", "d1@vn", "ROLE_VIEWER", true));
+        userRepository.save(new User(null, "duplegacy", passwordEncoder.encode("secret123"), "D2", "d2@vn", "ROLE_VIEWER", true));
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"DupLegacy\",\"password\":\"secret123\"}"))
+                .andExpect(status().isConflict());
+        assertEquals(2, userRepository.findAllByNormalizedUsername("duplegacy").size());
+    }
 }

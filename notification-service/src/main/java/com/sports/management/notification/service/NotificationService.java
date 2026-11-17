@@ -45,18 +45,31 @@ public class NotificationService {
     }
 
     public List<NotificationView> getAllNotificationViews(String viewerUsername) {
+        return getAllNotificationViews(viewerUsername, false);
+    }
+
+    public List<NotificationView> getAllNotificationViews(String viewerUsername, boolean isAdmin) {
         Set<Long> readIds = resolveReadIds(viewerUsername);
         return notificationRepository.findAllByOrderByCreatedAtDesc().stream()
+                .filter(n -> canViewNotification(n, viewerUsername, isAdmin))
                 .map(n -> NotificationView.from(n, isReadByUser(n, viewerUsername, readIds)))
                 .toList();
     }
 
     public Page<NotificationView> searchNotificationsForUser(
             String recipient, Boolean read, String keyword, String viewerUsername, Pageable pageable) {
+        return searchNotificationsForUser(recipient, read, keyword, viewerUsername, false, pageable);
+    }
+
+    public Page<NotificationView> searchNotificationsForUser(
+            String recipient, Boolean read, String keyword, String viewerUsername, boolean isAdmin, Pageable pageable) {
         String safeRec = (recipient != null && !recipient.isBlank()) ? recipient.trim() : null;
+        if (safeRec != null) {
+            assertCanAccessRecipient(safeRec, viewerUsername, isAdmin);
+        }
         String safeKw = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
         Set<Long> readIds = resolveReadIds(viewerUsername);
-        return notificationRepository.searchNotificationsForUser(safeRec, read, safeKw, viewerUsername, pageable)
+        return notificationRepository.searchNotificationsForUser(safeRec, read, safeKw, viewerUsername, isAdmin, pageable)
                 .map(n -> NotificationView.from(n, isReadByUser(n, viewerUsername, readIds)));
     }
 
@@ -67,14 +80,20 @@ public class NotificationService {
     }
 
     public Map<String, Object> getNotificationStatistics() {
-        return getNotificationStatistics(null);
+        return getNotificationStatistics(null, false);
     }
 
     public Map<String, Object> getNotificationStatistics(String viewerUsername) {
-        List<Notification> all = notificationRepository.findAll();
+        return getNotificationStatistics(viewerUsername, false);
+    }
+
+    public Map<String, Object> getNotificationStatistics(String viewerUsername, boolean isAdmin) {
+        List<Notification> visible = notificationRepository.findAll().stream()
+                .filter(n -> canViewNotification(n, viewerUsername, isAdmin))
+                .toList();
         Set<Long> readIds = resolveReadIds(viewerUsername);
-        long readCount = all.stream().filter(n -> isReadByUser(n, viewerUsername, readIds)).count();
-        long total = all.size();
+        long readCount = visible.stream().filter(n -> isReadByUser(n, viewerUsername, readIds)).count();
+        long total = visible.size();
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("totalNotifications", total);
         stats.put("unreadNotifications", total - readCount);
@@ -87,8 +106,14 @@ public class NotificationService {
     }
 
     public List<NotificationView> getNotificationViewsByRecipient(String recipient, String viewerUsername) {
+        return getNotificationViewsByRecipient(recipient, viewerUsername, false);
+    }
+
+    public List<NotificationView> getNotificationViewsByRecipient(String recipient, String viewerUsername, boolean isAdmin) {
+        assertCanAccessRecipient(recipient, viewerUsername, isAdmin);
         Set<Long> readIds = resolveReadIds(viewerUsername);
         return notificationRepository.findByRecipientOrderByCreatedAtDesc(recipient).stream()
+                .filter(n -> canViewNotification(n, viewerUsername, isAdmin))
                 .map(n -> NotificationView.from(n, isReadByUser(n, viewerUsername, readIds)))
                 .toList();
     }
@@ -98,12 +123,50 @@ public class NotificationService {
     }
 
     public NotificationView getNotificationViewById(Long id, String viewerUsername) {
+        return getNotificationViewById(id, viewerUsername, false);
+    }
+
+    public NotificationView getNotificationViewById(Long id, String viewerUsername, boolean isAdmin) {
         Notification notification = getNotificationById(id);
         if (notification == null) {
             return null;
         }
+        assertCanAccessRecipient(notification.getRecipient(), viewerUsername, isAdmin);
         Set<Long> readIds = resolveReadIds(viewerUsername);
         return NotificationView.from(notification, isReadByUser(notification, viewerUsername, readIds));
+    }
+
+    public boolean canViewNotification(Notification n, String viewerUsername, boolean isAdmin) {
+        if (n == null) {
+            return false;
+        }
+        if (isAdmin) {
+            return true;
+        }
+        String target = n.getRecipient() != null ? n.getRecipient().trim() : "";
+        if (ALL_USERS.equalsIgnoreCase(target)) {
+            return true;
+        }
+        return viewerUsername != null && !viewerUsername.isBlank()
+                && target.equalsIgnoreCase(viewerUsername.trim());
+    }
+
+    private void assertCanAccessRecipient(String recipient, String viewerUsername, boolean isAdmin) {
+        if (isAdmin) {
+            return;
+        }
+        String target = recipient != null ? recipient.trim() : "";
+        if (ALL_USERS.equalsIgnoreCase(target)) {
+            return;
+        }
+        if (viewerUsername == null || viewerUsername.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "Yêu cầu đăng nhập để xem thông báo riêng");
+        }
+        if (!target.equalsIgnoreCase(viewerUsername.trim())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access Denied: Chỉ người nhận hoặc ADMIN mới được xem thông báo gửi riêng");
+        }
     }
 
     @Transactional

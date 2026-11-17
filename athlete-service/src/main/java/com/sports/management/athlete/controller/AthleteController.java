@@ -126,7 +126,7 @@ public class AthleteController {
                 || authentication.getName() == null || authentication.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Full authentication is required");
         }
-        String caller = authentication.getName();
+        String caller = authentication.getName().trim().toLowerCase(java.util.Locale.ROOT);
         boolean isAdmin = hasAdminRole(authentication);
         if (!isAdmin) {
             if (athlete.getOwnerUsername() != null && !athlete.getOwnerUsername().isBlank()
@@ -137,6 +137,8 @@ public class AthleteController {
             athlete.setOwnerUsername(caller);
         } else if (athlete.getOwnerUsername() == null || athlete.getOwnerUsername().isBlank()) {
             athlete.setOwnerUsername(caller);
+        } else {
+            athlete.setOwnerUsername(athlete.getOwnerUsername().trim().toLowerCase(java.util.Locale.ROOT));
         }
         Athlete created = athleteService.createAthlete(athlete);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -227,7 +229,8 @@ public class AthleteController {
             return;
         }
         String owner = athlete.getOwnerUsername();
-        if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(authentication.getName())) {
+        String caller = authentication.getName().trim();
+        if (owner == null || owner.isBlank() || !owner.trim().equalsIgnoreCase(caller)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access Denied: You do not own this athlete profile");
         }
     }

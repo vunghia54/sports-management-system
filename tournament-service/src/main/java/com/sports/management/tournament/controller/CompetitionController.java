@@ -100,8 +100,15 @@ public class CompetitionController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Competition not found with id: " + id);
         }
         assertTournamentOwnership(existing.getTournamentId(), authentication);
-        if (competition.getTournamentId() != null && !competition.getTournamentId().equals(existing.getTournamentId())) {
+        boolean changingTournament = competition.getTournamentId() != null
+                && !java.util.Objects.equals(existing.getTournamentId(), competition.getTournamentId());
+        boolean changingSport = competition.getSportId() != null
+                && !java.util.Objects.equals(existing.getSportId(), competition.getSportId());
+        if (changingTournament) {
             assertTournamentOwnership(competition.getTournamentId(), authentication);
+        }
+        if (changingTournament || changingSport) {
+            assertNoLinkedRegistrationsOrMatches(id, "thay đổi giải đấu hoặc môn thể thao của nội dung thi đấu");
         }
         Competition updated = competitionService.updateCompetition(id, competition);
         return ResponseEntity.ok(updated);
@@ -116,7 +123,7 @@ public class CompetitionController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Competition not found with id: " + id);
         }
         assertTournamentOwnership(existing.getTournamentId(), authentication);
-        assertNoLinkedRegistrationsOrMatches(id);
+        assertNoLinkedRegistrationsOrMatches(id, "xóa nội dung thi đấu");
 
         if (!competitionService.deleteCompetition(id)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Competition not found with id: " + id);
@@ -218,11 +225,11 @@ public class CompetitionController {
         }
     }
 
-    private void assertNoLinkedRegistrationsOrMatches(Long competitionId) {
+    private void assertNoLinkedRegistrationsOrMatches(Long competitionId, String actionLabel) {
         if (matchRestClient == null) {
             return;
         }
-        assertNoMatchesForCompetition(competitionId, "xóa nội dung thi đấu");
+        assertNoMatchesForCompetition(competitionId, actionLabel);
         try {
             List<Map<String, Object>> regs = matchRestClient.get()
                     .uri(matchServiceUrl + "/api/v1/registrations/competition/{id}", competitionId)
@@ -230,7 +237,7 @@ public class CompetitionController {
                     .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
             if (regs != null && !regs.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Không thể xóa nội dung thi đấu #" + competitionId + " vì đang có " + regs.size() + " hồ sơ đăng ký liên kết.");
+                        "Không thể " + actionLabel + " #" + competitionId + " vì đang có " + regs.size() + " hồ sơ đăng ký liên kết.");
             }
         } catch (ResponseStatusException rse) {
             throw rse;

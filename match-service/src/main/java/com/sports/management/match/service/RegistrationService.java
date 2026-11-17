@@ -187,102 +187,41 @@ public class RegistrationService {
             }
         }
 
-        // 4. Verify participant (Team / Athlete), ownership, rule bounds & athlete health + no duplicate athlete across active teams
+        // 4. Verify participant (Team / Athlete), ownership & competition eligibility (reused on approve)
+        String normalizedCaller = callerUsername.trim().toLowerCase(Locale.ROOT);
         if ("TEAM".equals(type)) {
-            Map<String, Object> team = tournamentClient.getTeamById(registration.getParticipantReferenceId());
-            if (team == null) {
-                throw new ResourceNotFoundException("Team not found with id: " + registration.getParticipantReferenceId());
-            }
+            Map<String, Object> team = requireTeamForRegistration(registration.getParticipantReferenceId());
             if (!isAdmin) {
-                String owner = team.get("ownerUsername") != null ? String.valueOf(team.get("ownerUsername")) : null;
-                if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(callerUsername)) {
+                String owner = team.get("ownerUsername") != null ? String.valueOf(team.get("ownerUsername")).trim() : null;
+                if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(normalizedCaller)) {
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                             "Access Denied: Bạn chỉ được phép đăng ký đội tuyển thuộc quyền sở hữu của mình");
                 }
             }
-            Object rawName = team.get("name") != null ? team.get("name") : team.get("teamName");
-            if (rawName != null && !String.valueOf(rawName).isBlank()) {
-                registration.setParticipantName(String.valueOf(rawName));
-            }
-            List<Map<String, Object>> members = tournamentClient.getTeamMembers(registration.getParticipantReferenceId());
-            int memberCount = members != null ? members.size() : 0;
-            Integer minMembers = rule != null ? parseIntField(rule.get("minTeamMembers")) : null;
-            Integer maxMembers = rule != null ? parseIntField(rule.get("maxTeamMembers")) : null;
-            if (minMembers != null && memberCount < minMembers) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Đội '" + registration.getParticipantName() + "' mới có " + memberCount
-                                + " thành viên, chưa đạt tối thiểu " + minMembers + " thành viên theo điều lệ");
-            }
-            if (maxMembers != null && memberCount > maxMembers) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Đội '" + registration.getParticipantName() + "' có " + memberCount
-                                + " thành viên, vượt quá tối đa " + maxMembers + " thành viên theo điều lệ");
-            }
-            java.util.Set<Long> candidateAthleteIds = new java.util.HashSet<>();
-            if (members != null) {
-                for (Map<String, Object> m : members) {
-                    Long aid = parseLongField(m.get("athleteId"));
-                    if (aid == null) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "Thành viên đội '" + registration.getParticipantName() + "' thiếu athleteId hợp lệ");
-                    }
-                    Map<String, Object> memberAthlete = tournamentClient.getAthleteById(aid);
-                    if (memberAthlete == null) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "Không tìm thấy hồ sơ VĐV #" + aid + " trong đội");
-                    }
-                    String health = memberAthlete.get("healthStatus") != null
-                            ? String.valueOf(memberAthlete.get("healthStatus")).trim() : "";
-                    if (!"QUALIFIED".equalsIgnoreCase(health)) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "Thành viên VĐV #" + aid + " (" + memberAthlete.get("fullName")
-                                        + ") chưa đạt trạng thái sức khỏe QUALIFIED (hiện tại: " + health + ")");
-                    }
-                    candidateAthleteIds.add(aid);
-                }
-            }
-            if (!candidateAthleteIds.isEmpty()) {
-                List<Registration> otherActiveTeamRegs = registrationRepository
-                        .findByCompetitionIdAndParticipantTypeAndStatusIn(
-                                registration.getCompetitionId(), "TEAM", List.of("PENDING", "APPROVED"));
-                for (Registration other : otherActiveTeamRegs) {
-                    if (java.util.Objects.equals(other.getParticipantReferenceId(), registration.getParticipantReferenceId())) {
-                        continue;
-                    }
-                    List<Map<String, Object>> otherMembers = tournamentClient.getTeamMembers(other.getParticipantReferenceId());
-                    if (otherMembers != null) {
-                        for (Map<String, Object> om : otherMembers) {
-                            Long otherAid = parseLongField(om.get("athleteId"));
-                            if (otherAid != null && candidateAthleteIds.contains(otherAid)) {
-                                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                                        "Vận động viên #" + otherAid + " đã nằm trong đội '" + other.getParticipantName()
-                                                + "' (trạng thái " + other.getStatus() + ") ở cùng nội dung thi đấu #"
-                                                + registration.getCompetitionId());
-                            }
-                        }
-                    }
-                }
-            }
+            String resolvedName = validateTeamEligibilityForCompetition(
+                    registration.getCompetitionId(),
+                    registration.getParticipantReferenceId(),
+                    registration.getParticipantName(),
+                    team,
+                    rule,
+                    HttpStatus.BAD_REQUEST
+            );
+            registration.setParticipantName(resolvedName);
         } else {
-            Map<String, Object> athlete = tournamentClient.getAthleteById(registration.getParticipantReferenceId());
-            if (athlete == null) {
-                throw new ResourceNotFoundException("Athlete not found with id: " + registration.getParticipantReferenceId());
-            }
+            Map<String, Object> athlete = requireAthleteForRegistration(registration.getParticipantReferenceId());
             if (!isAdmin) {
-                String owner = athlete.get("ownerUsername") != null ? String.valueOf(athlete.get("ownerUsername")) : null;
-                if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(callerUsername)) {
+                String owner = athlete.get("ownerUsername") != null ? String.valueOf(athlete.get("ownerUsername")).trim() : null;
+                if (owner == null || owner.isBlank() || !owner.equalsIgnoreCase(normalizedCaller)) {
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                             "Access Denied: Bạn chỉ được phép đăng ký vận động viên thuộc quyền sở hữu của mình");
                 }
             }
-            String health = athlete.get("healthStatus") != null ? String.valueOf(athlete.get("healthStatus")).trim() : "";
-            if (!"QUALIFIED".equalsIgnoreCase(health)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Vận động viên chưa đạt trạng thái sức khỏe QUALIFIED (hiện tại: " + health + ")");
-            }
-            if (athlete.get("fullName") != null && !String.valueOf(athlete.get("fullName")).isBlank()) {
-                registration.setParticipantName(String.valueOf(athlete.get("fullName")));
-            }
+            String resolvedName = validateAthleteEligibilityForCompetition(
+                    registration.getParticipantReferenceId(),
+                    registration.getParticipantName(),
+                    athlete
+            );
+            registration.setParticipantName(resolvedName);
         }
 
         // 5. Duplicate check -> 409 Conflict for PENDING/APPROVED; allow re-register for REJECTED/WITHDRAWN
@@ -294,7 +233,7 @@ public class RegistrationService {
             String st = existing.getStatus() != null ? existing.getStatus().trim().toUpperCase(Locale.ROOT) : "";
             if ("REJECTED".equals(st) || "WITHDRAWN".equals(st)) {
                 existing.setParticipantName(registration.getParticipantName());
-                existing.setRegisteredBy(callerUsername);
+                existing.setRegisteredBy(normalizedCaller);
                 existing.setStatus("PENDING");
                 existing.setRejectionReason(null);
                 existing.setRegistrationDate(LocalDateTime.now());
@@ -306,7 +245,7 @@ public class RegistrationService {
 
         registration.setId(null);
         registration.setParticipantType(type);
-        registration.setRegisteredBy(callerUsername);
+        registration.setRegisteredBy(normalizedCaller);
         registration.setStatus("PENDING");
         registration.setRejectionReason(null);
         registration.setRegistrationDate(LocalDateTime.now());
@@ -338,6 +277,26 @@ public class RegistrationService {
             }
         }
 
+        // Re-verify live eligibility (health status, roster bounds, cross-team athlete uniqueness) at approval time
+        if ("TEAM".equalsIgnoreCase(reg.getParticipantType())) {
+            String resolvedName = validateTeamEligibilityForCompetition(
+                    reg.getCompetitionId(),
+                    reg.getParticipantReferenceId(),
+                    reg.getParticipantName(),
+                    null,
+                    rule,
+                    HttpStatus.BAD_REQUEST
+            );
+            reg.setParticipantName(resolvedName);
+        } else {
+            String resolvedName = validateAthleteEligibilityForCompetition(
+                    reg.getParticipantReferenceId(),
+                    reg.getParticipantName(),
+                    null
+            );
+            reg.setParticipantName(resolvedName);
+        }
+
         reg.setStatus("APPROVED");
         reg.setRejectionReason(null);
         Registration savedReg = registrationRepository.save(reg);
@@ -358,6 +317,165 @@ public class RegistrationService {
         });
 
         return savedReg;
+    }
+
+    public void validateTeamRosterChange(Long teamId, Long addedAthleteId, Integer proposedMemberCount) {
+        if (teamId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Team ID is required");
+        }
+        List<Registration> activeTeamRegs = registrationRepository
+                .findByParticipantTypeAndParticipantReferenceIdAndStatusIn(
+                        "TEAM", teamId, List.of("PENDING", "APPROVED"));
+        if (activeTeamRegs.isEmpty()) {
+            return;
+        }
+        for (Registration reg : activeTeamRegs) {
+            Map<String, Object> rule = tournamentClient.getCompetitionRule(reg.getCompetitionId());
+            if (proposedMemberCount != null) {
+                assertTeamMemberCountWithinRule(
+                        reg.getParticipantName() != null ? reg.getParticipantName() : ("Đội #" + teamId),
+                        proposedMemberCount,
+                        rule,
+                        HttpStatus.CONFLICT
+                );
+            }
+            if (addedAthleteId != null) {
+                assertNoCrossTeamAthleteOverlap(
+                        reg.getCompetitionId(),
+                        teamId,
+                        java.util.Set.of(addedAthleteId)
+                );
+            }
+        }
+    }
+
+    private Map<String, Object> requireTeamForRegistration(Long teamId) {
+        Map<String, Object> team = tournamentClient.getTeamById(teamId);
+        if (team == null) {
+            throw new ResourceNotFoundException("Team not found with id: " + teamId);
+        }
+        return team;
+    }
+
+    private Map<String, Object> requireAthleteForRegistration(Long athleteId) {
+        Map<String, Object> athlete = tournamentClient.getAthleteById(athleteId);
+        if (athlete == null) {
+            throw new ResourceNotFoundException("Athlete not found with id: " + athleteId);
+        }
+        return athlete;
+    }
+
+    private String validateTeamEligibilityForCompetition(
+            Long competitionId,
+            Long teamId,
+            String currentDisplayName,
+            Map<String, Object> preloadedTeam,
+            Map<String, Object> rule,
+            HttpStatus memberRuleViolationStatus) {
+
+        Map<String, Object> team = preloadedTeam != null ? preloadedTeam : requireTeamForRegistration(teamId);
+        String resolvedName = currentDisplayName;
+        Object rawName = team.get("name") != null ? team.get("name") : team.get("teamName");
+        if (rawName != null && !String.valueOf(rawName).isBlank()) {
+            resolvedName = String.valueOf(rawName);
+        }
+
+        List<Map<String, Object>> members = tournamentClient.getTeamMembers(teamId);
+        int memberCount = members != null ? members.size() : 0;
+        assertTeamMemberCountWithinRule(resolvedName, memberCount, rule, memberRuleViolationStatus);
+
+        java.util.Set<Long> candidateAthleteIds = new java.util.HashSet<>();
+        if (members != null) {
+            for (Map<String, Object> m : members) {
+                Long aid = parseLongField(m.get("athleteId"));
+                if (aid == null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Thành viên đội '" + resolvedName + "' thiếu athleteId hợp lệ");
+                }
+                Map<String, Object> memberAthlete = tournamentClient.getAthleteById(aid);
+                assertAthleteQualified(aid, memberAthlete,
+                        "Thành viên VĐV #" + aid + (memberAthlete != null ? " (" + memberAthlete.get("fullName") + ")" : ""));
+                candidateAthleteIds.add(aid);
+            }
+        }
+        assertNoCrossTeamAthleteOverlap(competitionId, teamId, candidateAthleteIds);
+        return resolvedName;
+    }
+
+    private String validateAthleteEligibilityForCompetition(
+            Long athleteId,
+            String currentDisplayName,
+            Map<String, Object> preloadedAthlete) {
+        Map<String, Object> athlete = preloadedAthlete != null ? preloadedAthlete : requireAthleteForRegistration(athleteId);
+        assertAthleteQualified(athleteId, athlete, "Vận động viên");
+        if (athlete.get("fullName") != null && !String.valueOf(athlete.get("fullName")).isBlank()) {
+            return String.valueOf(athlete.get("fullName"));
+        }
+        return currentDisplayName;
+    }
+
+    private void assertAthleteQualified(Long athleteId, Map<String, Object> athlete, String subjectLabel) {
+        if (athlete == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Không tìm thấy hồ sơ VĐV #" + athleteId);
+        }
+        String health = athlete.get("healthStatus") != null
+                ? String.valueOf(athlete.get("healthStatus")).trim() : "";
+        if (!"QUALIFIED".equalsIgnoreCase(health)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    subjectLabel + " chưa đạt trạng thái sức khỏe QUALIFIED (hiện tại: " + health + ")");
+        }
+    }
+
+    private void assertTeamMemberCountWithinRule(
+            String teamName,
+            int memberCount,
+            Map<String, Object> rule,
+            HttpStatus statusOnViolation) {
+        if (rule == null) {
+            return;
+        }
+        Integer minMembers = parseIntField(rule.get("minTeamMembers"));
+        Integer maxMembers = parseIntField(rule.get("maxTeamMembers"));
+        if (minMembers != null && memberCount < minMembers) {
+            throw new ResponseStatusException(statusOnViolation,
+                    "Đội '" + teamName + "' có " + memberCount
+                            + " thành viên, chưa đạt tối thiểu " + minMembers + " thành viên theo điều lệ");
+        }
+        if (maxMembers != null && memberCount > maxMembers) {
+            throw new ResponseStatusException(statusOnViolation,
+                    "Đội '" + teamName + "' có " + memberCount
+                            + " thành viên, vượt quá tối đa " + maxMembers + " thành viên theo điều lệ");
+        }
+    }
+
+    private void assertNoCrossTeamAthleteOverlap(
+            Long competitionId,
+            Long teamId,
+            java.util.Set<Long> candidateAthleteIds) {
+        if (competitionId == null || candidateAthleteIds == null || candidateAthleteIds.isEmpty()) {
+            return;
+        }
+        List<Registration> otherActiveTeamRegs = registrationRepository
+                .findByCompetitionIdAndParticipantTypeAndStatusIn(
+                        competitionId, "TEAM", List.of("PENDING", "APPROVED"));
+        for (Registration other : otherActiveTeamRegs) {
+            if (java.util.Objects.equals(other.getParticipantReferenceId(), teamId)) {
+                continue;
+            }
+            List<Map<String, Object>> otherMembers = tournamentClient.getTeamMembers(other.getParticipantReferenceId());
+            if (otherMembers != null) {
+                for (Map<String, Object> om : otherMembers) {
+                    Long otherAid = parseLongField(om.get("athleteId"));
+                    if (otherAid != null && candidateAthleteIds.contains(otherAid)) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                "Vận động viên #" + otherAid + " đã nằm trong đội '" + other.getParticipantName()
+                                        + "' (trạng thái " + other.getStatus() + ") ở cùng nội dung thi đấu #"
+                                        + competitionId);
+                    }
+                }
+            }
+        }
     }
 
     @Transactional

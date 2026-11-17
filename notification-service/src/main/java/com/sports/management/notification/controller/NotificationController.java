@@ -60,7 +60,8 @@ public class NotificationController {
     @GetMapping("/statistics")
     public ResponseEntity<Map<String, Object>> getNotificationStatistics(Authentication authentication) {
         String viewer = extractUsername(authentication);
-        return ResponseEntity.ok(notificationService.getNotificationStatistics(viewer));
+        boolean isAdmin = hasAdminAuthority(authentication);
+        return ResponseEntity.ok(notificationService.getNotificationStatistics(viewer, isAdmin));
     }
 
     @GetMapping
@@ -68,9 +69,10 @@ public class NotificationController {
             @RequestParam(required = false) String recipient,
             Authentication authentication) {
         String viewer = extractUsername(authentication);
+        boolean isAdmin = hasAdminAuthority(authentication);
         List<NotificationView> list = (recipient != null && !recipient.isBlank())
-                ? notificationService.getNotificationViewsByRecipient(recipient, viewer)
-                : notificationService.getAllNotificationViews(viewer);
+                ? notificationService.getNotificationViewsByRecipient(recipient, viewer, isAdmin)
+                : notificationService.getAllNotificationViews(viewer, isAdmin);
         return ResponseEntity.ok()
                 .header("X-Instance-Id", instanceId)
                 .body(list);
@@ -97,7 +99,8 @@ public class NotificationController {
                 : Sort.by(resolvedSortBy).descending();
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(100, Math.max(1, size)), sort);
         String viewer = extractUsername(authentication);
-        return ResponseEntity.ok(notificationService.searchNotificationsForUser(recipient, read, keyword, viewer, pageable));
+        boolean isAdmin = hasAdminAuthority(authentication);
+        return ResponseEntity.ok(notificationService.searchNotificationsForUser(recipient, read, keyword, viewer, isAdmin, pageable));
     }
 
     @GetMapping("/{id}")
@@ -105,7 +108,8 @@ public class NotificationController {
             @PathVariable Long id,
             Authentication authentication) {
         String viewer = extractUsername(authentication);
-        NotificationView view = notificationService.getNotificationViewById(id, viewer);
+        boolean isAdmin = hasAdminAuthority(authentication);
+        NotificationView view = notificationService.getNotificationViewById(id, viewer, isAdmin);
         if (view == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Notification not found with id: " + id);
         }
@@ -144,6 +148,11 @@ public class NotificationController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Notification not found with id: " + id);
         }
         return ResponseEntity.noContent().build();
+    }
+
+    private boolean hasAdminAuthority(Authentication authentication) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equalsIgnoreCase(a.getAuthority()));
     }
 
     private String extractUsername(Authentication authentication) {

@@ -418,4 +418,75 @@ class RegistrationSecurityAndBusinessTest {
                         .content("{\"competitionId\":10,\"participantType\":\"TEAM\",\"participantReferenceId\":102}"))
                 .andExpect(status().isConflict());
     }
+
+    @Test
+    void approveRegistration_rechecksHealthAndRosterBounds_andRosterChangeValidationBlocksOverlapAndBounds() throws Exception {
+        // Register team 100 cleanly while [200, 202] are QUALIFIED (minTeamMembers=2, maxTeamMembers=5)
+        MvcResult r1Res = mockMvc.perform(post("/api/v1/registrations")
+                        .header("Authorization", mgr1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":10,\"participantType\":\"TEAM\",\"participantReferenceId\":100}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long reg1Id = MAPPER.readTree(r1Res.getResponse().getContentAsString()).get("id").asLong();
+
+        // 1. Athlete 202 becomes SUSPENDED before organizer approves -> approve must be rejected (400)!
+        when(tournamentClient.getAthleteById(202L)).thenReturn(Map.of(
+                "id", 202, "fullName", "Nguyễn Quang Hải", "ownerUsername", "manager1", "healthStatus", "SUSPENDED"));
+        mockMvc.perform(put("/api/v1/registrations/" + reg1Id + "/approve")
+                        .header("Authorization", org1Token))
+                .andExpect(status().isBadRequest());
+        assertEquals("PENDING", registrationRepository.findById(reg1Id).orElseThrow().getStatus());
+        assertTrue(participantRepository.findByCompetitionId(10L).isEmpty());
+
+        // 2. Restore health QUALIFIED, shrink team 100 to 1 member (< minTeamMembers=2) -> approve must fail (400)!
+        when(tournamentClient.getAthleteById(202L)).thenReturn(Map.of(
+                "id", 202, "fullName", "Nguyễn Quang Hải", "ownerUsername", "manager1", "healthStatus", "QUALIFIED"));
+        when(tournamentClient.getTeamMembers(100L)).thenReturn(List.of(Map.of("id", 1, "athleteId", 200)));
+        mockMvc.perform(put("/api/v1/registrations/" + reg1Id + "/approve")
+                        .header("Authorization", org1Token))
+                .andExpect(status().isBadRequest());
+        assertEquals("PENDING", registrationRepository.findById(reg1Id).orElseThrow().getStatus());
+
+        // 3. Restore team 100 members -> approve succeeds; register team 101 -> PENDING
+        when(tournamentClient.getTeamMembers(100L)).thenReturn(List.of(
+                Map.of("id", 1, "athleteId", 200), Map.of("id", 2, "athleteId", 202)));
+        when(tournamentClient.getCompetitionRule(10L)).thenReturn(Map.of(
+                "competitionId", 10, "maxParticipants", 8, "minTeamMembers", 2, "maxTeamMembers", 5));
+        mockMvc.perform(put("/api/v1/registrations/" + reg1Id + "/approve")
+                        .header("Authorization", org1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPROVED"));
+
+        mockMvc.perform(post("/api/v1/registrations")
+                        .header("Authorization", mgr2Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitionId\":10,\"participantType\":\"TEAM\",\"participantReferenceId\":101}"))
+                .andExpect(status().isCreated());
+
+        // 4. Roster validation on team 101: adding athlete 202 (already in APPROVED team 100) -> 409 Conflict
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/registrations/teams/101/roster-change-validation")
+                        .param("addedAthleteId", "202")
+                        .param("proposedMemberCount", "3"))
+                .andExpect(status().isConflict());
+
+        // 5. Roster validation removing below minTeamMembers (1 < 2) or exceeding maxTeamMembers (6 > 5) -> 409 Conflict
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/registrations/teams/101/roster-change-validation")
+                        .param("proposedMemberCount", "1"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/registrations/teams/101/roster-change-validation")
+                        .param("addedAthleteId", "204")
+                        .param("proposedMemberCount", "6"))
+                .andExpect(status().isConflict());
+
+        // 6. Valid roster addition on team 101 -> 200 OK
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/registrations/teams/101/roster-change-validation")
+                        .param("addedAthleteId", "204")
+                        .param("proposedMemberCount", "3"))
+                .andExpect(status().isOk());
+    }
 }

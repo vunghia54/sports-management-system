@@ -71,6 +71,15 @@ public class RegistrationController {
         return ResponseEntity.ok(registrationService.getRegistrationsByCompetition(competitionId));
     }
 
+    @GetMapping("/registrations/teams/{teamId}/roster-change-validation")
+    public ResponseEntity<Map<String, Object>> validateTeamRosterChange(
+            @PathVariable Long teamId,
+            @RequestParam(required = false) Long addedAthleteId,
+            @RequestParam(required = false) Integer proposedMemberCount) {
+        registrationService.validateTeamRosterChange(teamId, addedAthleteId, proposedMemberCount);
+        return ResponseEntity.ok(Map.of("valid", true));
+    }
+
     @PutMapping("/registrations/{id}/approve")
     public ResponseEntity<Registration> approveRegistration(
             @PathVariable Long id,

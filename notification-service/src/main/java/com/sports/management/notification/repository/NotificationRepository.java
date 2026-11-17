@@ -36,10 +36,32 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             String keyword,
             String viewerUsername,
             Pageable pageable) {
+        return searchNotificationsForUser(recipient, read, keyword, viewerUsername, false, pageable);
+    }
+
+    default Page<Notification> searchNotificationsForUser(
+            String recipient,
+            Boolean read,
+            String keyword,
+            String viewerUsername,
+            boolean isAdmin,
+            Pageable pageable) {
         return findAll((root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+            Predicate broadcastPredicate = cb.equal(cb.lower(cb.trim(cb.coalesce(root.get("recipient"), ""))), "all_users");
+            if (!isAdmin) {
+                if (viewerUsername != null && !viewerUsername.isBlank()) {
+                    Predicate ownPredicate = cb.equal(
+                            cb.lower(cb.trim(cb.coalesce(root.get("recipient"), ""))),
+                            viewerUsername.trim().toLowerCase(Locale.ROOT)
+                    );
+                    predicates.add(cb.or(broadcastPredicate, ownPredicate));
+                } else {
+                    predicates.add(broadcastPredicate);
+                }
+            }
             if (recipient != null && !recipient.isBlank()) {
-                predicates.add(cb.equal(cb.lower(cb.coalesce(root.get("recipient"), "")), recipient.trim().toLowerCase(Locale.ROOT)));
+                predicates.add(cb.equal(cb.lower(cb.trim(cb.coalesce(root.get("recipient"), ""))), recipient.trim().toLowerCase(Locale.ROOT)));
             }
             if (read != null) {
                 Predicate targetReadPredicate = cb.and(
