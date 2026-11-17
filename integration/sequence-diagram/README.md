@@ -21,27 +21,35 @@ sequenceDiagram
     Auth-->>Organizer: 200 OK (JWT Token - ROLE_ORGANIZER)
 
     %% 2. Gọi tạo trận đấu
-    Organizer->>Match: POST /api/v1/matches (Bearer Token, tournamentId=1)
+    Organizer->>Match: POST /api/v1/matches (Bearer Token, tournamentId, competitionId, participant1Id, participant2Id, matchTime)
     
     activate Match
     Match->>Match: JwtAuthenticationFilter kiểm tra token hợp lệ
     
     %% 3. Tích hợp REST với Provider
-    Note over Match,Tour: Token Propagation: Forward Bearer JWT qua RestClient
-    Match->>Tour: GET /api/v1/tournaments/1 (Authorization: Bearer JWT)
+    Note over Match,Tour: Token Propagation: Forward Bearer JWT qua RestClient (TournamentClient)
+    Match->>Tour: GET /api/v1/tournaments/{tournamentId} (Authorization: Bearer JWT)
     activate Tour
     
-    alt Trường hợp 1: Tournament hợp lệ (Thành công)
-        Tour-->>Match: 200 OK (Tournament Data)
-        Match->>DB: INSERT INTO matches (Lưu thông tin trận đấu)
-        DB-->>Match: match record saved
-        Match-->>Organizer: 201 Created (Match ID = 15)
+    alt Trường hợp 1: Tournament hợp lệ
+        Tour-->>Match: 200 OK (Tournament Data + X-Instance-Id)
+        Match->>Tour: GET /api/v1/competitions/{competitionId} (Authorization: Bearer JWT)
+        alt Nội dung thi đấu hợp lệ thuộc giải đấu
+            Tour-->>Match: 200 OK (Competition Data)
+            Match->>Match: Kiểm tra participant1Id/2Id và xung đột lịch
+            Match->>DB: INSERT INTO matches (Lưu thông tin trận đấu)
+            DB-->>Match: match record saved
+            Match-->>Organizer: 201 Created (X-Tournament-Provider-Instance)
+        else Competition không tồn tại (404) hoặc không thuộc giải đấu
+            Tour-->>Match: 404 Not Found
+            Match-->>Organizer: 400 Bad Request ("Nội dung thi đấu không tồn tại...")
+        end
     else Trường hợp 2: Tournament không tồn tại (Lỗi nghiệp vụ)
         Tour-->>Match: 404 Not Found
-        Match-->>Organizer: 400 Bad Request ("Tournament does not exist")
-    else Trường hợp 3: Tournament Service bị sập (Lỗi hệ thống)
-        Tour--xMatch: Connection Refused / Timeout
-        Match-->>Organizer: 503 Service Unavailable ("Tournament Service unavailable")
+        Match-->>Organizer: 400 Bad Request ("Invalid tournament ID")
+    else Trường hợp 3: Tournament Service bị sập / timeout (Lỗi hệ thống)
+        Tour--xMatch: Connection Refused / Timeout / No Eureka Instance
+        Match-->>Organizer: 503 Service Unavailable ("Tournament Service is unavailable...")
     end
     deactivate Tour
     deactivate Match
@@ -56,19 +64,23 @@ Biểu đồ mô tả sự kiện kết thúc trận đấu và thông báo tự
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Referee as Trọng tài (Client)
+    actor Organizer as Ban tổ chức (Client)
+    participant Result as Result Service (8087)
     participant Match as Match Service (8082)<br/>[Producer]
     participant Rabbit as RabbitMQ Broker (5672)<br/>[Exchange: sports.exchange]
     participant Notif as Notification Service (8084)<br/>[Consumer]
     participant DB as notification_db
 
-    Referee->>Match: PUT /api/v1/matches/15 (status="FINISHED")
+    Note over Organizer,Result: Trước đó trọng tài đã PATCH trận sang ONGOING và ghi kết quả (POST /api/v1/results)
+    Organizer->>Result: PUT /api/v1/results/{resultId}/confirm
+    Result->>Match: PATCH /api/v1/matches/{matchId} (status="FINISHED", token nội bộ ROLE_INTERNAL_RESULT_SYNC)
     activate Match
-    Match->>Match: Cập nhật trạng thái trận đấu = FINISHED
+    Match->>Match: Cập nhật trạng thái trận đấu = FINISHED (transaction)
     
     Note over Match,Rabbit: Xuất bản sự kiện bất đồng bộ sau commit (AFTER_COMMIT, Non-blocking)
     Match->>Rabbit: Publish MatchFinishedEvent (RoutingKey: match.finished)
-    Match-->>Referee: 200 OK (Match Finished)
+    Match-->>Result: 200 OK
+    Result-->>Organizer: 200 OK (kết quả CONFIRMED)
     deactivate Match
 
     activate Notif

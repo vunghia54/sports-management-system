@@ -35,7 +35,7 @@ Hệ thống xác định 4 nhóm tài sản nghiệp vụ quan trọng cần đ
 
 2. **Broken Authentication & Session Management:**
    * *Nguy cơ:* Kẻ tấn công thực hiện brute-force mật khẩu hoặc giải mã mật khẩu lưu dưới dạng plain-text.
-   * *Biện pháp:* Băm mật khẩu một chiều bằng thuật toán `BCrypt` có độ phức tạp cao; cấp phát `JSON Web Token (JWT)` có thời hạn ngắn (15 phút / 900 giây).
+   * *Biện pháp:* Băm mật khẩu một chiều bằng thuật toán `BCrypt` có độ phức tạp cao; cấp phát `JSON Web Token (JWT)` có thời hạn giới hạn (60 phút / 3600 giây, cấu hình `jwt.expiration`).
 
 3. **Privilege Escalation (Leo thang đặc quyền):**
    * *Nguy cơ:* Khán giả (`ROLE_VIEWER`) hoặc người dùng công khai tự đăng ký vai trò đặc quyền (`ROLE_ORGANIZER`, `ROLE_REFEREE`, `ROLE_ADMIN`, `ROLE_INTERNAL_RESULT_SYNC`) hoặc gửi request tạo giải đấu / sửa tỉ số trận đấu.
@@ -52,7 +52,7 @@ Hệ thống xác định 4 nhóm tài sản nghiệp vụ quan trọng cần đ
 * **Xác thực (Authentication):**
   * Sử dụng chuẩn công nghiệp JWT (JSON Web Token - RFC 7519).
   * Thuật toán ký: `HMAC-SHA256 (HS256)` với secret key có độ dài tối thiểu 256 bits.
-  * Thời hạn sống của token (`expiresIn`): 900 giây (15 phút).
+  * Thời hạn sống của token (`expiresIn`): 3600 giây (60 phút), cấu hình qua `jwt.expiration`.
   * Mã hóa mật khẩu: `BCryptPasswordEncoder` của Spring Security Crypto.
 
 * **Phân quyền (Authorization):**

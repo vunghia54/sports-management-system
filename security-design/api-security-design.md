@@ -109,7 +109,7 @@ Token được tạo ra và kiểm tra tính hợp lệ tuân thủ chuẩn RFC 
 {
   "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
   "tokenType": "Bearer",
-  "expiresIn": 900,
+  "expiresIn": 3600,
   "username": "organizer1",
   "role": "ROLE_ORGANIZER"
 }
