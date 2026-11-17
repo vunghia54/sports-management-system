@@ -1,0 +1,107 @@
+﻿[
+    {
+        "name":  "ATHLETE-SERVICE",
+        "instances":  [
+                          {
+                              "port":  8086,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.10",
+                              "instanceId":  "athlete-service:8086"
+                          }
+                      ]
+    },
+    {
+        "name":  "API-GATEWAY",
+        "instances":  [
+                          {
+                              "port":  8080,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.6",
+                              "instanceId":  "api-gateway:8080"
+                          }
+                      ]
+    },
+    {
+        "name":  "TOURNAMENT-SERVICE",
+        "instances":  [
+                          {
+                              "port":  8081,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.7",
+                              "instanceId":  "tournament-service:8081"
+                          },
+                          {
+                              "port":  8091,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.14",
+                              "instanceId":  "tournament-service:8091"
+                          }
+                      ]
+    },
+    {
+        "name":  "AUTH-SERVICE",
+        "instances":  [
+                          {
+                              "port":  8083,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.5",
+                              "instanceId":  "auth-service:8083"
+                          }
+                      ]
+    },
+    {
+        "name":  "MATCH-SERVICE",
+        "instances":  [
+                          {
+                              "port":  8082,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.9",
+                              "instanceId":  "match-service:8082"
+                          }
+                      ]
+    },
+    {
+        "name":  "TEAM-SERVICE",
+        "instances":  [
+                          {
+                              "port":  8085,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.12",
+                              "instanceId":  "team-service:8085"
+                          }
+                      ]
+    },
+    {
+        "name":  "RANKING-SERVICE",
+        "instances":  [
+                          {
+                              "port":  8088,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.13",
+                              "instanceId":  "ranking-service:8088"
+                          }
+                      ]
+    },
+    {
+        "name":  "NOTIFICATION-SERVICE",
+        "instances":  [
+                          {
+                              "port":  8084,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.11",
+                              "instanceId":  "notification-service:8084"
+                          }
+                      ]
+    },
+    {
+        "name":  "RESULT-SERVICE",
+        "instances":  [
+                          {
+                              "port":  8087,
+                              "status":  "UP",
+                              "hostName":  "172.19.0.8",
+                              "instanceId":  "result-service:8087"
+                          }
+                      ]
+    }
+]

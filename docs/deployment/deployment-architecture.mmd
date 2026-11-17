@@ -1,0 +1,69 @@
+flowchart LR
+    Client["Client / Browser / Postman"] -->|"HTTP :8080<br/>Header: X-Request-Id"| GW["API Gateway (:8080)<br/>Static UI + RequestIdFilter + LoadBalanced Proxy"]
+
+    subgraph DockerNet["Docker Bridge Network (sports-net)"]
+        Eureka["Service Registry (:8761)<br/>Netflix Eureka Server"]
+
+        GW -.->|"Service Discovery & Heartbeat"| Eureka
+
+        subgraph Services["Microservices (Non-root JRE 17 + Actuator /health,/info,/prometheus + RequestIdFilter)"]
+            Auth["AUTH-SERVICE (:8083)"]
+            Tour1["TOURNAMENT-SERVICE-1 (:8081)"]
+            Tour2["TOURNAMENT-SERVICE-2 (:8091)"]
+            Team["TEAM-SERVICE (:8085)"]
+            Ath["ATHLETE-SERVICE (:8086)"]
+            Match["MATCH-SERVICE (:8082)"]
+            Res["RESULT-SERVICE (:8087)"]
+            Rank["RANKING-SERVICE (:8088)"]
+            Notif["NOTIFICATION-SERVICE (:8084)"]
+        end
+
+        Services -.->|"Register & Discover<br/>http://service-registry:8761/eureka/"| Eureka
+
+        GW -->|"lb://service-id<br/>Forward X-Request-Id"| Services
+        Match -->|"http://tournament-service (LB/Failover, Timeout)"| Tour1
+        Match -->|"http://tournament-service (LB/Failover, Timeout)"| Tour2
+        Match -->|"http://team-service / athlete-service / result-service (Timeout)"| Team
+        Team -->|"http://athlete-service / match-service (Timeout)"| Ath
+        Res -->|"http://match-service / ranking-service / tournament-service (Timeout)"| Match
+        Rank -->|"http://tournament-service / match-service / result-service (Timeout)"| Res
+
+        MQ[("RabbitMQ (:5672 / :15672)<br/>Vol: rabbitmq_data")]
+        Match -->|"Publish MATCH_FINISHED (AFTER_COMMIT)"| MQ
+        MQ -->|"Consume sports.notification.queue"| Notif
+
+        DbInit["db-init (One-shot)<br/>create-service-db-users.sh"]
+
+        subgraph PG["PostgreSQL Container (:5432) — Vol: postgres_data"]
+            DB1[("auth_db<br/>owner: auth_user")]
+            DB2[("tournament_db<br/>owner: tournament_user")]
+            DB3[("team_db<br/>owner: team_user")]
+            DB4[("athlete_db<br/>owner: athlete_user")]
+            DB5[("match_db<br/>owner: match_user")]
+            DB6[("result_db<br/>owner: result_user")]
+            DB7[("ranking_db<br/>owner: ranking_user")]
+            DB8[("notification_db<br/>owner: notification_user")]
+        end
+
+        DbInit -->|"Create & isolate 8 service DB users"| PG
+
+        Auth -->|"auth_user"| DB1
+        Tour1 -->|"tournament_user"| DB2
+        Tour2 -->|"tournament_user"| DB2
+        Team -->|"team_user"| DB3
+        Ath -->|"athlete_user"| DB4
+        Match -->|"match_user"| DB5
+        Res -->|"result_user"| DB6
+        Rank -->|"ranking_user"| DB7
+        Notif -->|"notification_user"| DB8
+
+        subgraph Monitoring["Optional Profile: --profile monitoring"]
+            Prom["Prometheus (:9090)<br/>Scrape /actuator/prometheus (11 targets)<br/>Vol: prometheus_data"]
+            Graf["Grafana (:3000)<br/>Dashboard: sports-overview<br/>Vol: grafana_data"]
+            Prom --> Graf
+        end
+
+        Prom -.->|"GET /actuator/prometheus"| Eureka
+        Prom -.->|"GET /actuator/prometheus"| GW
+        Prom -.->|"GET /actuator/prometheus"| Services
+    end

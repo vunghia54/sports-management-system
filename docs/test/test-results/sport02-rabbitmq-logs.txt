@@ -1,0 +1,7 @@
+﻿=== MATCH-SERVICE ===
+match-service-1  | 2026-11-17T12:55:57.693+07:00  INFO 1 --- [match-service] [nio-8082-exec-8] [c9e69cc8-73fb-4db4-aba9-afa944e6fd53] c.s.m.match.service.MatchService         : Match finished event queued for AFTER_COMMIT publish, matchId=1
+match-service-1  | 2026-11-17T12:55:57.703+07:00  INFO 1 --- [match-service] [nio-8082-exec-8] [c9e69cc8-73fb-4db4-aba9-afa944e6fd53] c.s.m.m.producer.MatchEventProducer      : [RABBITMQ] Published MATCH_FINISHED event to sports.exchange [match.finished], matchId=1
+
+=== NOTIFICATION-SERVICE ===
+notification-service-1  | 2026-11-17T12:55:57.968+07:00  INFO 1 --- [notification-service] [ntContainer#0-1] [] c.s.m.n.messaging.NotificationConsumer   : Received MatchFinishedEvent for matchId=1
+notification-service-1  | 2026-11-17T12:55:58.049+07:00  INFO 1 --- [notification-service] [ntContainer#0-1] [] c.s.m.n.messaging.NotificationConsumer   : Created notificationId=1 for matchId=1

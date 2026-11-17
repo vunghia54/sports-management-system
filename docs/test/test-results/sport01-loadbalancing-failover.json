@@ -1,0 +1,40 @@
+﻿{
+    "loadBalance20Requests":  {
+                                  "tournament-service:8091":  10,
+                                  "tournament-service:8081":  10
+                              },
+    "sampleSequence":  [
+                           "1 -\u003e tournament-service:8091",
+                           "2 -\u003e tournament-service:8081",
+                           "3 -\u003e tournament-service:8091",
+                           "4 -\u003e tournament-service:8081",
+                           "5 -\u003e tournament-service:8091",
+                           "6 -\u003e tournament-service:8081",
+                           "7 -\u003e tournament-service:8091",
+                           "8 -\u003e tournament-service:8081",
+                           "9 -\u003e tournament-service:8091",
+                           "10 -\u003e tournament-service:8081",
+                           "11 -\u003e tournament-service:8091",
+                           "12 -\u003e tournament-service:8081",
+                           "13 -\u003e tournament-service:8091",
+                           "14 -\u003e tournament-service:8081",
+                           "15 -\u003e tournament-service:8091",
+                           "16 -\u003e tournament-service:8081",
+                           "17 -\u003e tournament-service:8091",
+                           "18 -\u003e tournament-service:8081",
+                           "19 -\u003e tournament-service:8091",
+                           "20 -\u003e tournament-service:8081"
+                       ],
+    "failover10RequestsAfterStoppingInstance1":  [
+                                                     "tournament-service:8091",
+                                                     "tournament-service:8091",
+                                                     "tournament-service:8091",
+                                                     "tournament-service:8091",
+                                                     "tournament-service:8091",
+                                                     "tournament-service:8091",
+                                                     "tournament-service:8091",
+                                                     "tournament-service:8091",
+                                                     "tournament-service:8091",
+                                                     "tournament-service:8091"
+                                                 ]
+}

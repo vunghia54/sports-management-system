@@ -443,3 +443,48 @@ Chạy đầy đủ cụm 10 module với `JWT_SECRET` ngẫu nhiên, `APP_DEMO_
 5. **Thông báo RabbitMQ (C3):** `notification-service` nhận đủ thông báo chứa tỉ số (`"1 - 1"` và `"luân lưu 5 - 4"`).
 6. **Dọn dẹp:** Đã dừng toàn bộ 10 JVM và xóa toàn bộ dữ liệu kiểm thử khỏi 8 DB PostgreSQL, xác minh số dòng sau test khớp đúng trạng thái nền ban đầu.
 
+---
+
+## 6. Vòng 3 — Hardening TH8, Kiểm thử Docker Compose & Xử lý Rà soát Logic
+
+Sau khi kiểm tra, biên dịch sạch và chạy thử toàn bộ thay đổi Vòng 3 trên Maven (`Spring Boot 4.1.1`) và Docker Compose cách ly (`sports_th8_v3_test`, `sports_th8_oldvol_test`), toàn bộ các hạng mục đều đạt yêu cầu (không có mục nào phải hoàn tác).
+
+### Bảng Tổng Hợp Commit Vòng 3
+
+| Nhóm | Commit | Tiêu đề & Nội dung chính | Trạng thái |
+|---|---|---|---|
+| **security,logic** | `38a20a0` | Chuẩn hóa username không phân biệt hoa/thường & khoảng trắng (`AuthService`, `DataSeeder`, ownership check ở `Team`/`Athlete`), sửa Stored XSS ở `app.js` (`UiSecurityXssTest`), siết quyền đọc thông báo riêng tư (`NotificationService`/`Repository`), kiểm tra biến động đội hình từ `team-service` sang `match-service`, khóa đổi `tournamentId`/`sportId` khi `Competition` đã có đăng ký/trận đấu, chặn xác nhận kết quả trận `CANCELLED`, và tái kiểm tra sức khỏe/đội hình khi `approveRegistration`. | Hoàn tất & Đã kiểm thử |
+| **deploy** | `344c601` | Chuyển `seed-data.json` từ `api-gateway/.../static/js/` sang `data/seed-data.json` và cập nhật `seed_all_soa_data.py`; gỡ mật khẩu DB & `JWT_SECRET` khỏi `.run/*.xml` (đọc qua biến môi trường Windows); bổ sung `.dockerignore`, `.gitattributes` (`*.sh` LF), `.gitignore` (`tmp/`, `backups/`, `.env.*`) và multi-stage `Dockerfile` (non-root `appuser`) cho 10 module. | Hoàn tất & Đã kiểm thử |
+| **timeout** | `7bde554` | Cấu hình `RestClientConfig` ở 6 service (`tournament`, `team`, `athlete`, `match`, `result`, `ranking`) dùng `JdkClientHttpRequestFactory` (`HTTP_1_1`) với `services.http.connect-timeout-ms` (`2000ms`) và `read-timeout-ms` (`10000ms`) cùng interceptor gắn `X-Request-Id`; thêm [`ResultTimeoutAndRequestIdTest.java`](result-service/src/test/java/com/sports/management/result/ResultTimeoutAndRequestIdTest.java) kiểm chứng trả `503` nhanh khi provider chậm hơn read timeout (`350ms` vs `2200ms`). | Hoàn tất & Đã kiểm thử |
+| **monitoring** | `4acf347` | Thêm `spring-boot-starter-actuator` và `io.micrometer:micrometer-registry-prometheus` cho 10 `pom.xml`; mở `GET /actuator/prometheus` trong 8 `SecurityConfig`; bật `exposure=health,info,prometheus` và `management.metrics.tags.application`; bổ sung test `/actuator/prometheus` `200` / `/actuator/env` bị chặn trên 9 module có test; thêm cấu hình `docker/monitoring/` (Prometheus + Grafana datasource & dashboard `sports-overview.json`). | Hoàn tất & Đã kiểm thử |
+| **db-users** | `26b4286` | Thêm `docker/create-service-db-users.sh` và service một lần `db-init` trong `docker-compose.yml` tạo 8 tài khoản `<service>_user` tách biệt, chuyển quyền sở hữu database/schema `public`/bảng và thu hồi `CONNECT` từ `PUBLIC`; cập nhật `.env.example` và bổ sung `SPORT03`, `SPORT04` cùng giải mã UTF-8 trong `test_th8_deployment.ps1`. | Hoàn tất & Đã kiểm thử |
+| **request-id** | `5353e2d` | Thêm `RequestIdFilter` ở 8 business service và `api-gateway` (bọc request chuyển tiếp header); bỏ qua `X-Request-Id` từ downstream trong `GatewayRoutingController` tránh trùng header; chuẩn hóa log SLF4J và `logging.pattern.correlation=[%X{requestId:-}]`; thêm [`GatewayRequestIdPropagationTest.java`](api-gateway/src/test/java/com/sports/management/gateway/GatewayRequestIdPropagationTest.java). | Hoàn tất & Đã kiểm thử |
+| **docs** | *(commit cuối Vòng 3)* | Cập nhật `docs/deployment/deployment-architecture.mmd` & `.png`, `docs/deployment/deployment-design.md`, `README.md`, `docs/test/deployment-test-cases.md` (`10/10` + monitoring), `docs/operation/failure-analysis.md`, bộ minh chứng trong `docs/test/test-results/` và mục Vòng 3 trong `KET_QUA_SUA_LOI.md`. | Hoàn tất & Đã kiểm thử |
+
+### Kết Quả Kiểm Chứng Chi Tiết Vòng 3
+
+1. **Biên dịch & Kiểm thử tự động Maven (`.\mvnw.cmd clean test`) — 118/118 PASS (0 fail, 0 error, 0 skipped):**
+   - `service-registry`: build sạch (`0` test; `/actuator/prometheus` kiểm chứng trực tiếp qua container Docker trả `200 OK`).
+   - `api-gateway`: **16/16** pass (gồm `ActuatorHealthAndInfoTest`, `GatewayRequestIdPropagationTest`, `GatewayCorsIntegrationTest`, `UiSecurityXssTest`, `DemoMode*`, `SystemReport*`).
+   - `auth-service`: **18/18** pass (gồm `ActuatorSecurityTest`, `AuthRoleAndRegistrationTest`, `AuthPasswordSecurityTest`, `AuthControllerPagedUsersTest`, `DataSeeder*`, `JwtSecretStartupValidationTest`).
+   - `tournament-service`: **13/13** pass.
+   - `team-service`: **10/10** pass.
+   - `athlete-service`: **5/5** pass.
+   - `match-service`: **22/22** pass.
+   - `result-service`: **14/14** pass (`ResultCompetitionAndConcurrencyTest` 4/4, `ResultSecuritySyncAndBatchIntegrationTest` 3/3 xác nhận `PATCH` sang `match-service` qua `JdkClientHttpRequestFactory`, `ResultTimeoutAndRequestIdTest` 1/1, `ResultValidationKnockoutAndReopenSyncTest` 6/6).
+   - `ranking-service`: **14/14** pass.
+   - `notification-service`: **6/6** pass.
+   - Kiểm tra bổ trợ: `node --check api-gateway/src/main/resources/static/js/app.js` pass; `python -m py_compile seed_all_soa_data.py` pass; `.run/*.xml` sạch mật khẩu và `JWT_SECRET`.
+
+2. **Kiểm thử Docker Compose (`test_th8_deployment.ps1` trên `sports_th8_v3_test` + volume cũ `sports_th8_oldvol_test` + `--profile monitoring`):**
+   - `docker compose --env-file ... config -q` hợp lệ (exit `0`).
+   - `Wait-ComposeServicesHealthy` hoạt động ổn định, không bị kẹt khi container `db-init` thoát (`Exited (0)`).
+   - **10/10 kịch bản PASS (`DEP01`–`DEP06` + `SPORT01`–`SPORT04`)** trong [`docs/test/test-results/summary.json`](docs/test/test-results/summary.json):
+     - `DEP02`: 11/11 service trả `/actuator/health` `UP` (không lộ `components`), `/actuator/prometheus` `200`, `/actuator/env` bị chặn (`401`/`403`/`404`).
+     - `SPORT03`: `psql -U team_user -d athlete_db -c "select 1"` bị từ chối (`exitCode=2`, `FATAL: permission denied for database "athlete_db"`); toàn bộ 8/8 DB thuộc quyền `<service>_user`.
+     - Kiểm chứng thêm trên volume cũ mô phỏng (`sports_th8_oldvol_test` có bảng `public.sports` do user `sports` tạo trước cùng dữ liệu cũ): `db-init` chuyển quyền sở hữu sang `tournament_user`, bảo toàn bản ghi và `tournament-service` (`Hibernate ddl-auto=update`) khởi động `healthy` sau `16s`.
+     - `SPORT04`: Request `GET /api/v1/tournaments/1` mang `X-Request-Id: sport04-trace-81580` trả về đúng 1 header `X-Request-Id` không trùng lặp và xuất hiện khớp trong log của cả `api-gateway-1` và `tournament-service-1`.
+   - **Monitoring (`--profile monitoring`):** Prometheus thấy đủ `11/11` target `up`; cả `6/6` PromQL query của [`sports-overview.json`](docker/monitoring/grafana/dashboards/sports-overview.json) trả `status="success"`; Grafana datasource `Prometheus` đạt `healthStatus="OK"` và dashboard `Sports Management - Tong quan dich vu` nạp đủ `6` panel ([`monitoring-check.json`](docs/test/test-results/monitoring-check.json)).
+   - Toàn bộ container và volume tạm của các project kiểm thử cách ly (`sports_th8_v3_test`, `sports_th8_oldvol_test`) đã được dọn sạch (`down -v`) sau khi lưu minh chứng.
+
+

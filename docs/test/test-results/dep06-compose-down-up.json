@@ -1,0 +1,7 @@
+﻿{
+    "tournamentId":  1,
+    "tournamentNameAfterDownUp":  "Giai Dau Ben Vung TH8 81580",
+    "organizerLoginAfterDownUp":  200,
+    "rabbitMqHostname":  "rabbitmq",
+    "rabbitMqPersistentMessageRecovered":  true
+}

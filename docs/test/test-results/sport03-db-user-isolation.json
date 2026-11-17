@@ -1,0 +1,85 @@
+﻿{
+    "crossDbDeniedTest":  {
+                              "command":  "psql -U team_user -d athlete_db -c \"select 1\"",
+                              "exitCode":  2,
+                              "denied":  true,
+                              "message":  "psql: error: connection to server on socket \"/var/run/postgresql/.s.PGSQL.5432\" failed: FATAL:  permission denied for database \"athlete_db\"\nDETAIL:  User does not have CONNECT privilege."
+                          },
+    "serviceOwnershipChecks":  [
+                                   {
+                                       "database":  "auth_db",
+                                       "user":  "auth_user",
+                                       "currentUserVerified":  "auth_user",
+                                       "tablesAndOwners":  [
+                                                               "users:auth_user"
+                                                           ]
+                                   },
+                                   {
+                                       "database":  "tournament_db",
+                                       "user":  "tournament_user",
+                                       "currentUserVerified":  "tournament_user",
+                                       "tablesAndOwners":  [
+                                                               "competition_formats:tournament_user",
+                                                               "competition_rules:tournament_user",
+                                                               "competitions:tournament_user",
+                                                               "sports:tournament_user",
+                                                               "tournaments:tournament_user"
+                                                           ]
+                                   },
+                                   {
+                                       "database":  "team_db",
+                                       "user":  "team_user",
+                                       "currentUserVerified":  "team_user",
+                                       "tablesAndOwners":  [
+                                                               "team_members:team_user",
+                                                               "teams:team_user"
+                                                           ]
+                                   },
+                                   {
+                                       "database":  "athlete_db",
+                                       "user":  "athlete_user",
+                                       "currentUserVerified":  "athlete_user",
+                                       "tablesAndOwners":  [
+                                                               "athletes:athlete_user"
+                                                           ]
+                                   },
+                                   {
+                                       "database":  "match_db",
+                                       "user":  "match_user",
+                                       "currentUserVerified":  "match_user",
+                                       "tablesAndOwners":  [
+                                                               "matches:match_user",
+                                                               "participants:match_user",
+                                                               "registrations:match_user"
+                                                           ]
+                                   },
+                                   {
+                                       "database":  "result_db",
+                                       "user":  "result_user",
+                                       "currentUserVerified":  "result_user",
+                                       "tablesAndOwners":  [
+                                                               "ranking_sync_tasks:result_user",
+                                                               "result_details:result_user",
+                                                               "results:result_user"
+                                                           ]
+                                   },
+                                   {
+                                       "database":  "ranking_db",
+                                       "user":  "ranking_user",
+                                       "currentUserVerified":  "ranking_user",
+                                       "tablesAndOwners":  [
+                                                               "ranking_items:ranking_user",
+                                                               "rankings:ranking_user"
+                                                           ]
+                                   },
+                                   {
+                                       "database":  "notification_db",
+                                       "user":  "notification_user",
+                                       "currentUserVerified":  "notification_user",
+                                       "tablesAndOwners":  [
+                                                               "notification_reads:notification_user",
+                                                               "notifications:notification_user"
+                                                           ]
+                                   }
+                               ]
+}

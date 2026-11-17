@@ -1,0 +1,145 @@
+﻿[
+    {
+        "service":  "service-registry",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  404
+    },
+    {
+        "service":  "api-gateway",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  404
+    },
+    {
+        "service":  "auth-service",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  403
+    },
+    {
+        "service":  "tournament-service-1",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  401
+    },
+    {
+        "service":  "tournament-service-2",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  401
+    },
+    {
+        "service":  "team-service",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  401
+    },
+    {
+        "service":  "athlete-service",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  401
+    },
+    {
+        "service":  "match-service",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  401
+    },
+    {
+        "service":  "result-service",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  401
+    },
+    {
+        "service":  "ranking-service",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  401
+    },
+    {
+        "service":  "notification-service",
+        "healthCode":  200,
+        "healthBody":  {
+                           "groups":  [
+                                          "liveness",
+                                          "readiness"
+                                      ],
+                           "status":  "UP"
+                       },
+        "prometheusCode":  200,
+        "envEndpointStatus":  401
+    }
+]

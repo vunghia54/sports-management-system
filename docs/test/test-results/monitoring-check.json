@@ -1,0 +1,130 @@
+﻿{
+    "timestampUtc":  "2026-11-17T05:57:57Z",
+    "prometheusTargetsTotal":  11,
+    "prometheusTargetsUp":  11,
+    "targets":  [
+                    {
+                        "job":  "sports-services",
+                        "instance":  "service-registry:8761",
+                        "health":  "up",
+                        "scrapeUrl":  "http://service-registry:8761/actuator/prometheus"
+                    },
+                    {
+                        "job":  "sports-services",
+                        "instance":  "api-gateway:8080",
+                        "health":  "up",
+                        "scrapeUrl":  "http://api-gateway:8080/actuator/prometheus"
+                    },
+                    {
+                        "job":  "sports-services",
+                        "instance":  "tournament-service:8081",
+                        "health":  "up",
+                        "scrapeUrl":  "http://tournament-service:8081/actuator/prometheus"
+                    },
+                    {
+                        "job":  "sports-services",
+                        "instance":  "athlete-service:8086",
+                        "health":  "up",
+                        "scrapeUrl":  "http://athlete-service:8086/actuator/prometheus"
+                    },
+                    {
+                        "job":  "sports-services",
+                        "instance":  "match-service:8082",
+                        "health":  "up",
+                        "scrapeUrl":  "http://match-service:8082/actuator/prometheus"
+                    },
+                    {
+                        "job":  "sports-services",
+                        "instance":  "result-service:8087",
+                        "health":  "up",
+                        "scrapeUrl":  "http://result-service:8087/actuator/prometheus"
+                    },
+                    {
+                        "job":  "sports-services",
+                        "instance":  "notification-service:8084",
+                        "health":  "up",
+                        "scrapeUrl":  "http://notification-service:8084/actuator/prometheus"
+                    },
+                    {
+                        "job":  "sports-services",
+                        "instance":  "auth-service:8083",
+                        "health":  "up",
+                        "scrapeUrl":  "http://auth-service:8083/actuator/prometheus"
+                    },
+                    {
+                        "job":  "sports-services",
+                        "instance":  "tournament-service-2:8091",
+                        "health":  "up",
+                        "scrapeUrl":  "http://tournament-service-2:8091/actuator/prometheus"
+                    },
+                    {
+                        "job":  "sports-services",
+                        "instance":  "team-service:8085",
+                        "health":  "up",
+                        "scrapeUrl":  "http://team-service:8085/actuator/prometheus"
+                    },
+                    {
+                        "job":  "sports-services",
+                        "instance":  "ranking-service:8088",
+                        "health":  "up",
+                        "scrapeUrl":  "http://ranking-service:8088/actuator/prometheus"
+                    }
+                ],
+    "dashboardQueriesVerified":  [
+                                     {
+                                         "panelId":  1,
+                                         "title":  "Instance dang hoat dong (up)",
+                                         "expr":  "up{job=\"sports-services\"}",
+                                         "status":  "success",
+                                         "seriesCount":  11
+                                     },
+                                     {
+                                         "panelId":  2,
+                                         "title":  "So request moi giay theo service",
+                                         "expr":  "sum by (application) (rate(http_server_requests_seconds_count[1m]))",
+                                         "status":  "success",
+                                         "seriesCount":  10
+                                     },
+                                     {
+                                         "panelId":  3,
+                                         "title":  "Request loi 5xx moi giay",
+                                         "expr":  "sum by (application) (rate(http_server_requests_seconds_count{status=~\"5..\"}[1m]))",
+                                         "status":  "success",
+                                         "seriesCount":  0
+                                     },
+                                     {
+                                         "panelId":  4,
+                                         "title":  "Do tre trung binh",
+                                         "expr":  "sum by (application) (rate(http_server_requests_seconds_sum[1m])) / sum by (application) (rate(http_server_requests_seconds_count[1m]))",
+                                         "status":  "success",
+                                         "seriesCount":  10
+                                     },
+                                     {
+                                         "panelId":  5,
+                                         "title":  "JVM heap da dung",
+                                         "expr":  "sum by (application, instance) (jvm_memory_used_bytes{area=\"heap\"})",
+                                         "status":  "success",
+                                         "seriesCount":  11
+                                     },
+                                     {
+                                         "panelId":  6,
+                                         "title":  "Ket noi database dang dung (HikariCP)",
+                                         "expr":  "hikaricp_connections_active",
+                                         "status":  "success",
+                                         "seriesCount":  9
+                                     }
+                                 ],
+    "grafanaDatasource":  {
+                              "name":  "Prometheus",
+                              "uid":  "prometheus",
+                              "type":  "prometheus",
+                              "url":  "http://prometheus:9090",
+                              "healthStatus":  "OK",
+                              "healthMessage":  "Successfully queried the Prometheus API."
+                          },
+    "grafanaDashboard":  {
+                             "uid":  "sports-overview",
+                             "title":  "Sports Management - Tong quan dich vu",
+                             "panelsCount":  6
+                         }
+}
