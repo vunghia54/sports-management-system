@@ -47,3 +47,4 @@ __pycache__/
 skills-lock.json
 tmp/
 backups/
+node_modules/

@@ -406,6 +406,31 @@ services:
     restart: unless-stopped
 
   # =====================================================
+  # TH2 (tuy chon): Consumer viet bang Node.js + Express
+  # docker compose --profile th2-demo up -d --build express-consumer
+  # =====================================================
+  express-consumer:
+    build:
+      context: ./framework-comparison/express-tournament-consumer
+    profiles: ["th2-demo"]
+    environment:
+      TOURNAMENT_PROVIDER_URL: http://api-gateway:8080
+      PROVIDER_TIMEOUT_MS: ${EXPRESS_PROVIDER_TIMEOUT_MS:-3000}
+    ports:
+      - "${EXPRESS_CONSUMER_PORT:-8095}:8095"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - sports-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8095/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # =====================================================
   # GIAM SAT (tuy chon): docker compose --profile monitoring up -d
   # =====================================================
   prometheus:
