@@ -1,436 +1,548 @@
 {
-  "info": {
-    "_postman_id": "th7-service-discovery-sports-collection",
-    "name": "Sports Management System - TH7 Microservices & Service Registry (Eureka)",
-    "description": "Bộ kiểm thử Postman cho Bài thực hành số 7: Service Registry (Eureka Server), Service Discovery, Multi-Instance Load Balancing, Failover (TC01 - TC06) và API Gateway.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "variable": [
-    {
-      "key": "eurekaUrl",
-      "value": "http://localhost:8761"
-    },
-    {
-      "key": "gatewayUrl",
-      "value": "http://localhost:8080"
-    },
-    {
-      "key": "tournamentInstance1Url",
-      "value": "http://localhost:8081"
-    },
-    {
-      "key": "tournamentInstance2Url",
-      "value": "http://localhost:8091"
-    },
-    {
-      "key": "matchServiceUrl",
-      "value": "http://localhost:8082"
-    },
-    {
-      "key": "authServiceUrl",
-      "value": "http://localhost:8083"
-    },
-    {
-      "key": "jwtToken",
-      "value": ""
-    },
-    {
-      "key": "tournamentId",
-      "value": "1"
-    }
-  ],
-  "item": [
-    {
-      "name": "1. TC01 - Kiểm tra Service Registry (Eureka Server :8761)",
-      "item": [
-        {
-          "name": "TC01.1 - Xem danh sách tất cả Microservices đã đăng ký trên Eureka",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200 OK', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test('Eureka Registry contains TOURNAMENT-SERVICE and MATCH-SERVICE', function () {",
-                  "    var bodyText = pm.response.text();",
-                  "    pm.expect(bodyText).to.include('TOURNAMENT-SERVICE');",
-                  "    pm.expect(bodyText).to.include('MATCH-SERVICE');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{eurekaUrl}}/eureka/apps",
-              "host": [
-                "{{eurekaUrl}}"
-              ],
-              "path": [
-                "eureka",
-                "apps"
-              ]
-            }
-          }
-        },
-        {
-          "name": "TC01.2 - Kiểm tra các instance của TOURNAMENT-SERVICE trên Eureka",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200 OK', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{eurekaUrl}}/eureka/apps/TOURNAMENT-SERVICE",
-              "host": [
-                "{{eurekaUrl}}"
-              ],
-              "path": [
-                "eureka",
-                "apps",
-                "TOURNAMENT-SERVICE"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "2. TC02 & TC03 - Kiểm tra Multi-Instance & Load Balancing qua Service Discovery",
-      "item": [
-        {
-          "name": "TC02.1 - Kiểm tra trực tiếp Instance Info của Tournament Service 1 (Port 8081)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Instance 1 returns port 8081', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.serviceName).to.eql('TOURNAMENT-SERVICE');",
-                  "    pm.expect(json.instancePort).to.eql(8081);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{tournamentInstance1Url}}/api/v1/instance-info",
-              "host": [
-                "{{tournamentInstance1Url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "instance-info"
-              ]
-            }
-          }
-        },
-        {
-          "name": "TC02.2 - Kiểm tra trực tiếp Instance Info của Tournament Service 2 (Port 8091)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Instance 2 returns port 8091', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.serviceName).to.eql('TOURNAMENT-SERVICE');",
-                  "    pm.expect(json.instancePort).to.eql(8091);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{tournamentInstance2Url}}/api/v1/instance-info",
-              "host": [
-                "{{tournamentInstance2Url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "instance-info"
-              ]
-            }
-          }
-        },
-        {
-          "name": "TC03.1 - Consumer (Match Service) gọi Provider (Tournament Service) qua Service ID & LoadBalancer",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Service Discovery & LoadBalancer returns 200 OK', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.consumerService).to.eql('MATCH-SERVICE');",
-                  "    pm.expect(json.discoveryTarget).to.eql('http://tournament-service');",
-                  "    pm.expect(json.providerInstance.serviceName).to.eql('TOURNAMENT-SERVICE');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{matchServiceUrl}}/api/v1/matches/discovery/tournament-instance",
-              "host": [
-                "{{matchServiceUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "matches",
-                "discovery",
-                "tournament-instance"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "3. Luồng nghiệp vụ Tạo Lịch Thi Đấu qua Service Discovery (Match -> Tournament)",
-      "item": [
-        {
-          "name": "3.1 - Đăng nhập lấy JWT Token (ROLE_ORGANIZER)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Login successful', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "    var json = pm.response.json();",
-                  "    pm.collectionVariables.set('jwtToken', json.accessToken);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"organizer1\",\n  \"password\": \"password123\"\n}"
-            },
-            "url": {
-              "raw": "{{authServiceUrl}}/api/v1/auth/login",
-              "host": [
-                "{{authServiceUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "login"
-              ]
-            }
-          }
-        },
-        {
-          "name": "3.2 - Tạo Giải đấu mới trên Tournament Service",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Tournament created 201', function () {",
-                  "    pm.response.to.have.status(201);",
-                  "    var json = pm.response.json();",
-                  "    pm.collectionVariables.set('tournamentId', json.id);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwtToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Giải Vô Địch Bóng Đá Sinh Viên Toàn Quốc 2026\",\n  \"description\": \"Giải đấu kiểm thử Service Discovery TH7\",\n  \"startDate\": \"2026-11-20\",\n  \"endDate\": \"2026-12-10\",\n  \"location\": \"Hà Nội\",\n  \"registrationStartDate\": \"2026-10-01\",\n  \"registrationEndDate\": \"2026-11-15\",\n  \"status\": \"UPCOMING\"\n}"
-            },
-            "url": {
-              "raw": "{{tournamentInstance1Url}}/api/v1/tournaments",
-              "host": [
-                "{{tournamentInstance1Url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "tournaments"
-              ]
-            }
-          }
-        },
-        {
-          "name": "3.3 - Tạo Trận đấu trên Match Service (Khám phá Tournament Service qua Eureka)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Match created 201 via Service Discovery', function () {",
-                  "    pm.response.to.have.status(201);",
-                  "    pm.expect(pm.response.headers.get('X-Tournament-Provider-Instance')).to.include('tournament-service:');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwtToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": 1,\n  \"round\": \"Chung kết\",\n  \"participant1Id\": 1,\n  \"participant2Id\": 2,\n  \"location\": \"SVĐ Mỹ Đình\",\n  \"scheduledTime\": \"2026-11-28T19:30:00\",\n  \"status\": \"SCHEDULED\"\n}"
-            },
-            "url": {
-              "raw": "{{matchServiceUrl}}/api/v1/matches",
-              "host": [
-                "{{matchServiceUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "matches"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "4. API Gateway (:8080) - Định tuyến động theo Service ID",
-      "item": [
-        {
-          "name": "4.1 - Xem danh sách Routes và Instances khám phá được tại API Gateway",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/gateway/routes",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "gateway",
-                "routes"
-              ]
-            }
-          }
-        },
-        {
-          "name": "4.2 - Gọi Tournament Service qua API Gateway (:8080 -> lb://TOURNAMENT-SERVICE)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/tournaments/instance-info",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "tournaments",
-                "instance-info"
-              ]
-            }
-          }
-        },
-        {
-          "name": "4.3 - Gọi Match Service qua API Gateway (:8080 -> lb://MATCH-SERVICE)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{gatewayUrl}}/api/v1/matches",
-              "host": [
-                "{{gatewayUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "matches"
-              ]
-            }
-          }
-        }
-      ]
-    }
-  ]
+	"info": {
+		"_postman_id": "a9e41c73-d1b8-42c2-b2f5-e7c41289b0a1",
+		"name": "Sports Management System - TH7 Microservices & Service Registry (Eureka)",
+		"description": "Collection kiểm thử Service Discovery & Load Balancing (TH7): Eureka Registry, multi-instance TOURNAMENT-SERVICE (8081 & 8091), LoadBalancer qua Match Service, luồng nghiệp vụ động (organizer123, không hardcode ID/ngày, dùng matchTime đúng chuẩn) và API Gateway định tuyến động.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{ "key": "eurekaUrl", "value": "http://localhost:8761" },
+		{ "key": "gatewayUrl", "value": "http://localhost:8080" },
+		{ "key": "authServiceUrl", "value": "http://localhost:8083" },
+		{ "key": "tournamentInstance1Url", "value": "http://localhost:8081" },
+		{ "key": "tournamentInstance2Url", "value": "http://localhost:8091" },
+		{ "key": "matchServiceUrl", "value": "http://localhost:8082" },
+		{ "key": "teamServiceUrl", "value": "http://localhost:8085" },
+		{ "key": "athleteServiceUrl", "value": "http://localhost:8086" },
+		{ "key": "runTag", "value": "" },
+		{ "key": "regStart", "value": "" },
+		{ "key": "regEnd", "value": "" },
+		{ "key": "tourStart", "value": "" },
+		{ "key": "tourEnd", "value": "" },
+		{ "key": "matchTimeDynamic", "value": "" },
+		{ "key": "dobDynamic", "value": "" },
+		{ "key": "cccd1", "value": "" },
+		{ "key": "cccd2", "value": "" },
+		{ "key": "jwtToken", "value": "" },
+		{ "key": "mgrToken", "value": "" },
+		{ "key": "sportId", "value": "" },
+		{ "key": "tournamentId", "value": "" },
+		{ "key": "competitionId", "value": "" },
+		{ "key": "ath1Id", "value": "" },
+		{ "key": "ath2Id", "value": "" },
+		{ "key": "team1Id", "value": "" },
+		{ "key": "team2Id", "value": "" },
+		{ "key": "reg1Id", "value": "" },
+		{ "key": "reg2Id", "value": "" },
+		{ "key": "participant1Id", "value": "" },
+		{ "key": "participant2Id", "value": "" }
+	],
+	"item": [
+		{
+			"name": "1. TC01 - Kiểm tra Service Registry (Eureka Server :8761)",
+			"item": [
+				{
+					"name": "TC01.1 - Xem danh sách tất cả Microservices đã đăng ký trên Eureka",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+									"const apps = pm.response.json().applications.application;",
+									"const appNames = apps.map(a => a.name);",
+									"pm.test('All required microservices are registered in Eureka', function () {",
+									"    pm.expect(appNames).to.include('API-GATEWAY');",
+									"    pm.expect(appNames).to.include('AUTH-SERVICE');",
+									"    pm.expect(appNames).to.include('TOURNAMENT-SERVICE');",
+									"    pm.expect(appNames).to.include('MATCH-SERVICE');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Accept", "value": "application/json" }],
+						"url": { "raw": "{{eurekaUrl}}/eureka/apps", "host": ["{{eurekaUrl}}"], "path": ["eureka", "apps"] }
+					}
+				},
+				{
+					"name": "TC01.2 - Kiểm tra các instance của TOURNAMENT-SERVICE trên Eureka",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+									"const app = pm.response.json().application;",
+									"const instances = Array.isArray(app.instance) ? app.instance : [app.instance];",
+									"pm.test('TOURNAMENT-SERVICE has at least 2 UP instances', function () {",
+									"    pm.expect(instances.length).to.be.at.least(2);",
+									"    instances.forEach(inst => pm.expect(inst.status).to.eql('UP'));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Accept", "value": "application/json" }],
+						"url": { "raw": "{{eurekaUrl}}/eureka/apps/TOURNAMENT-SERVICE", "host": ["{{eurekaUrl}}"], "path": ["eureka", "apps", "TOURNAMENT-SERVICE"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "2. TC02 & TC03 - Kiểm tra Multi-Instance & Load Balancing qua Service Discovery",
+			"item": [
+				{
+					"name": "TC02.1 - Kiểm tra trực tiếp Instance Info của Tournament Service 1 (Port 8081)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+									"const json = pm.response.json();",
+									"pm.test('Instance 1 port is 8081', function () {",
+									"    pm.expect(String(json.instancePort)).to.eql('8081');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{tournamentInstance1Url}}/api/v1/instance-info", "host": ["{{tournamentInstance1Url}}"], "path": ["api", "v1", "instance-info"] }
+					}
+				},
+				{
+					"name": "TC02.2 - Kiểm tra trực tiếp Instance Info của Tournament Service 2 (Port 8091)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+									"const json = pm.response.json();",
+									"pm.test('Instance 2 port is 8091', function () {",
+									"    pm.expect(String(json.instancePort)).to.eql('8091');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{tournamentInstance2Url}}/api/v1/instance-info", "host": ["{{tournamentInstance2Url}}"], "path": ["api", "v1", "instance-info"] }
+					}
+				},
+				{
+					"name": "TC03.1 - Consumer (Match Service) gọi Provider (Tournament Service) qua Service ID & LoadBalancer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+									"const json = pm.response.json();",
+									"pm.test('Returned providerInstance via Discovery Client', function () {",
+									"    pm.expect(json.providerInstance).to.be.an('object');",
+									"    pm.expect(String(json.providerInstance.instancePort)).to.be.oneOf(['8081', '8091']);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{matchServiceUrl}}/api/v1/matches/discovery/tournament-instance", "host": ["{{matchServiceUrl}}"], "path": ["api", "v1", "matches", "discovery", "tournament-instance"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Luồng nghiệp vụ Tạo Lịch Thi Đấu qua Service Discovery (Match -> Tournament)",
+			"item": [
+				{
+					"name": "3.1 - Đăng nhập lấy JWT Token (organizer1 / organizer123)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const tag = Date.now().toString().slice(-7);",
+									"pm.collectionVariables.set('runTag', tag);",
+									"const now = new Date();",
+									"const pad = (n) => String(n).padStart(2, '0');",
+									"const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;",
+									"const addDays = (d, n) => new Date(d.getTime() + n * 86400000);",
+									"pm.collectionVariables.set('regStart', fmt(addDays(now, -3)));",
+									"pm.collectionVariables.set('regEnd', fmt(now));",
+									"pm.collectionVariables.set('tourStart', fmt(now));",
+									"pm.collectionVariables.set('tourEnd', fmt(addDays(now, 20)));",
+									"pm.collectionVariables.set('matchTimeDynamic', fmt(addDays(now, 2)) + 'T19:00:00');",
+									"pm.collectionVariables.set('dobDynamic', fmt(addDays(now, -21 * 365)));",
+									"pm.collectionVariables.set('cccd1', '0797' + tag + '1');",
+									"pm.collectionVariables.set('cccd2', '0797' + tag + '2');"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Login organizer1 200 OK', function () { pm.response.to.have.status(200); });",
+									"pm.collectionVariables.set('jwtToken', pm.response.json().accessToken);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": { "mode": "raw", "raw": "{\n  \"username\": \"organizer1\",\n  \"password\": \"organizer123\"\n}" },
+						"url": { "raw": "{{authServiceUrl}}/api/v1/auth/login", "host": ["{{authServiceUrl}}"], "path": ["api", "v1", "auth", "login"] }
+					}
+				},
+				{
+					"name": "3.1b - Đăng nhập manager1 cho bước đăng ký đội",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Login manager1 200 OK', function () { pm.response.to.have.status(200); });",
+									"pm.collectionVariables.set('mgrToken', pm.response.json().accessToken);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": { "mode": "raw", "raw": "{\n  \"username\": \"manager1\",\n  \"password\": \"manager123\"\n}" },
+						"url": { "raw": "{{authServiceUrl}}/api/v1/auth/login", "host": ["{{authServiceUrl}}"], "path": ["api", "v1", "auth", "login"] }
+					}
+				},
+				{
+					"name": "3.1c - Lấy Sport ID (TEAM)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Sports 200 OK', function () { pm.response.to.have.status(200); });",
+									"const resBody = pm.response.json();",
+									"const arr = Array.isArray(resBody) ? resBody : (resBody.content || []);",
+									"const sp = arr.find((s) => s.sportType === 'TEAM') || arr[0];",
+									"pm.collectionVariables.set('sportId', String(sp.id));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{tournamentInstance1Url}}/api/v1/sports", "host": ["{{tournamentInstance1Url}}"], "path": ["api", "v1", "sports"] }
+					}
+				},
+				{
+					"name": "3.2 - Tạo Giải đấu mới trên Tournament Service",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Tournament created 201', function () { pm.response.to.have.status(201); });",
+									"pm.collectionVariables.set('tournamentId', String(pm.response.json().id));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Giải Vô Địch Sinh Viên TH7 {{runTag}}\",\n  \"description\": \"Kiểm thử Service Discovery & Dynamic Match Setup\",\n  \"startDate\": \"{{tourStart}}\",\n  \"endDate\": \"{{tourEnd}}\",\n  \"location\": \"SVĐ Mỹ Đình\",\n  \"registrationStartDate\": \"{{regStart}}\",\n  \"registrationEndDate\": \"{{regEnd}}\",\n  \"status\": \"OPEN_REGISTRATION\"\n}"
+						},
+						"url": { "raw": "{{tournamentInstance1Url}}/api/v1/tournaments", "host": ["{{tournamentInstance1Url}}"], "path": ["api", "v1", "tournaments"] }
+					}
+				},
+				{
+					"name": "3.2b - Tạo Nội dung + Rule + Format",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Competition created 201', function () { pm.response.to.have.status(201); });",
+									"pm.collectionVariables.set('competitionId', String(pm.response.json().id));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"sportId\": {{sportId}},\n  \"name\": \"TH7 Comp {{runTag}}\",\n  \"competitionName\": \"TH7 Comp {{runTag}}\",\n  \"status\": \"OPEN_REGISTRATION\"\n}"
+						},
+						"url": { "raw": "{{tournamentInstance1Url}}/api/v1/competitions", "host": ["{{tournamentInstance1Url}}"], "path": ["api", "v1", "competitions"] }
+					}
+				},
+				{
+					"name": "3.2c - Rule (minTeamMembers=1)",
+					"event": [{ "listen": "test", "script": { "exec": ["pm.test('Rule 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+						],
+						"body": { "mode": "raw", "raw": "{\n  \"maxParticipants\": 16,\n  \"minTeamMembers\": 1,\n  \"maxTeamMembers\": 20,\n  \"scoringMethod\": \"POINTS\"\n}" },
+						"url": { "raw": "{{tournamentInstance1Url}}/api/v1/competitions/{{competitionId}}/rule", "host": ["{{tournamentInstance1Url}}"], "path": ["api", "v1", "competitions", "{{competitionId}}", "rule"] }
+					}
+				},
+				{
+					"name": "3.2d - Format (ROUND_ROBIN)",
+					"event": [{ "listen": "test", "script": { "exec": ["pm.test('Format 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+						],
+						"body": { "mode": "raw", "raw": "{\n  \"formatType\": \"ROUND_ROBIN\",\n  \"numberOfGroups\": 1,\n  \"qualifyingSpotsPerGroup\": 2\n}" },
+						"url": { "raw": "{{tournamentInstance1Url}}/api/v1/competitions/{{competitionId}}/format", "host": ["{{tournamentInstance1Url}}"], "path": ["api", "v1", "competitions", "{{competitionId}}", "format"] }
+					}
+				},
+				{
+					"name": "3.2e - Tạo VĐV 1 & VĐV 2",
+					"event": [
+						{ "listen": "test", "script": { "exec": ["pm.test('Ath1 201', function () { pm.response.to.have.status(201); }); pm.collectionVariables.set('ath1Id', String(pm.response.json().id));"], "type": "text/javascript" } }
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{mgrToken}}" }],
+						"body": { "mode": "raw", "raw": "{\n  \"fullName\": \"TH7 Athlete 1 {{runTag}}\",\n  \"dateOfBirth\": \"{{dobDynamic}}\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"{{cccd1}}\",\n  \"phone\": \"0904441111\",\n  \"email\": \"th7_a1_{{runTag}}@example.com\",\n  \"nationality\": \"Vietnam\",\n  \"healthStatus\": \"QUALIFIED\"\n}" },
+						"url": { "raw": "{{athleteServiceUrl}}/api/v1/athletes", "host": ["{{athleteServiceUrl}}"], "path": ["api", "v1", "athletes"] }
+					}
+				},
+				{
+					"name": "3.2f - Tạo VĐV 2",
+					"event": [
+						{ "listen": "test", "script": { "exec": ["pm.test('Ath2 201', function () { pm.response.to.have.status(201); }); pm.collectionVariables.set('ath2Id', String(pm.response.json().id));"], "type": "text/javascript" } }
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{mgrToken}}" }],
+						"body": { "mode": "raw", "raw": "{\n  \"fullName\": \"TH7 Athlete 2 {{runTag}}\",\n  \"dateOfBirth\": \"{{dobDynamic}}\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"{{cccd2}}\",\n  \"phone\": \"0904442222\",\n  \"email\": \"th7_a2_{{runTag}}@example.com\",\n  \"nationality\": \"Vietnam\",\n  \"healthStatus\": \"QUALIFIED\"\n}" },
+						"url": { "raw": "{{athleteServiceUrl}}/api/v1/athletes", "host": ["{{athleteServiceUrl}}"], "path": ["api", "v1", "athletes"] }
+					}
+				},
+				{
+					"name": "3.2g - Tạo Đội 1",
+					"event": [
+						{ "listen": "test", "script": { "exec": ["pm.test('Team1 201', function () { pm.response.to.have.status(201); }); pm.collectionVariables.set('team1Id', String(pm.response.json().id));"], "type": "text/javascript" } }
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{mgrToken}}" }],
+						"body": { "mode": "raw", "raw": "{\n  \"name\": \"TH7 ĐH Bách Khoa {{runTag}}\",\n  \"shortName\": \"BKA\",\n  \"managerName\": \"HLV BK\",\n  \"contactPhone\": \"0904441111\",\n  \"contactEmail\": \"bk_{{runTag}}@example.com\"\n}" },
+						"url": { "raw": "{{teamServiceUrl}}/api/v1/teams", "host": ["{{teamServiceUrl}}"], "path": ["api", "v1", "teams"] }
+					}
+				},
+				{
+					"name": "3.2h - Thêm VĐV 1 vào Đội 1",
+					"event": [{ "listen": "test", "script": { "exec": ["pm.test('Mem1 added', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });"], "type": "text/javascript" } }],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{mgrToken}}" }],
+						"body": { "mode": "raw", "raw": "{\n  \"athleteId\": {{ath1Id}},\n  \"athleteName\": \"TH7 Athlete 1 {{runTag}}\",\n  \"jerseyNumber\": 9,\n  \"position\": \"Forward\"\n}" },
+						"url": { "raw": "{{teamServiceUrl}}/api/v1/teams/{{team1Id}}/members", "host": ["{{teamServiceUrl}}"], "path": ["api", "v1", "teams", "{{team1Id}}", "members"] }
+					}
+				},
+				{
+					"name": "3.2i - Tạo Đội 2",
+					"event": [
+						{ "listen": "test", "script": { "exec": ["pm.test('Team2 201', function () { pm.response.to.have.status(201); }); pm.collectionVariables.set('team2Id', String(pm.response.json().id));"], "type": "text/javascript" } }
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{mgrToken}}" }],
+						"body": { "mode": "raw", "raw": "{\n  \"name\": \"TH7 ĐH Kinh Tế {{runTag}}\",\n  \"shortName\": \"KTE\",\n  \"managerName\": \"HLV KT\",\n  \"contactPhone\": \"0904442222\",\n  \"contactEmail\": \"kt_{{runTag}}@example.com\"\n}" },
+						"url": { "raw": "{{teamServiceUrl}}/api/v1/teams", "host": ["{{teamServiceUrl}}"], "path": ["api", "v1", "teams"] }
+					}
+				},
+				{
+					"name": "3.2j - Thêm VĐV 2 vào Đội 2",
+					"event": [{ "listen": "test", "script": { "exec": ["pm.test('Mem2 added', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });"], "type": "text/javascript" } }],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{mgrToken}}" }],
+						"body": { "mode": "raw", "raw": "{\n  \"athleteId\": {{ath2Id}},\n  \"athleteName\": \"TH7 Athlete 2 {{runTag}}\",\n  \"jerseyNumber\": 10,\n  \"position\": \"Forward\"\n}" },
+						"url": { "raw": "{{teamServiceUrl}}/api/v1/teams/{{team2Id}}/members", "host": ["{{teamServiceUrl}}"], "path": ["api", "v1", "teams", "{{team2Id}}", "members"] }
+					}
+				},
+				{
+					"name": "3.2k - Đăng ký Đội 1",
+					"event": [{ "listen": "test", "script": { "exec": ["pm.test('Reg1 201', function () { pm.response.to.have.status(201); }); pm.collectionVariables.set('reg1Id', String(pm.response.json().id));"], "type": "text/javascript" } }],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{mgrToken}}" }],
+						"body": { "mode": "raw", "raw": "{\n  \"competitionId\": {{competitionId}},\n  \"participantType\": \"TEAM\",\n  \"participantReferenceId\": {{team1Id}},\n  \"participantName\": \"TH7 ĐH Bách Khoa {{runTag}}\"\n}" },
+						"url": { "raw": "{{matchServiceUrl}}/api/v1/registrations", "host": ["{{matchServiceUrl}}"], "path": ["api", "v1", "registrations"] }
+					}
+				},
+				{
+					"name": "3.2l - Duyệt Đội 1",
+					"event": [{ "listen": "test", "script": { "exec": ["pm.test('Approve1 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+						"url": { "raw": "{{matchServiceUrl}}/api/v1/registrations/{{reg1Id}}/approve", "host": ["{{matchServiceUrl}}"], "path": ["api", "v1", "registrations", "{{reg1Id}}", "approve"] }
+					}
+				},
+				{
+					"name": "3.2m - Đăng ký Đội 2",
+					"event": [{ "listen": "test", "script": { "exec": ["pm.test('Reg2 201', function () { pm.response.to.have.status(201); }); pm.collectionVariables.set('reg2Id', String(pm.response.json().id));"], "type": "text/javascript" } }],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{mgrToken}}" }],
+						"body": { "mode": "raw", "raw": "{\n  \"competitionId\": {{competitionId}},\n  \"participantType\": \"TEAM\",\n  \"participantReferenceId\": {{team2Id}},\n  \"participantName\": \"TH7 ĐH Kinh Tế {{runTag}}\"\n}" },
+						"url": { "raw": "{{matchServiceUrl}}/api/v1/registrations", "host": ["{{matchServiceUrl}}"], "path": ["api", "v1", "registrations"] }
+					}
+				},
+				{
+					"name": "3.2n - Duyệt Đội 2",
+					"event": [{ "listen": "test", "script": { "exec": ["pm.test('Approve2 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+						"url": { "raw": "{{matchServiceUrl}}/api/v1/registrations/{{reg2Id}}/approve", "host": ["{{matchServiceUrl}}"], "path": ["api", "v1", "registrations", "{{reg2Id}}", "approve"] }
+					}
+				},
+				{
+					"name": "3.2o - Lấy Participants đã duyệt",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Participants 200', function () { pm.response.to.have.status(200); });",
+									"const arr = pm.response.json();",
+									"pm.collectionVariables.set('participant1Id', String(arr[0].id));",
+									"pm.collectionVariables.set('participant2Id', String(arr[1].id));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+						"url": { "raw": "{{matchServiceUrl}}/api/v1/participants/competition/{{competitionId}}", "host": ["{{matchServiceUrl}}"], "path": ["api", "v1", "participants", "competition", "{{competitionId}}"] }
+					}
+				},
+				{
+					"name": "3.3 - Tạo Trận đấu trên Match Service (Khám phá Tournament Service qua Eureka)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Match created 201 via Discovery', function () {",
+									"    pm.response.to.have.status(201);",
+									"    pm.expect(pm.response.headers.get('X-Tournament-Provider-Instance')).to.be.a('string').and.not.empty;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tournamentId\": {{tournamentId}},\n  \"competitionId\": {{competitionId}},\n  \"round\": \"Chung kết\",\n  \"participant1Id\": {{participant1Id}},\n  \"participant2Id\": {{participant2Id}},\n  \"matchTime\": \"{{matchTimeDynamic}}\",\n  \"location\": \"SVĐ Mỹ Đình\",\n  \"refereeUsername\": \"referee1\",\n  \"status\": \"SCHEDULED\"\n}"
+						},
+						"url": { "raw": "{{matchServiceUrl}}/api/v1/matches", "host": ["{{matchServiceUrl}}"], "path": ["api", "v1", "matches"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "4. API Gateway (:8080) - Định tuyến động theo Service ID",
+			"item": [
+				{
+					"name": "4.1 - Xem danh sách Routes và Instances khám phá được tại API Gateway",
+					"event": [{ "listen": "test", "script": { "exec": ["pm.test('Gateway routes 200 OK', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{gatewayUrl}}/api/v1/gateway/routes", "host": ["{{gatewayUrl}}"], "path": ["api", "v1", "gateway", "routes"] }
+					}
+				},
+				{
+					"name": "4.2 - Gọi Tournament Service qua API Gateway (:8080 -> lb://TOURNAMENT-SERVICE)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Gateway routes to tournament-service instance-info (200)', function () {",
+									"    pm.response.to.have.status(200);",
+									"    pm.expect(String(pm.response.json().instancePort)).to.be.oneOf(['8081', '8091']);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{gatewayUrl}}/api/v1/tournaments/instance-info", "host": ["{{gatewayUrl}}"], "path": ["api", "v1", "tournaments", "instance-info"] }
+					}
+				},
+				{
+					"name": "4.3 - Gọi Match Service qua API Gateway (:8080 -> lb://MATCH-SERVICE)",
+					"event": [{ "listen": "test", "script": { "exec": ["pm.test('Gateway routes to match-service (200)', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{gatewayUrl}}/api/v1/matches", "host": ["{{gatewayUrl}}"], "path": ["api", "v1", "matches"] }
+					}
+				}
+			]
+		}
+	]
 }
-

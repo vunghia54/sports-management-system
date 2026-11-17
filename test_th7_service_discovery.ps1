@@ -64,23 +64,15 @@ $startedProcesses = [System.Collections.Generic.List[object]]::new()
 
 function Start-Microservice ($Name, $Port, $Jar, $ExtraArgs = @(), $HealthUrl) {
     if (Test-PortOpen $Port) {
-        Write-Host "  -> [$Name] Port ${Port}: Da dang chay san (OK)" -ForegroundColor Green
-        $existingProc = $null
-        try {
-            $owningPid = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess
-            if ($owningPid) {
-                $existingProc = Get-Process -Id $owningPid -ErrorAction SilentlyContinue
-            }
-        } catch { }
-        $item = [PSCustomObject]@{
-            Process   = $existingProc
-            Name      = $Name
-            Port      = $Port
-            HealthUrl = $HealthUrl
-            ErrFile   = "logs\${Name}_${Port}_err.log"
+        Write-Host "  -> [$Name] Port ${Port}: Da dang chay san (khong tu y dung tien trinh ngoai)" -ForegroundColor Green
+        return [PSCustomObject]@{
+            Process         = $null
+            StartedByScript = $false
+            Name            = $Name
+            Port            = $Port
+            HealthUrl       = $HealthUrl
+            ErrFile         = "logs\${Name}_${Port}_err.log"
         }
-        $script:startedProcesses.Add($item)
-        return $item
     }
     if (-not (Test-Path $Jar)) {
         throw "Khong tim thay file JAR: $Jar. Hay chay mvn package truoc!"
@@ -91,11 +83,12 @@ function Start-Microservice ($Name, $Port, $Jar, $ExtraArgs = @(), $HealthUrl) {
     $errFile = "logs\${Name}_${Port}_err.log"
     $proc = Start-Process -FilePath "java" -ArgumentList $argList -RedirectStandardOutput $logFile -RedirectStandardError $errFile -PassThru -WindowStyle Hidden
     $item = [PSCustomObject]@{
-        Process   = $proc
-        Name      = $Name
-        Port      = $Port
-        HealthUrl = $HealthUrl
-        ErrFile   = $errFile
+        Process         = $proc
+        StartedByScript = $true
+        Name            = $Name
+        Port            = $Port
+        HealthUrl       = $HealthUrl
+        ErrFile         = $errFile
     }
     $script:startedProcesses.Add($item)
     return $item
@@ -206,9 +199,14 @@ try {
     $mgrLogin = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/login" -Method Post -Body (@{ username = $testMgrUser; password = "password123" } | ConvertTo-Json) -ContentType "application/json"
     $mgrHeaders = @{ Authorization = "Bearer $($mgrLogin.accessToken)" }
 
-    $refLogin = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/login" -Method Post -Body (@{ username = "referee1"; password = "referee123" } | ConvertTo-Json) -ContentType "application/json"
+    $testRefUser = "th7_ref_" + (Get-Random -Minimum 1000 -Maximum 9999)
+    $refReg = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/register" -Method Post -Body (@{
+        username = $testRefUser; password = "password123"; fullName = "Trong Tai TH7"; email = "$testRefUser@sports.vn"; role = "ROLE_VIEWER"
+    } | ConvertTo-Json) -ContentType "application/json"
+    Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/users/$($refReg.id)/role" -Method Put -Body (@{ role = "ROLE_REFEREE" } | ConvertTo-Json) -ContentType "application/json" -Headers $adminHeaders | Out-Null
+    $refLogin = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/auth/login" -Method Post -Body (@{ username = $testRefUser; password = "password123" } | ConvertTo-Json) -ContentType "application/json"
     $refHeaders = @{ Authorization = "Bearer $($refLogin.accessToken)" }
-    Write-Host "  [1. AUTH-SERVICE] Dang nhap JWT & Admin cap quyen thanh cong (Organizer = $testOrgUser, Manager = $testMgrUser)" -ForegroundColor Green
+    Write-Host "  [1. AUTH-SERVICE] Dang nhap JWT & Admin cap quyen thanh cong (Organizer = $testOrgUser, Manager = $testMgrUser, Referee = $testRefUser)" -ForegroundColor Green
 
     # 2. TOURNAMENT-SERVICE (:8081 & :8091) - Sport, Tournament, Competition, Rule
     $sportCode = "FOOTBALL_" + (Get-Random -Minimum 100 -Maximum 999)
@@ -219,15 +217,20 @@ try {
     } | ConvertTo-Json
     $createdSport = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/sports" -Method Post -Body $sportBody -ContentType "application/json" -Headers $authHeaders
 
+    $suffix = Get-Random -Minimum 10000 -Maximum 99999
+    $todayDate = Get-Date
+    $todayStr = $todayDate.ToString("yyyy-MM-dd")
+    $regStartStr = $todayDate.AddDays(-3).ToString("yyyy-MM-dd")
+    $tourEndStr = $todayDate.AddDays(30).ToString("yyyy-MM-dd")
     $tourBody = @{
-        name                  = "Giai Bong Da Sinh Vien Toan Quoc TH7 - 2026"
+        name                  = "Giai Bong Da Sinh Vien Toan Quoc TH7 - $suffix"
         description           = "Kiem thu toan dien TH1-TH7 tren 10 Microservices"
-        startDate             = "2026-11-16"
-        endDate               = "2026-12-30"
+        startDate             = $todayStr
+        endDate               = $tourEndStr
         location              = "Ha Noi"
-        registrationStartDate = "2026-11-01"
-        registrationEndDate   = "2026-11-16"
-        status                = "ONGOING"
+        registrationStartDate = $regStartStr
+        registrationEndDate   = $todayStr
+        status                = "OPEN_REGISTRATION"
     } | ConvertTo-Json
     $createdTour = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/tournaments" -Method Post -Body $tourBody -ContentType "application/json" -Headers $authHeaders
 
@@ -319,15 +322,19 @@ try {
     $p1Obj = $participants | Where-Object { $_.referenceId -eq $createdTeam1.id } | Select-Object -First 1
     $p2Obj = $participants | Where-Object { $_.referenceId -eq $createdTeam2.id } | Select-Object -First 1
 
+    $pastMatchTimeStr = (Get-Date).AddMinutes(-15).ToString("yyyy-MM-ddTHH:mm:ss")
+    if ((Get-Date).Hour -eq 0 -and (Get-Date).Minute -lt 20) {
+        $pastMatchTimeStr = "${todayStr}T00:01:00"
+    }
     $matchBody = @{
         tournamentId    = $createdTour.id
         competitionId   = $createdComp.id
         round           = "Vong Chung Ket"
         participant1Id  = $p1Obj.id
         participant2Id  = $p2Obj.id
-        location        = "SVD My Dinh"
-        matchTime       = "2026-11-16T08:00:00"
-        refereeUsername = "referee1"
+        location        = "SVD My Dinh - $suffix"
+        matchTime       = $pastMatchTimeStr
+        refereeUsername = $testRefUser
         status          = "SCHEDULED"
     } | ConvertTo-Json
     $matchWebResp = Invoke-WebRequest -Uri "http://localhost:8082/api/v1/matches" -Method Post -Body $matchBody -ContentType "application/json" -Headers $authHeaders -UseBasicParsing
@@ -355,14 +362,18 @@ try {
     $topTeam = $rankingResp.items[0]
     Write-Host "  [7. RANKING-SERVICE] BXH tu dong cap nhat: Hang #1 = $($topTeam.participantName) (Diem: $($topTeam.points), Hieu so: +$($topTeam.goalDifference))" -ForegroundColor Green
 
-    # 8. NOTIFICATION-SERVICE (:8084)
-    $notifBody = @{
-        recipient = $testOrgUser
-        title     = "Ket qua chung ket da duoc xac nhan"
-        message   = "Tran dau $($createdTeam1.name) 3-1 $($createdTeam2.name) da ket thuc!"
-    } | ConvertTo-Json
-    $createdNotif = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/notifications" -Method Post -Body $notifBody -ContentType "application/json" -Headers $authHeaders
-    Write-Host "  [8. NOTIFICATION-SERVICE] Da tao thong bao ID=$($createdNotif.id) cho '$($createdNotif.recipient)'" -ForegroundColor Green
+    # 8. NOTIFICATION-SERVICE (:8084) - Kiem chung event MATCH_FINISHED qua RabbitMQ
+    $matchedNotif = $null
+    for ($nTry = 1; $nTry -le 10; $nTry++) {
+        $notifList = Invoke-RestMethod -Uri "http://localhost:8080/api/v1/notifications" -Method Get -Headers $authHeaders
+        $matchedNotif = @($notifList) | Where-Object { $_.type -eq "MATCH_FINISHED" -and [long]$_.referenceId -eq [long]$createdMatch.id } | Select-Object -First 1
+        if ($matchedNotif) { break }
+        Start-Sleep -Seconds 1
+    }
+    if (-not $matchedNotif) {
+        throw "[FAILED] Notification-service chua nhan su kien MATCH_FINISHED qua RabbitMQ cho matchId=$($createdMatch.id)"
+    }
+    Write-Host "  [8. NOTIFICATION-SERVICE] RabbitMQ event MATCH_FINISHED -> Notif ID=$($matchedNotif.id) (referenceId=$($matchedNotif.referenceId))" -ForegroundColor Green
 
     # ------------------------------------------------------------------
     # TC03: KIEM TRA CAN BANG TAI (20 REQUESTS QUA CONSUMER)
@@ -379,56 +390,86 @@ try {
         Write-Host ("  Lần gửi {0,2}: Instance xử lý = {1,-26} | Port = {2} | Kết quả = Thành công" -f $i, $instId, $instPort) -ForegroundColor Gray
     }
     Write-Host "  => THONG KE 20 REQUESTS: Instance 8081 = $count8081 lan | Instance 8091 = $count8091 lan" -ForegroundColor Cyan
+    if ($count8081 -le 0 -or $count8091 -le 0) {
+        throw "[FAILED] TC03: Can bang tai khong phan phoi deu cho ca 8081 ($count8081) va 8091 ($count8091)"
+    }
 
     # ------------------------------------------------------------------
     # TC04: DUNG 1 INSTANCE (8081) -> KIEM TRA FAILOVER SANG 8091
     # ------------------------------------------------------------------
     Write-Host "`n>>> [TC04] Dung dot ngot Tournament Service Instance 1 (Port 8081)..." -ForegroundColor Magenta
-    if ($tour1Item -and $tour1Item.Process -and -not $tour1Item.Process.HasExited) {
+    if ($tour1Item -and $tour1Item.StartedByScript -and $tour1Item.Process -and -not $tour1Item.Process.HasExited) {
         $tour1Item.Process.Kill()
-        try { Invoke-RestMethod -Uri "http://localhost:8761/eureka/apps/TOURNAMENT-SERVICE/tournament-service:8081" -Method Delete -ErrorAction SilentlyContinue | Out-Null } catch { }
-        Write-Host "  -> Da dung process tournament-service-1 (Port 8081). Doi Eureka & LoadBalancer cap nhat (4s)..." -ForegroundColor Yellow
+        Write-Host "  -> Da dung process tournament-service-1 (Port 8081). Doi Eureka tu dong eviction (lease-expiration=10s) & LoadBalancer..." -ForegroundColor Yellow
+        $evicted1 = $false
+        for ($w = 1; $w -le 20; $w++) {
+            Start-Sleep -Seconds 2
+            $appInfo = (Invoke-RestMethod -Uri "http://localhost:8761/eureka/apps/TOURNAMENT-SERVICE" -Headers @{ Accept = "application/json" }).application
+            $upInst = @($appInfo.instance | Where-Object { $_.status -eq "UP" })
+            if ($upInst.Count -eq 1) { $evicted1 = $true; break }
+        }
         Start-Sleep -Seconds 4
         $discAfterKill = Invoke-RestMethod -Uri "http://localhost:8082/api/v1/matches/discovery/tournament-instance" -Method Get
-        Write-Host "  -> [PASSED] He thong van phuc vu binh thuong qua Instance con lai: $($discAfterKill.providerInstance.instanceId)" -ForegroundColor Green
+        Write-Host "  -> [PASSED] He thong van phuc vu binh thuong qua Instance con lai: $($discAfterKill.providerInstance.instanceId) (eviction=$evicted1)" -ForegroundColor Green
+    } else {
+        Write-Host "  -> [SKIP] tournament-service-1 khong do script nay khoi dong; dung test_th8_deployment.ps1 [SPORT01] cho Docker failover." -ForegroundColor Yellow
     }
 
     # ------------------------------------------------------------------
     # TC05: DUNG TOAN BO INSTANCE PROVIDER -> KIEM TRA LOI 503 RO RANG
     # ------------------------------------------------------------------
     Write-Host "`n>>> [TC05] Dung tiep Tournament Service Instance 2 (Port 8091) (Toan bo Provider ngung hoat dong)..." -ForegroundColor Magenta
-    if ($tour2Item -and $tour2Item.Process -and -not $tour2Item.Process.HasExited) {
+    if ($tour2Item -and $tour2Item.StartedByScript -and $tour2Item.Process -and -not $tour2Item.Process.HasExited) {
         $tour2Item.Process.Kill()
-        try { Invoke-RestMethod -Uri "http://localhost:8761/eureka/apps/TOURNAMENT-SERVICE/tournament-service:8091" -Method Delete -ErrorAction SilentlyContinue | Out-Null } catch { }
-        Write-Host "  -> Da dung process tournament-service-2 (Port 8091). Doi LoadBalancer cap nhat (4s)..." -ForegroundColor Yellow
+        Write-Host "  -> Da dung process tournament-service-2 (Port 8091). Doi Eureka tu dong eviction & LoadBalancer cache het han..." -ForegroundColor Yellow
+        for ($w = 1; $w -le 20; $w++) {
+            Start-Sleep -Seconds 2
+            try {
+                $appInfo = (Invoke-RestMethod -Uri "http://localhost:8761/eureka/apps/TOURNAMENT-SERVICE" -Headers @{ Accept = "application/json" }).application
+                $upInst = @($appInfo.instance | Where-Object { $_.status -eq "UP" })
+                if ($upInst.Count -eq 0) { break }
+            } catch { break }
+        }
         Start-Sleep -Seconds 4
+        $statusCode = 0
         try {
             Invoke-RestMethod -Uri "http://localhost:8082/api/v1/matches/discovery/tournament-instance" -Method Get | Out-Null
-            Write-Host "  -> [WARN] Van nhan duoc phan hoi" -ForegroundColor Yellow
+            throw "[FAILED] TC05: Ky vong 503 nhung endpoint van tra 200 OK"
         } catch {
-            $statusCode = [int]$_.Exception.Response.StatusCode
-            Write-Host "  -> [PASSED] Consumer tra ve ma loi co kiem soat: HTTP $statusCode (Service Unavailable)" -ForegroundColor Green
+            if ($_.Exception.Response) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            }
+            if ($statusCode -ne 503) {
+                throw "[FAILED] TC05: Ky vong HTTP 503 nhung nhan HTTP $statusCode"
+            }
+            Write-Host "  -> [PASSED] Consumer tra ve dung ma loi HTTP $statusCode (Service Unavailable)" -ForegroundColor Green
         }
+    } else {
+        Write-Host "  -> [SKIP] tournament-service-2 khong do script nay khoi dong; dung test_th8_deployment.ps1 [DEP03] cho Docker 503 check." -ForegroundColor Yellow
     }
 
     # ------------------------------------------------------------------
     # TC06: KHOI DONG LAI PROVIDER -> TU DONG DANG KY LAI & PHUC HOI
     # ------------------------------------------------------------------
     Write-Host "`n>>> [TC06] Khoi dong lai Tournament Service Instance 1 (Port 8081) va kiem tra phuc hoi..." -ForegroundColor Magenta
-    if (Test-Path "logs\h2_tournament_db.lock.db") { Remove-Item "logs\h2_tournament_db.lock.db" -Force -ErrorAction SilentlyContinue }
-    $tour1Restarted = Start-Microservice -Name "tournament-service-1" -Port 8081 -Jar "tournament-service\target\tournament-service-0.0.1-SNAPSHOT.jar" -ExtraArgs $tourDbArgs -HealthUrl "http://localhost:8081/api/v1/instance-info"
-    Wait-ForService -Name "tournament-service-1" -Port 8081 -Url "http://localhost:8081/api/v1/instance-info" | Out-Null
-    Write-Host "  -> Doi Eureka & LoadBalancer dong bo dang ky lai (8s)..." -ForegroundColor Gray
-    Start-Sleep -Seconds 8
-    $discRecovered = Invoke-RestMethod -Uri "http://localhost:8082/api/v1/matches/discovery/tournament-instance" -Method Get
-    Write-Host "  -> [PASSED] Provider da tu dong dang ky lai va phuc vu request: $($discRecovered.providerInstance.instanceId)" -ForegroundColor Green
+    if ($tour1Item -and $tour1Item.StartedByScript) {
+        if (Test-Path "logs\h2_tournament_db.lock.db") { Remove-Item "logs\h2_tournament_db.lock.db" -Force -ErrorAction SilentlyContinue }
+        $tour1Restarted = Start-Microservice -Name "tournament-service-1" -Port 8081 -Jar "tournament-service\target\tournament-service-0.0.1-SNAPSHOT.jar" -ExtraArgs $tourDbArgs -HealthUrl "http://localhost:8081/api/v1/instance-info"
+        Wait-ForService -Name "tournament-service-1" -Port 8081 -Url "http://localhost:8081/api/v1/instance-info" | Out-Null
+        Write-Host "  -> Doi Eureka & LoadBalancer dong bo dang ky lai (8s)..." -ForegroundColor Gray
+        Start-Sleep -Seconds 8
+        $discRecovered = Invoke-RestMethod -Uri "http://localhost:8082/api/v1/matches/discovery/tournament-instance" -Method Get
+        Write-Host "  -> [PASSED] Provider da tu dong dang ky lai va phuc vu request: $($discRecovered.providerInstance.instanceId)" -ForegroundColor Green
+    } else {
+        Write-Host "  -> [SKIP] Provider dang chay bang Docker; dung test_th8_deployment.ps1 [DEP04] cho Docker recovery check." -ForegroundColor Yellow
+    }
 
 } finally {
     if (-not $KeepRunning) {
-        Write-Host "`nDang don dep cac tien trinh kiem thu..." -ForegroundColor Yellow
+        Write-Host "`nDang don dep cac tien trinh kiem thu do script nay khoi dong..." -ForegroundColor Yellow
         foreach ($item in $startedProcesses) {
             try {
-                if ($item.Process -and -not $item.Process.HasExited) {
+                if ($item.StartedByScript -and $item.Process -and -not $item.Process.HasExited) {
                     $item.Process.Kill()
                 }
             } catch { }

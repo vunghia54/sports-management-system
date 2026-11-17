@@ -1,8 +1,8 @@
 # BÁO CÁO KẾT QUẢ KIỂM THỬ BẢO MẬT (SECURITY TEST RESULTS)
 **Học phần:** Phát triển phần mềm hướng dịch vụ (PTPMHDV) — Buổi thực hành 5  
 **Hệ thống:** Sports Management Multi-Service System  
-**Ngày thực hiện:** 20/10/2026  
-**Công cụ kiểm thử:** Postman & Automated Integration Tests  
+**Ngày thực hiện:** 17/11/2026  
+**Công cụ kiểm thử:** Newman 6.2.3 (`security-design/postman-collection.json` -> `docs/test/test-results/security-th5-newman.json`, 45 requests / 46 assertions — **0 failed**, avg `34.0 ms`)  
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Test Case | Nhóm kiểm thử | HTTP Request | Tài khoản / Role | Kết quả mong đợi | Kết quả thực tế | Trạng thái |
 |:---:|---|---|---|---|---|:---:|
-| **TC01** | Xác thực | `POST /api/v1/auth/login` | `admin` (`ROLE_ADMIN`) | `200 OK`, trả về `accessToken` JWT, `expiresIn: 900` | `200 OK`, JWT cấp phát hợp lệ, thời hạn 900s | **ĐẠT** |
+| **TC01** | Xác thực | `POST /api/v1/auth/login` | `admin` (`ROLE_ADMIN`) | `200 OK`, trả về `accessToken` JWT, `expiresIn: 3600` | `200 OK`, JWT cấp phát hợp lệ, thời hạn `expiresIn: 3600` | **ĐẠT** |
 | **TC02** | Xác thực | `POST /api/v1/auth/login` | `organizer1` (`ROLE_ORGANIZER`) | `200 OK`, trả về `accessToken` JWT, `role: ROLE_ORGANIZER` | `200 OK`, JWT cấp phát đúng role và username | **ĐẠT** |
 | **TC03** | Xác thực | `POST /api/v1/auth/login` (Sai pass) | `organizer1` (Mật khẩu sai) | `401 Unauthorized`, message: `Invalid username or password` | `401 Unauthorized`, không tiết lộ lý do mật khẩu/tài khoản | **ĐẠT** |
 | **TC04** | Xác thực | `POST /api/v1/auth/register` | Người dùng mới | `201 Created`, lưu mật khẩu mã hóa BCrypt vào database | `201 Created`, user được tạo thành công | **ĐẠT** |
@@ -26,9 +26,10 @@
 | **TC14** | Admin Override | `PUT /api/v1/tournaments/{id}` | `admin` (`ROLE_ADMIN`) | `200 OK`, Admin có toàn quyền can thiệp mọi giải đấu | `200 OK`, Admin cập nhật giải đấu thành công | **ĐẠT** |
 | **TC15** | Bảo mật liên dịch vụ | `POST /api/v1/matches` | `organizer1` (Token Propagation) | `201 Created`, Match Service gọi Tournament Service thành công | `201 Created`, xác nhận Tournament 1 tồn tại qua REST | **ĐẠT** |
 | **TC16** | Dữ liệu không tồn tại | `POST /api/v1/matches` | `organizer1` (`tournamentId: 999999`) | `400 Bad Request`, báo giải đấu không tồn tại | `400 Bad Request`, Invalid tournament ID | **ĐẠT** |
-| **TC17** | Phân quyền Trọng tài | `PUT /api/v1/matches/{id}` | `referee1` (`ROLE_REFEREE`) | `200 OK`, trọng tài được phép cập nhật tỉ số | `200 OK`, cập nhật trạng thái `COMPLETED` thành công | **ĐẠT** |
-| **TC18** | Phân quyền Trọng tài | `PUT /api/v1/matches/{id}` | `user1` (`ROLE_VIEWER`) | `403 Forbidden`, User thường không được sửa trận đấu | `403 Forbidden`, Access Denied | **ĐẠT** |
+| **TC17** | Phân quyền Trọng tài & Kết quả | `PATCH /api/v1/matches/{id}` (`ONGOING`) -> `POST /api/v1/results` -> Organizer `PUT /api/v1/results/{rid}/confirm` -> `GET /api/v1/matches/{id}` | `referee1` (`ROLE_REFEREE`) & `organizer1` (`ROLE_ORGANIZER`) | Trọng tài bắt đầu trận và nhập điểm (`201`), BTC xác nhận (`200`), trận chuyển sang `FINISHED` | Trọng tài chuyển `ONGOING` (`200`) + ghi điểm (`201`, `PENDING_CONFIRMATION`), BTC xác nhận (`200`), trận #25 chuyển `FINISHED` | **ĐẠT** |
+| **TC18** | Phân quyền Trọng tài | `PATCH /api/v1/matches/{id}` | `user1` (`ROLE_VIEWER`) | `403 Forbidden`, User thường không được sửa trận đấu | `403 Forbidden`, Access Denied | **ĐẠT** |
 | **TC19** | Quyền xóa trận đấu | `DELETE /api/v1/matches/{id}` | `admin` (`ROLE_ADMIN`) | `204 No Content`, xóa thành công trận đấu | `204 No Content`, trận đấu đã bị xóa | **ĐẠT** |
+| **TC20** | Token hết hạn | `GET /api/v1/auth/me` | JWT có `exp` trong quá khứ | `401 Unauthorized`, từ chối token hết hạn | `401 Unauthorized` (`Invalid or expired token`) | **ĐẠT** |
 
 ---
 
@@ -55,9 +56,9 @@
 | Tiêu chí đánh giá (Theo đề bài TH5) | Điểm tối đa | Đánh giá thực tế | Kết luận |
 |---|:---:|---|:---:|
 | 1. Phân tích tài sản, vai trò và quyền | 1.5 | Đã hoàn thiện file `security-requirements.md` và `role-permission-matrix.md` chi tiết 5 vai trò (`ADMIN`, `ORGANIZER`, `REFEREE`, `TEAM_MANAGER`, `VIEWER`) và 4 nhóm tài sản. | **ĐẠT (1.5/1.5)** |
-| 2. Đăng nhập, BCrypt và JWT | 2.0 | Xây dựng hoàn chỉnh `Auth Service` với mã hóa mật khẩu `BCryptPasswordEncoder` và cấp phát JWT chuẩn HS256 (`expiresIn: 900`). | **ĐẠT (2.0/2.0)** |
+| 2. Đăng nhập, BCrypt và JWT | 2.0 | Xây dựng hoàn chỉnh `Auth Service` với mã hóa mật khẩu `BCryptPasswordEncoder` và cấp phát JWT chuẩn HS256 (`expiresIn: 3600`). | **ĐẠT (2.0/2.0)** |
 | 3. Cấu hình bảo vệ API | 1.5 | Cấu hình `SecurityFilterChain`, `JwtAuthenticationFilter`, chuẩn hóa mã lỗi 401/403 cho tất cả các service. | **ĐẠT (1.5/1.5)** |
 | 4. Phân quyền theo vai trò và quyền sở hữu | 2.0 | Triển khai cả RBAC và Resource Ownership (chỉ owner hoặc admin mới được sửa/xóa giải đấu). | **ĐẠT (2.0/2.0)** |
-| 5. Kiểm thử các trường hợp truy cập trái phép | 2.0 | Bộ kiểm thử Postman 19 test cases bao phủ đầy đủ 5 trường hợp truy cập trái phép bắt buộc. | **ĐẠT (2.0/2.0)** |
+| 5. Kiểm thử các trường hợp truy cập trái phép | 2.0 | Bộ kiểm thử Postman 45 requests / 46 assertions (TC01–TC20, bao gồm thiếu token, token giả mạo, token hết hạn, VIEWER 403, ownership IDOR 403) pass 100% qua Newman (`security-th5-newman.json`). | **ĐẠT (2.0/2.0)** |
 | 6. Áp dụng vào Bài tập lớn và giải thích kiến trúc | 1.0 | Áp dụng trực tiếp vào Sports Management System, có kiến trúc Token Propagation liên dịch vụ. | **ĐẠT (1.0/1.0)** |
 | **TỔNG ĐIỂM** | **10.0** | **Hệ thống đáp ứng toàn diện mọi yêu cầu lý thuyết và thực hành.** | **10.0 / 10.0** |

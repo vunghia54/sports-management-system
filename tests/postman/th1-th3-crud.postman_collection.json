@@ -1,0 +1,664 @@
+{
+  "info": {
+    "_postman_id": "th1-th3-athlete-crud-collection",
+    "name": "TH1 & TH3 - Athlete CRUD, Validation, Pagination, Filter, Sort",
+    "description": "Bộ kiểm thử Postman cho TH1 (CRUD, HTTP status) và TH3 (PATCH, Bean Validation, 404, phân trang, lọc, sắp xếp, sortBy allowlist) qua API Gateway ({{baseUrl}}=http://localhost:8080).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "managerToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "runTag", "value": "" },
+    { "key": "athleteId", "value": "" },
+    { "key": "athleteBId", "value": "" },
+    { "key": "athleteCId", "value": "" },
+    { "key": "athleteCccdA", "value": "" },
+    { "key": "athleteCccdB", "value": "" },
+    { "key": "athleteCccdC", "value": "" },
+    { "key": "dobDynamic", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Auth - Login Team Manager (manager1)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const suffix = Date.now().toString().slice(-8);",
+              "pm.collectionVariables.set('runTag', 'TH13_' + suffix);",
+              "pm.collectionVariables.set('athleteCccdA', '079' + suffix + '1');",
+              "pm.collectionVariables.set('athleteCccdB', '079' + suffix + '2');",
+              "pm.collectionVariables.set('athleteCccdC', '079' + suffix + '3');",
+              "const dob = new Date(Date.now() - 22 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);",
+              "pm.collectionVariables.set('dobDynamic', dob);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login manager1 returns 200 OK with JWT', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.accessToken).to.be.a('string').and.not.empty;",
+              "    pm.collectionVariables.set('managerToken', json.accessToken);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"manager1\",\n  \"password\": \"manager123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "0b. Auth - Login Admin (admin for DELETE)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login admin returns 200 OK with JWT', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.accessToken).to.be.a('string').and.not.empty;",
+              "    pm.collectionVariables.set('adminToken', json.accessToken);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "1. [TH1] POST /api/v1/athletes -> 201 Created",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Create athlete returns 201 Created', function () {",
+              "    pm.response.to.have.status(201);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.id).to.be.a('number');",
+              "    pm.expect(json.fullName).to.include('AAA');",
+              "    pm.collectionVariables.set('athleteId', String(json.id));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fullName\": \"AAA Nguyen Van An {{runTag}}\",\n  \"dateOfBirth\": \"{{dobDynamic}}\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"{{athleteCccdA}}\",\n  \"phone\": \"0901234567\",\n  \"email\": \"an.{{runTag}}@sports.vn\",\n  \"nationality\": \"Vietnam\",\n  \"healthStatus\": \"QUALIFIED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes"]
+        }
+      }
+    },
+    {
+      "name": "2. [TH1] GET /api/v1/athletes/{id} -> 200 OK",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Get athlete by id returns 200 OK with matching id and CCCD for owner', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const json = pm.response.json();",
+              "    pm.expect(String(json.id)).to.eql(pm.collectionVariables.get('athleteId'));",
+              "    pm.expect(json.identityCardNumber).to.eql(pm.collectionVariables.get('athleteCccdA'));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/{{athleteId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "{{athleteId}}"]
+        }
+      }
+    },
+    {
+      "name": "3. [TH1] GET /api/v1/athletes -> 200 OK (list)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Get athletes list returns 200 OK and contains created athlete', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const list = pm.response.json();",
+              "    pm.expect(list).to.be.an('array');",
+              "    const targetId = Number(pm.collectionVariables.get('athleteId'));",
+              "    pm.expect(list.some(a => a.id === targetId)).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes"]
+        }
+      }
+    },
+    {
+      "name": "4. [TH1] PUT /api/v1/athletes/{id} -> 200 OK",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('PUT athlete updates full resource and returns 200 OK', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.fullName).to.include('AAA Updated');",
+              "    pm.expect(json.nationality).to.eql('Vietnam');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fullName\": \"AAA Updated Nguyen Van An {{runTag}}\",\n  \"dateOfBirth\": \"{{dobDynamic}}\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"{{athleteCccdA}}\",\n  \"phone\": \"0909998887\",\n  \"email\": \"an.updated.{{runTag}}@sports.vn\",\n  \"nationality\": \"Vietnam\",\n  \"healthStatus\": \"QUALIFIED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/{{athleteId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "{{athleteId}}"]
+        }
+      }
+    },
+    {
+      "name": "5. [TH3] PATCH /api/v1/athletes/{id} -> 200 OK",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('PATCH athlete updates healthStatus partially and returns 200 OK', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.healthStatus).to.eql('INJURED');",
+              "    pm.expect(json.fullName).to.include('AAA Updated');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"healthStatus\": \"INJURED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/{{athleteId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "{{athleteId}}"]
+        }
+      }
+    },
+    {
+      "name": "6. [Setup TH3] POST Athlete B (MALE) -> 201 Created",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Create Athlete B returns 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "    pm.collectionVariables.set('athleteBId', String(pm.response.json().id));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fullName\": \"BBB Tran Minh Binh {{runTag}}\",\n  \"dateOfBirth\": \"{{dobDynamic}}\",\n  \"gender\": \"MALE\",\n  \"identityCardNumber\": \"{{athleteCccdB}}\",\n  \"healthStatus\": \"QUALIFIED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes"]
+        }
+      }
+    },
+    {
+      "name": "7. [Setup TH3] POST Athlete C (FEMALE) -> 201 Created",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Create Athlete C returns 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "    pm.collectionVariables.set('athleteCId', String(pm.response.json().id));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fullName\": \"CCC Le Thi Chau {{runTag}}\",\n  \"dateOfBirth\": \"{{dobDynamic}}\",\n  \"gender\": \"FEMALE\",\n  \"identityCardNumber\": \"{{athleteCccdC}}\",\n  \"healthStatus\": \"QUALIFIED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes"]
+        }
+      }
+    },
+    {
+      "name": "8. [TH3] Validation 400 - Missing fullName",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Missing fullName returns 400 Bad Request with unified error shape', function () {",
+              "    pm.response.to.have.status(400);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.status).to.eql(400);",
+              "    pm.expect(json.timestamp).to.be.a('string');",
+              "    pm.expect(json.error).to.eql('Bad Request');",
+              "    pm.expect(json.path).to.include('/api/v1/athletes');",
+              "    pm.expect(json.errors).to.have.property('fullName');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"gender\": \"MALE\",\n  \"healthStatus\": \"QUALIFIED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes"]
+        }
+      }
+    },
+    {
+      "name": "9. [TH3] Validation 400 - Invalid gender",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Invalid gender returns 400 Bad Request', function () {",
+              "    pm.response.to.have.status(400);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.status).to.eql(400);",
+              "    pm.expect(json.message).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fullName\": \"Invalid Gender Athlete {{runTag}}\",\n  \"gender\": \"INVALID_GENDER\",\n  \"healthStatus\": \"QUALIFIED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes"]
+        }
+      }
+    },
+    {
+      "name": "10. [TH3] Error 404 - Non-existent Athlete ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Non-existent athlete returns 404 Not Found', function () {",
+              "    pm.response.to.have.status(404);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.status).to.eql(404);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/999999999",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "999999999"]
+        }
+      }
+    },
+    {
+      "name": "11. [TH3] Pagination - /paged?page=0&size=2 -> 200 OK",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Paged query returns 2 items on page 0 with metadata', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.page).to.eql(0);",
+              "    pm.expect(json.size).to.eql(2);",
+              "    pm.expect(json.content).to.be.an('array').with.lengthOf(2);",
+              "    pm.expect(json.totalElements).to.be.at.least(3);",
+              "    pm.expect(json.totalPages).to.be.at.least(2);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/paged?keyword={{runTag}}&page=0&size=2",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "paged"],
+          "query": [
+            { "key": "keyword", "value": "{{runTag}}" },
+            { "key": "page", "value": "0" },
+            { "key": "size", "value": "2" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "12. [TH3] Filter - gender=MALE -> 200 OK",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Filter gender=MALE returns only MALE athletes', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.content.length).to.be.at.least(2);",
+              "    json.content.forEach(a => pm.expect(a.gender).to.eql('MALE'));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/paged?keyword={{runTag}}&gender=MALE&page=0&size=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "paged"],
+          "query": [
+            { "key": "keyword", "value": "{{runTag}}" },
+            { "key": "gender", "value": "MALE" },
+            { "key": "page", "value": "0" },
+            { "key": "size", "value": "10" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "13. [TH3] Sort - sortBy=fullName&direction=desc -> 200 OK",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Sort by fullName desc returns CCC before BBB before AAA', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const list = pm.response.json();",
+              "    pm.expect(list).to.be.an('array').with.length.at.least(3);",
+              "    pm.expect(list[0].fullName).to.include('CCC');",
+              "    pm.expect(list[1].fullName).to.include('BBB');",
+              "    pm.expect(list[2].fullName).to.include('AAA');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes?keyword={{runTag}}&sortBy=fullName&direction=desc",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes"],
+          "query": [
+            { "key": "keyword", "value": "{{runTag}}" },
+            { "key": "sortBy", "value": "fullName" },
+            { "key": "direction", "value": "desc" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "14. [TH3] Invalid sortBy -> 400 Bad Request",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Invalid sortBy returns 400 Bad Request', function () {",
+              "    pm.response.to.have.status(400);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.status).to.eql(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/paged?sortBy=nonExistentColumn",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "paged"],
+          "query": [{ "key": "sortBy", "value": "nonExistentColumn" }]
+        }
+      }
+    },
+    {
+      "name": "15. [TH1] DELETE /api/v1/athletes/{id} -> 204 No Content",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('DELETE athlete returns 204 No Content', function () {",
+              "    pm.response.to.have.status(204);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/{{athleteId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "{{athleteId}}"]
+        }
+      }
+    },
+    {
+      "name": "16. [TH1] GET /api/v1/athletes/{id} After Delete -> 404 Not Found",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('GET deleted athlete returns 404 Not Found', function () {",
+              "    pm.response.to.have.status(404);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/{{athleteId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "{{athleteId}}"]
+        }
+      }
+    },
+    {
+      "name": "17. [Cleanup] DELETE Athlete B -> 204",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Cleanup Athlete B returns 204', function () {",
+              "    pm.response.to.have.status(204);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/{{athleteBId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "{{athleteBId}}"]
+        }
+      }
+    },
+    {
+      "name": "18. [Cleanup] DELETE Athlete C -> 204",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Cleanup Athlete C returns 204', function () {",
+              "    pm.response.to.have.status(204);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/athletes/{{athleteCId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "athletes", "{{athleteCId}}"]
+        }
+      }
+    }
+  ]
+}
