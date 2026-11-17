@@ -1,14 +1,14 @@
 ﻿{
-    "requestId":  "sport04-trace-90810",
-    "endpoint":  "/api/v1/tournaments/15",
+    "requestId":  "sport04-trace-85998",
+    "endpoint":  "/api/v1/tournaments/26",
     "statusCode":  200,
     "responseHeaderValues":  [
-                                 "sport04-trace-90810"
+                                 "sport04-trace-85998"
                              ],
     "gatewayLogMatches":  [
-                              "api-gateway-1  | 2026-11-17T16:51:55.688+07:00  INFO 1 --- [api-gateway] [nio-8080-exec-3] [sport04-trace-90810] c.s.m.g.c.GatewayRoutingController       : Gateway routed GET /api/v1/tournaments/15 -\u003e tournament-service status=200"
+                              "api-gateway-1  | 2026-11-18T00:15:21.494+07:00  INFO 1 --- [api-gateway] [nio-8080-exec-2] [sport04-trace-85998] c.s.m.g.c.GatewayRoutingController       : Gateway routed GET /api/v1/tournaments/26 -\u003e tournament-service status=200"
                           ],
     "backendLogMatches":  [
-                              "tournament-service-1  | 2026-11-17T16:51:55.684+07:00  INFO 1 --- [tournament-service] [nio-8081-exec-8] [sport04-trace-90810] c.s.m.t.controller.TournamentController  : [tournament-service:8081] Handling GET /api/v1/tournaments/15"
+                              "tournament-service-1  | 2026-11-18T00:15:21.489+07:00  INFO 1 --- [tournament-service] [nio-8081-exec-8] [sport04-trace-85998] c.s.m.t.controller.TournamentController  : [tournament-service:8081] Handling GET /api/v1/tournaments/26"
                           ]
 }

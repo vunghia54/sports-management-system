@@ -3,8 +3,8 @@
     "nodeHostnameAfter":  "rabbitmq",
     "durableQueue":  "th8.persistence.test.queue",
     "queueStatusBeforeDown":  "name\tdurable\tmessages\nth8.persistence.test.queue\ttrue\t1\nsports.notification.queue\ttrue\t0",
-    "payloadSent":  "th8-rabbitmq-durable-90810",
-    "payloadReceivedAfterDownUp":  "th8-rabbitmq-durable-90810",
+    "payloadSent":  "th8-rabbitmq-durable-85998",
+    "payloadReceivedAfterDownUp":  "th8-rabbitmq-durable-85998",
     "deliveryMode":  2,
     "redelivered":  false
 }

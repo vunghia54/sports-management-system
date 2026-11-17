@@ -20,10 +20,12 @@ Các test pass (`test/app.test.js`):
 
 ## 2. Thời gian khởi động đo từ log Docker thật
 
-| Service | Lệnh kiểm tra | Dòng log thực tế |
-|---|---|---|
-| Spring Boot (`match-service`) | `docker compose logs match-service \| Select-String "Started MatchServiceApplication"` | `Started MatchServiceApplication in 44.855 seconds (process running for 49.914)` |
-| Node.js + Express (`express-consumer`) | `docker compose logs express-consumer \| Select-String "Started on port"` | `Started on port 8095 in 18 ms (provider=http://api-gateway:8080, timeout=3000ms, maxAttempts=3)` |
+> **Phương pháp đo nhất quán:** Cả hai con số khởi động tiến trình đều tính từ thời điểm tiến trình bên trong container bắt đầu chạy: Spring Boot in `Started ... in X seconds (process running for Z)` từ lúc JVM khởi chạy; Express dùng `process.uptime() * 1000` từ lúc tiến trình Node.js khởi chạy (kèm thời gian riêng phần khởi tạo app Express `app init Y ms`). Bảng dưới ghi kèm thời gian thực tế từ `docker compose up` và `State.StartedAt` tới khi container đạt trạng thái `healthy` trong cùng điều kiện recreate đơn lẻ khi PostgreSQL/RabbitMQ/Eureka đã ấm.
+
+| Service | Dòng log thực tế trong container | `StartedAt` → `healthy` | `docker compose up` → `healthy` |
+|---|---|---|---|
+| Spring Boot (`match-service`) | Recreate đơn lẻ: `Started MatchServiceApplication in 16.571 seconds (process running for 18.947)`<br>Khởi động cả cụm: `Started MatchServiceApplication in 44.855 seconds (process running for 49.914)` | `20.90 s` (probe thứ 4 đạt `ExitCode=0`) | `25.17 s` |
+| Node.js + Express (`express-consumer`) | Ngay sau `--build`: `Started on port 8095 in 320 ms (app init 9 ms)`<br>Recreate đơn lẻ: `Started on port 8095 in 140 ms (app init 6 ms)` | `10.20 s` (probe đầu tiên sau `interval: 10s` đạt `ExitCode=0`) | `14.20 s` |
 
 ## 3. Kiểm thử thực tế qua HTTP (status + body thật)
 

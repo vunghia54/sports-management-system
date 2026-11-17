@@ -20,7 +20,8 @@ Provider trong cả hai trường hợp là `tournament-service` (Spring Boot). 
 | Timeout / retry | `JdkClientHttpRequestFactory` (connect 2s, read 10s) qua `RestClientConfig`; retry có giới hạn trong client | `AbortSignal.timeout` (mặc định 3s) và vòng lặp thử lại tối đa 3 lần |
 | Dependency | Nhiều starter (web, security, data-jpa, eureka-client, loadbalancer, actuator, ...) quản lý bằng Maven | Một thư viện `express`, quản lý bằng npm |
 | Cấu hình | `application.properties` + biến môi trường, `@Value` | Chỉ biến môi trường (`process.env`) |
-| Thời gian khởi động | `44.855 seconds` (Spring Boot `MatchServiceApplication` trong container Docker, nối PostgreSQL/RabbitMQ/Eureka) | `18 ms` (Express server `Started on port 8095 in 18 ms` trong container Docker) |
+| Thời gian khởi động (từ lúc tiến trình JVM/Node chạy trong container) | `16.571 seconds` — `process running for 18.947 s` khi recreate đơn lẻ trên hạ tầng ấm (`44.855 seconds` / `process running for 49.914 s` khi khởi động đồng thời toàn cụm) | `140 ms` (`app init 6 ms`) khi recreate đơn lẻ; `320 ms` (`app init 9 ms`) ngay sau `--build` (`process.uptime()`) |
+| Thời gian lên `healthy` (`docker compose up` → `healthy`) | `25.17 s` tính từ lệnh `up` (`20.90 s` từ `State.StartedAt` đến probe healthy đầu tiên) | `14.20 s` tính từ lệnh `up` (`10.20 s` từ `State.StartedAt` đến probe healthy đầu tiên, do `healthcheck.interval: 10s`) |
 | Dung lượng mã cho cùng chức năng gọi Provider | Lớp client riêng, cấu hình bean, lớp ngoại lệ, handler | Khoảng 200 dòng trong một tệp `app.js` |
 | Mức độ phức tạp | Cao hơn khi khởi tạo, nhưng có sẵn bảo mật, JPA, discovery, quan sát | Thấp khi khởi tạo; các tính năng hệ thống (discovery, bảo mật, giám sát) phải tự thêm |
 

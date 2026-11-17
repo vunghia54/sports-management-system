@@ -518,5 +518,23 @@ Sau khi kiểm tra, biên dịch sạch và chạy thử toàn bộ thay đổi 
      - Kiểm tra sự cố: dừng `tournament-service` & `tournament-service-2` -> UI báo toast kèm `Mã yêu cầu: e798ebc8-8985-4dcb-bdce-5a3c9d51a103` khớp với log của `api-gateway`; sửa JWT giả mạo trong `localStorage` -> chuyển về `#/auth`, không lặp vô hạn (`navEventsCount: 6`).
      - Kiểm tra responsive (`1366px`, `768px`, `375px` — `docOverflowX: 0`, bảng cuộn ngang, menu mobile mở/đóng), theme (`dark`/`light`/`system`), chặn CDN (`cdn.jsdelivr.net`, `fonts.googleapis.com` — giao diện hoạt động bình thường). Ảnh chụp lưu tại [`docs/test/screenshots/frontend/`](docs/test/screenshots/frontend/).
 
+## 8. Vòng 5 – sửa bằng chứng token hết hạn (TH5) và số đo khởi động (TH2) (18/11/2026)
+
+1. **TH5 — Kiểm chứng tách biệt JWT ký đúng secret nhưng hết hạn (`401`) so với sai chữ ký (`TC09`):**
+   - **JUnit (`match-service`):** Bổ sung `expiredTokenSignedWithCorrectSecretIsRejectedWith401` trong [`MatchSecurityAndConflictIntegrationTest.java`](match-service/src/test/java/com/sports/management/match/MatchSecurityAndConflictIntegrationTest.java): token ký bằng đúng `JWT_SECRET` nhưng `exp` đã qua bị từ chối `401` trên `PATCH /api/v1/matches/{id}`, đối chứng cùng user + cùng `JWT_SECRET` còn hạn trả `200` trên cả `PATCH` và `GET /api/v1/matches/{id}`. Chạy lại `.\mvnw.cmd test -q` toàn repo đạt **119/119 pass** (`match-service` `23/23`, `0` fail, `0` error, `0` skip).
+   - **Postman / Newman (`security-design`):** Bổ sung `TC20b` (cùng script ký HMAC-SHA256 bằng `jwtSecret` thật, `exp = now + 3600` -> `200 OK`, `username = organizer1`) ngay trước `TC20` (cùng `jwtSecret`, `exp = now - 3600` -> `401 Unauthorized`), mở rộng cửa sổ `pastMatchTime` 72h tránh xung đột ca trực 00:00, và gọi `pm.environment.unset('jwtSecret')` ngay sau khi ký. Chạy Newman với `--env-var "jwtSecret=$s"` lấy trực tiếp từ `.env` đạt **47/47 request, 48/48 assertion pass** (`0` fail, avg `40 ms`); kiểm tra `Select-String -SimpleMatch $s` trên [`docs/test/test-results/security-th5-newman.json`](docs/test/test-results/security-th5-newman.json) cho **`0` kết quả** (không lộ secret). Cập nhật [`security-design/test-results.md`](security-design/test-results.md).
+
+2. **TH2 — Đo thời gian khởi động Express từ lúc tiến trình Node bắt đầu (`process.uptime()`):**
+   - Cập nhật [`server.js`](framework-comparison/express-tournament-consumer/src/server.js) đo `process.uptime() * 1000` (tương đương `Started ... in` từ lúc JVM chạy của Spring Boot) kèm `app init ... ms`.
+   - Rebuild `express-consumer` (`docker compose --profile th2-demo up -d --build express-consumer`) và đo đối chiếu trên container thực tế:
+     - Ngay sau `--build`: `Started on port 8095 in 320 ms (app init 9 ms)` (`StartedAt -> healthy`: `10.21 s`).
+     - Recreate đơn lẻ trên hạ tầng ấm (`--force-recreate --no-deps`): Express đạt `Started on port 8095 in 140 ms (app init 6 ms)` (`StartedAt -> healthy`: `10.20 s`, `docker compose up -> healthy`: `14.20 s`); đối chứng Spring Boot (`match-service`) cùng điều kiện đạt `Started MatchServiceApplication in 16.571 seconds (process running for 18.947)` (`StartedAt -> healthy`: `20.90 s`, `docker compose up -> healthy`: `25.17 s`; khi khởi động đồng thời cả cụm: `44.855 seconds` / `72 s` healthy cho toàn cụm 13 container).
+   - Cập nhật [`framework-comparison/so-sanh-framework.md`](framework-comparison/so-sanh-framework.md) và [`framework-comparison/ket-qua-chay.md`](framework-comparison/ket-qua-chay.md).
+
+3. **Kiểm tra hồi quy:**
+   - `npm test` (`express-tournament-consumer`): **6/6 pass** (`duration_ms 1474.6864`).
+   - `test_th8_deployment.ps1` trên cụm Docker: **10/10 PASS (`DEP01`–`DEP06`, `SPORT01`–`SPORT04`)** (`Tournament ID=26`, `Notif ID=26`, `X-Request-Id=sport04-trace-85998`); `express-consumer` được bật lại `healthy` cùng 13 container chính (**14/14 healthy**).
+
+
 
 
